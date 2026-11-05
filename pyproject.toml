@@ -1,0 +1,16 @@
+# Tool configuration only. Dependencies live in requirements*.txt because
+# tools/ is a folder of scripts, not an installable package.
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, naming, bugbear, simplifications, pyupgrade
+select = ["E", "W", "F", "I", "N", "B", "SIM", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["codewarrior", "dol", "export_dolrecomp_map", "export_mod_symbols", "fetch_windows_toolchain", "function_finder", "isa_conformance", "lockstep_coverage", "lockstep_report", "lsb", "moderngekko_automation", "package_windows", "ppc", "ppc_encode", "ppc_mnemonics", "project", "run_isa_conformance", "sdk_names", "symbols", "synthetic", "synthetic_disc", "synthetic_disc_image", "textfiles"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

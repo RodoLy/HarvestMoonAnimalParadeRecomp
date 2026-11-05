@@ -1,0 +1,15 @@
+# Game data is never committed. Bring your own disc.
+# Los datos del juego nunca se suben. Usa tu propio disco.
+*.rvz
+*.iso
+*.wbfs
+*.wia
+*.dol
+orig/*/*
+!orig/*/.gitkeep
+build/
+
+# Python
+__pycache__/
+.pytest_cache/
+.ruff_cache/
