@@ -250,6 +250,22 @@ verify_disc() {
     note "OK"
 }
 
+# Dolphin settings that this game runs better with (config/RBIEE9/game_settings.ini): the loop of the
+# operating system's idle thread that the runner skips, and the disc speed. Dolphin reads the game's
+# own file in the user folder on top of its list for the game, so the file only has to be there.
+# A file that is already there is the user's choice, so it is only mentioned.
+install_game_settings() {
+    local project_settings="$REPOSITORY_ROOT/config/RBIEE9/game_settings.ini"
+    local user_settings="$USER_DIRECTORY/GameSettings/RBIEE9.ini"
+    if [[ ! -f "$user_settings" ]]; then
+        mkdir -p "$(dirname "$user_settings")"
+        cp "$project_settings" "$user_settings"
+        note "game settings written to $user_settings"
+    elif ! cmp -s "$project_settings" "$user_settings"; then
+        note "$user_settings is not the project's file; to use the project's settings, delete it"
+    fi
+}
+
 run_game() {
     step "Starting the game"
     note "The first start also compiles the game module (a few minutes); later starts are immediate."
@@ -273,6 +289,7 @@ main() {
     build_tools
     extract_disc "$disc_image"
     verify_disc
+    install_game_settings
     run_game
 }
 
