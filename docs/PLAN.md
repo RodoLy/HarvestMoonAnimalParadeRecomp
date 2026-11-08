@@ -48,7 +48,9 @@ que *Magical Melody* tiene que escribir aparte: ver
       de GX con nombre, todas.
 - [x] Manifiesto y mapa de funciones para el traductor de WiiCompiled
       (`wiicompiled/RBIEE9.yml`, `tools/export_wiicompiled_map.py`).
-- [ ] Correr el traductor de WiiCompiled con este juego.
+- [x] Correr el traductor de WiiCompiled con este juego: 17 217 funciones
+      traducidas en unos 35 segundos, sin instrucciones desconocidas, con un
+      parche (`patches/wiicompiled/`).
 - [ ] Nombrar las 102 funciones de GX que faltan (leyendo su código, con
       pruebas contra `main.dol`), luego OS, DVD y VI.
 - [ ] Capa propia: las piezas de WiiCompiled registradas en las direcciones de
@@ -118,7 +120,9 @@ Dolphin core). For a Wii game, WiiCompiled already brings almost everything
       functions, all of them.
 - [x] Manifest and function map for WiiCompiled's translator
       (`wiicompiled/RBIEE9.yml`, `tools/export_wiicompiled_map.py`).
-- [ ] Run WiiCompiled's translator on this game.
+- [x] Run WiiCompiled's translator on this game: 17,217 functions
+      translated in about 35 seconds, no unknown instructions, with one patch
+      (`patches/wiicompiled/`).
 - [ ] Name the 102 GX functions still missing (by reading their code, with
       tests against `main.dol`), then OS, DVD and VI.
 - [ ] Our own layer: the pieces of WiiCompiled registered at this game's
