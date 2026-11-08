@@ -427,5 +427,5 @@ def test_the_gx_entry_points_quoted_in_the_native_runtime_work_list():
     entry_points = find_entry_points(call_map, symbols, stretches_of_library(symbols, "GX"))
     named = [entry for entry in entry_points if entry.is_named]
     assert len(entry_points) == 129
-    assert len(named) == 98
+    assert len(named) == 117
     assert "GXInit" in {entry.function.name for entry in named}
