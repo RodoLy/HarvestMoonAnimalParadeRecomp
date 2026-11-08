@@ -1,0 +1,141 @@
+"""Naming a library from another game's map, on hand-written maps and symbol tables.
+
+Nombrar una biblioteca con el mapa de otro juego, con mapas y tablas de símbolos escritos a mano.
+
+The hand-built game has the GX library between two named functions, GXFirst and GXLast:
+
+    GXFirst       named, an anchor
+    fn_80004020   0x20 bytes: the reference has one function of that size here, GXTwenty
+    fn_80004040   0x10 bytes  \
+    fn_80004050   0x10 bytes   > the reference has three functions of 0x10 here, so the pairing could
+                               / slide: neither gets a name
+    GXLast        named, an anchor
+
+The reference map has, between the same two anchors, GXTwenty (with two labels of a switch inside it),
+three functions of 0x10 and one of 0x40 that this game's linker dropped.
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+
+from name_from_reference_map import (  # noqa: E402
+    Function,
+    Proposal,
+    judge,
+    plain_sdk_name,
+    propose_names,
+    read_reference_map,
+    unambiguous_pairs,
+)
+from symbols import Symbol, SymbolTable  # noqa: E402
+
+TEXT = 0x80004000
+REFERENCE_TEXT = 0x80100000
+
+REFERENCE_MAP = """\
+# a comment line is skipped
+80100000 GX::First
+80100010 GX::Twenty
+80100020 GX::Twenty_switch
+80100024 GX::Twenty_caseD_3
+80100030 GX::SixteenA
+80100030 GX::Duplicate_at_the_same_address
+80100040 GX::SixteenB
+80100050 GX::SixteenC
+80100060 GX::Dropped
+801000A0 GX::Last
+801000B0 OS::AfterTheLibrary
+"""
+
+
+def function_symbol(name: str, address: int, size: int) -> Symbol:
+    return Symbol(name, ".text", address, "function", size)
+
+
+def hand_built_table() -> SymbolTable:
+    return SymbolTable(
+        [
+            function_symbol("GXFirst", TEXT + 0x00, 0x20),
+            function_symbol("fn_80004020", TEXT + 0x20, 0x20),
+            function_symbol("fn_80004040", TEXT + 0x40, 0x10),
+            function_symbol("fn_80004050", TEXT + 0x50, 0x10),
+            function_symbol("GXLast", TEXT + 0x60, 0x10),
+        ]
+    )
+
+
+def write_reference(tmp_path: Path) -> Path:
+    path = tmp_path / "MAP.txt"
+    path.write_text(REFERENCE_MAP, encoding="utf-8")
+    return path
+
+
+def test_the_sdk_names_of_the_map_are_written_as_the_sdk_headers_write_them():
+    assert plain_sdk_name("GX::SetViewport") == "GXSetViewport"
+    assert plain_sdk_name("__GX::InitGX") == "__GXInitGX"
+    assert plain_sdk_name("nw4r::g3d::Draw") == "nw4r::g3d::Draw"  # not a C function of the SDK
+    assert plain_sdk_name("main") == "main"
+
+
+def test_labels_inside_a_function_belong_to_the_function_before_them(tmp_path):
+    reference = read_reference_map(write_reference(tmp_path))
+    by_name = {function.name: function for function in reference}
+    assert "GXTwenty_switch" not in by_name
+    assert "GXTwenty_caseD_3" not in by_name
+    assert by_name["GXTwenty"].size == 0x20  # up to GXSixteenA, labels and all
+    # The first name given to an address is the one kept.
+    assert by_name["GXSixteenA"].address == REFERENCE_TEXT + 0x30
+    assert "GXDuplicate_at_the_same_address" not in by_name
+    # The last entry has no next one to measure against, so it is not a function of known size.
+    assert "OSAfterTheLibrary" not in by_name
+    assert by_name["GXLast"] == Function(REFERENCE_TEXT + 0xA0, 0x10, "GXLast")
+
+
+def test_a_function_pairs_only_with_one_of_the_same_size():
+    # 0x20 and 0x30 in ours; the reference has 0x20, a 0x18 this game dropped, and 0x30.
+    assert unambiguous_pairs([0x20, 0x30], [0x20, 0x18, 0x30]) == {(0, 0), (1, 2)}
+    assert unambiguous_pairs([0x20], [0x24]) == set()
+
+
+def test_a_pairing_that_could_slide_gives_no_name():
+    # Two functions of 0x10 against three: which two of the three is anybody's guess.
+    assert unambiguous_pairs([0x20, 0x10, 0x10], [0x20, 0x10, 0x10, 0x10]) == {(0, 0)}
+    # Against exactly two, there is only one way.
+    assert unambiguous_pairs([0x10, 0x10], [0x10, 0x10]) == {(0, 0), (1, 1)}
+
+
+def test_names_come_only_from_between_two_anchors_and_only_when_sure(tmp_path):
+    table = hand_built_table()
+    reference = read_reference_map(write_reference(tmp_path))
+    proposals = propose_names(table, reference, "GX")
+    assert proposals == [Proposal(TEXT + 0x20, 0x20, "fn_80004020", "GXTwenty")]
+
+
+def test_a_name_is_written_only_on_a_placeholder_and_only_once():
+    table = hand_built_table()
+    table.add(function_symbol("GXTaken", TEXT + 0x1000, 0x10))
+    table.add(function_symbol("OSAlreadyNamed", TEXT + 0x1010, 0x10))
+    proposals = [
+        Proposal(TEXT + 0x20, 0x20, "fn_80004020", "GXTwenty"),  # accepted
+        Proposal(TEXT + 0x1010, 0x10, "OSAlreadyNamed", "GXOther"),  # the function has a name already
+        Proposal(TEXT + 0x40, 0x10, "fn_80004040", "OSReport"),  # not a name of the GX library
+        Proposal(TEXT + 0x50, 0x10, "fn_80004050", "GXTaken"),  # another symbol has it
+    ]
+    result = judge(table, proposals, "GX")
+    assert result.accepted == proposals[:1]
+    assert result.already_named == proposals[1:2]
+    assert result.other_library == proposals[2:3]
+    assert result.shared == proposals[3:4]
+
+
+def test_two_functions_offered_the_same_name_get_neither():
+    table = hand_built_table()
+    proposals = [
+        Proposal(TEXT + 0x40, 0x10, "fn_80004040", "GXTwin"),
+        Proposal(TEXT + 0x50, 0x10, "fn_80004050", "GXTwin"),
+    ]
+    result = judge(table, proposals, "GX")
+    assert result.accepted == []
+    assert result.shared == proposals
