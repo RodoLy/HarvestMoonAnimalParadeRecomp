@@ -31,10 +31,16 @@ def test_encoders_match_capstone():
         ppc_encode.lmw(30, 8, 1): "lmw r30, 8(r1)",
         ppc_encode.lfd(3, -16, 5): "lfd f3, -0x10(r5)",
         ppc_encode.stfd(7, 8, 3): "stfd f7, 8(r3)",
+        ppc_encode.lbz(5, 2, 9): "lbz r5, 2(r9)",
+        ppc_encode.lhz(0, 0x16, 3): "lhz r0, 0x16(r3)",
+        ppc_encode.cmpwi(3, -1): "cmpwi r3, -1",
         ppc_encode.cmplwi(3, 2): "cmplwi r3, 2",
+        ppc_encode.cmplw(3, 0): "cmplw r3, r0",
+        ppc_encode.andi_record(0, 3, 1): "andi. r0, r3, 1",
         ppc_encode.slwi(0, 3, 2): "slwi r0, r3, 2",
         ppc_encode.srwi(3, 9, 31): "srwi r3, r9, 0x1f",
         ppc_encode.rlwinm(5, 6, 0, 21, 19): "rlwinm r5, r6, 0, 0x15, 0x13",
+        ppc_encode.rlwimi(5, 4, 8, 16, 23): "rlwimi r5, r4, 8, 0x10, 0x17",
         ppc_encode.lwzx(0, 4, 0): "lwzx r0, r4, r0",
         ppc_encode.mr(31, 3): "mr r31, r3",
         ppc_encode.or_(9, 10, 8): "or r9, r10, r8",
@@ -49,6 +55,9 @@ def test_encoders_match_capstone():
         ppc_encode.b(ADDRESS, ADDRESS + 0x30): "b 0x80004030",
         ppc_encode.bl(ADDRESS, ADDRESS - 0x100): "bl 0x80003f00",
         ppc_encode.bgt(ADDRESS, ADDRESS + 0x30): "bgt 0x80004030",
+        ppc_encode.beq(ADDRESS, ADDRESS - 8): "beq 0x80003ff8",
+        ppc_encode.bne(ADDRESS, ADDRESS - 8): "bne 0x80003ff8",
+        ppc_encode.bdnz(ADDRESS, ADDRESS - 8): "bdnz 0x80003ff8",
     }
     for word, text in expected.items():
         assert text_of(word) == text, f"0x{word:08X}"
