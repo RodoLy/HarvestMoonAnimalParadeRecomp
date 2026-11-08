@@ -1,0 +1,34 @@
+Do not follow calls to addresses outside RAM.
+No seguir llamadas a direcciones fuera de la RAM.
+
+The Nintendo SDK's __OSDBJump (0x80251B90 in Animal Parade, 0x8016F6B0 in Magical Melody) ends
+with `bla 0x60`, a jump into the console's debugger stub. A retail console never takes it, but
+translate-recursive follows every call and stops with "Address 0x00000060 is outside the loaded
+RAM image". This skips any queued address outside the program image.
+
+__OSDBJump del SDK termina con `bla 0x60`, un salto al depurador de la consola. Una consola de
+venta nunca lo toma, pero translate-recursive sigue cada llamada y se detiene con "Address
+0x00000060 is outside the loaded RAM image". Esto salta cualquier dirección fuera de la imagen.
+
+Applies to WiiCompiled commit 27ff3b0 / Se aplica a WiiCompiled 27ff3b0:
+    git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
+
+diff --git a/translator/src/Translator.Cli/Program.cs b/translator/src/Translator.Cli/Program.cs
+index e1164dd..55622b0 100644
+--- a/translator/src/Translator.Cli/Program.cs
++++ b/translator/src/Translator.Cli/Program.cs
+@@ -645,6 +645,14 @@ int RunTranslateRecursive(string[] argsTail)
+                 return true;
+             }
+ 
++            // A call that leaves RAM is not a function of the game. The SDK's __OSDBJump
++            // ends with `bla 0x60`, a jump into the console's debugger stub, which a
++            // retail console never reaches. There is nothing to translate there.
++            if (!image.Value.Contains(item.addr, sizeof(uint)))
++            {
++                return true;
++            }
++
+             return false;
+         }
+ 
