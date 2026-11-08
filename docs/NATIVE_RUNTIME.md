@@ -45,13 +45,14 @@ que para *Magical Melody* (GameCube) son trabajo nuevo, aquí ya están:
    `27ff3b0`) y se nombraron con su mapa de Mario Kart Wii
    (`projects/mkwii/MAP.txt`).
 4. Se cruzaron las dos listas por nombre. Una función sin nombre no se puede
-   cruzar todavía.
+   cruzar todavía. GX se nombró casi entera con el mapa de *Mario Kart Wii*
+   (`tools/name_from_reference_map.py`, ver [FUNCTION_MAP.md](FUNCTION_MAP.md)).
 
 ### Resultado (2026-11-08)
 
 | Biblioteca | Lo que el juego llama | Con nombre | Ya lo da WiiCompiled | Cómo se cubre |
 |---|---:|---:|---:|---|
-| GX (gráficos) | 129 | 27 | **27 de 27** | Nativa, con aurora. Faltan nombres. |
+| GX (gráficos) | 129 | 117 | **98 de 117** | Nativa, con aurora. Las otras 19 corren traducidas. |
 | OS (sistema) | 108 | 42 | 17 | Nativa en parte: hilos, alarmas, interrupciones, caché. |
 | DVD (disco) | 24 | 7 | 4 | Nativa: lectura de la carpeta extraída. |
 | VI (video) | 32 | 14 | 6 | Nativa. |
@@ -60,12 +61,27 @@ que para *Magical Melody* (GameCube) son trabajo nuevo, aquí ya están:
 | IPC / IOS | 38 | 16 | 2 | Los dispositivos de IOS son nativos; la biblioteca corre traducida. |
 | NAND, SC, WPAD, KPAD, WUD, BTE | 244 | 108 | 2 | Corren traducidas sobre los dispositivos de IOS. |
 | MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 53 | 1 | Código normal: corre traducido. |
-| **Total** | **683** | **278** | **68** | |
+| **Total** | **683** | **368** | **139** | |
 
-Lo importante es la primera fila: **todas las funciones de GX que ya tienen
-nombre las da WiiCompiled.** Lo que falta es nombrar las otras 102, como hizo
-*Magical Melody* con las suyas: leyendo su código, cada una con una prueba
-contra `main.dol` (`tools/code_facts.py`).
+Lo importante es la primera fila: **de las 117 funciones de GX que el juego
+llama y ya tienen nombre, WiiCompiled da 98.** Las otras 19 no son un bloqueo,
+porque corren traducidas:
+
+- 14 solo leen o escriben memoria: los ocho getters de `GXTexObj`,
+  `GXInitLightPos`, `GXInitLightColor`, `GXAdjustForOverscan`,
+  `GXGetYScaleFactor`, `GXGetScissor` y `GXSetMisc`. Las dos últimas leen y
+  escriben la estructura `gx` del juego, así que al armar la capa hay que
+  revisar que las versiones nativas de WiiCompiled la mantengan.
+- 3 escriben en la tubería de GX (`GXInvalidateVtxCache`, `GXSetCopyClear`,
+  `GXSetDispCopyYScale`), y eso ya pasa por el decodificador de la FIFO de
+  WiiCompiled (ver abajo).
+- `GXSetDrawSyncCallback` guarda una función que el runtime tiene que llamar
+  cuando la GPU llegue a un *token* de sincronización.
+- `GXReadGPMetric` lee contadores de rendimiento del procesador de comandos;
+  basta con que devuelva ceros.
+
+Quedan 12 sin nombre, funciones pequeñas que el juego solo usa por puntero
+para mandar vértices.
 
 ### El juego escribe en la tubería de GX por su cuenta
 
@@ -150,7 +166,8 @@ con `dotnet`.
 
 ### Qué sigue
 
-1. Nombrar las 102 funciones de GX que faltan, y luego las de OS, DVD y VI.
+1. Nombrar OS, DVD y VI como se hizo con GX (`tools/name_from_reference_map.py OS`),
+   y leyendo el código lo que el mapa no ubique.
 2. Una capa propia con las direcciones de este juego: las piezas de
    WiiCompiled que sirven (GX, VI, OS, DVD, audio, IOS), registradas en las
    direcciones de Animal Parade. WiiCompiled es GPL-3.0 como este proyecto; lo
@@ -199,13 +216,14 @@ that are new work for *Magical Melody* (GameCube) are already there:
    `PPC_NATIVE_OVERRIDE_VOID` macros (552 addresses, commit `27ff3b0`) and
    named with its Mario Kart Wii map (`projects/mkwii/MAP.txt`).
 4. The two lists were matched by name. An unnamed function cannot be matched
-   yet.
+   yet. GX was named almost whole from *Mario Kart Wii*'s map
+   (`tools/name_from_reference_map.py`, see [FUNCTION_MAP.md](FUNCTION_MAP.md)).
 
 ### Result (2026-11-08)
 
 | Library | What the game calls | Named | Already in WiiCompiled | How it is covered |
 |---|---:|---:|---:|---|
-| GX (graphics) | 129 | 27 | **27 of 27** | Native, with aurora. Names missing. |
+| GX (graphics) | 129 | 117 | **98 of 117** | Native, with aurora. The other 19 run translated. |
 | OS (system) | 108 | 42 | 17 | Partly native: threads, alarms, interrupts, cache. |
 | DVD (disc) | 24 | 7 | 4 | Native: reading the extracted folder. |
 | VI (video) | 32 | 14 | 6 | Native. |
@@ -214,12 +232,27 @@ that are new work for *Magical Melody* (GameCube) are already there:
 | IPC / IOS | 38 | 16 | 2 | The IOS devices are native; the library runs translated. |
 | NAND, SC, WPAD, KPAD, WUD, BTE | 244 | 108 | 2 | Run translated on top of the IOS devices. |
 | MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 53 | 1 | Ordinary code: runs translated. |
-| **Total** | **683** | **278** | **68** | |
+| **Total** | **683** | **368** | **139** | |
 
-The first row is what matters: **every GX function that already has a name is
-provided by WiiCompiled.** What is left is naming the other 102, as *Magical
-Melody* did with its own: by reading their code, each with a test against
-`main.dol` (`tools/code_facts.py`).
+The first row is what matters: **of the 117 GX functions the game calls that
+have a name, WiiCompiled provides 98.** The other 19 are not a blocker,
+because they run translated:
+
+- 14 only read or write memory: the eight `GXTexObj` getters,
+  `GXInitLightPos`, `GXInitLightColor`, `GXAdjustForOverscan`,
+  `GXGetYScaleFactor`, `GXGetScissor` and `GXSetMisc`. The last two read and
+  write the game's `gx` structure, so when the layer is built we must check
+  that WiiCompiled's native versions keep it up to date.
+- 3 write into the GX pipe (`GXInvalidateVtxCache`, `GXSetCopyClear`,
+  `GXSetDispCopyYScale`), and that already goes through WiiCompiled's FIFO
+  decoder (see below).
+- `GXSetDrawSyncCallback` stores a function the runtime has to call when the
+  GPU reaches a sync token.
+- `GXReadGPMetric` reads performance counters of the command processor;
+  returning zeros is enough.
+
+12 are still unnamed: small functions the game only uses through a pointer, to
+send vertices.
 
 ### The game writes into the GX pipe on its own
 
@@ -303,7 +336,8 @@ through `dotnet`.
 
 ### What comes next
 
-1. Name the 102 GX functions that are missing, then those of OS, DVD and VI.
+1. Name OS, DVD and VI as was done with GX (`tools/name_from_reference_map.py OS`),
+   and by reading the code whatever the map cannot place.
 2. A layer of our own at this game's addresses: the pieces of WiiCompiled that
    serve (GX, VI, OS, DVD, audio, IOS), registered at Animal Parade's
    addresses. WiiCompiled is GPL-3.0 like this project; whatever is taken from
