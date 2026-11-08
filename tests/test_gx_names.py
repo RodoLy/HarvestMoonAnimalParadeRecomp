@@ -19,8 +19,8 @@ Two kinds of check:
 - A longer function is checked with a row of tools/code_facts.Evidence: the facts must be in the function
   and in no other function of GX. The row comments say what each fact is in the SDK's source.
 
-The offsets of `gx` (the SDK's state structure, which r2 points at through -0x3C68) and the BP register
-numbers are those of the SDK's GX sources; docs/FUNCTION_MAP.md lists them.
+The offsets of `gx` (the SDK's state structure, whose address the code loads from -0x3C68(r2)) and the
+BP register numbers are those of the SDK's GX sources. docs/FUNCTION_MAP.md tells how the names were found.
 """
 
 import os
