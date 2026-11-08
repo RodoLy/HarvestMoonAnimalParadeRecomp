@@ -10,7 +10,7 @@ target-version = "py311"
 select = ["E", "W", "F", "I", "N", "B", "SIM", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["analyze", "check_disc", "code_facts", "codewarrior", "disasm", "dol", "export_dolrecomp_map", "find_callers", "find_gx_pipe_writers", "find_idle_loops", "find_library_entry_points", "function_finder", "ppc", "ppc_encode", "ppc_mnemonics", "project", "sdk_libraries", "sdk_names", "sdk_signatures", "symbols", "synthetic"]
+known-first-party = ["analyze", "check_disc", "code_facts", "codewarrior", "disasm", "dol", "export_dolrecomp_map", "export_wiicompiled_map", "find_callers", "find_gx_pipe_writers", "find_idle_loops", "find_library_entry_points", "function_finder", "ppc", "ppc_encode", "ppc_mnemonics", "project", "sdk_libraries", "sdk_names", "sdk_signatures", "symbols", "synthetic"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
