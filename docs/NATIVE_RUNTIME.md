@@ -113,9 +113,10 @@ Sin el mapa, el traductor solo habría visto la cuarta parte del juego.
    direcciones fuera de la imagen del programa.
 2. **Las funciones nativas de Mario Kart Wii.** Si el manifiesto no dice dónde
    están las funciones nativas, el traductor lee las de `runtime/src`, que
-   están en las direcciones de Mario Kart Wii. Con eso tomó 582 direcciones de
-   este juego como funciones nativas: las dejaba sin traducir y suponía efectos
-   de registros equivocados al llamarlas. El manifiesto ahora apunta a una
+   están en las direcciones de Mario Kart Wii. Con eso trató 583 direcciones de
+   este juego como funciones nativas: no las metía en línea y, en 582, suponía
+   los efectos de registros de otra función al llamarlas. Se notó en el código
+   generado (24 041 llamadas en línea con la corrección, 23 953 sin ella). El manifiesto ahora apunta a una
    carpeta vacía (`native_registration_root`), y la traducción da 0 nativas.
 
 Lo que sigue es el runtime: registrar en las direcciones de Animal Parade las
@@ -265,9 +266,10 @@ Without the map, the translator would have seen a quarter of the game.
    makes it not follow addresses outside the program image.
 2. **Mario Kart Wii's native functions.** When the manifest does not say where
    the native functions are, the translator reads those in `runtime/src`, which
-   sit at Mario Kart Wii's addresses. With that it took 582 addresses of this
-   game as native functions: it left them untranslated and assumed the wrong
-   register effects when calling them. The manifest now points to an empty
+   sit at Mario Kart Wii's addresses. With that it treated 583 addresses of
+   this game as native functions: it did not inline them and, for 582, assumed
+   another function's register effects when calling them. It showed in the
+   generated code (24,041 inlined calls with the fix, 23,953 without it). The manifest now points to an empty
    folder (`native_registration_root`), and the translation has 0 natives.
 
 What follows is the runtime: registering the pieces of WiiCompiled that serve

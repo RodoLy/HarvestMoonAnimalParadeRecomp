@@ -51,11 +51,11 @@ translation:
 
 runtime:
   # An empty folder on purpose. Left out, this setting defaults to runtime/src, and then the
-  # translator takes Mario Kart Wii's native functions as this game's: it leaves the game functions
-  # at those addresses untranslated and assumes the wrong register effects for calls to them.
+  # translator takes Mario Kart Wii's native functions as this game's: it does not inline the game
+  # functions at those addresses and assumes another function's register effects for calls to them.
   # Una carpeta vacía a propósito. Si se omite, este ajuste vale runtime/src por defecto, y el
-  # traductor toma las funciones nativas de Mario Kart Wii como si fueran de este juego: deja sin
-  # traducir las funciones del juego en esas direcciones y supone efectos de registros equivocados.
+  # traductor toma las funciones nativas de Mario Kart Wii como si fueran de este juego: no mete en
+  # línea las funciones del juego en esas direcciones y supone efectos de registros de otra función.
   native_registration_root: projects/animal-parade/native
   native_abi_directories: []
 
