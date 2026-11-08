@@ -86,44 +86,75 @@ El hilo ocioso del sistema da vueltas en `0x8025ACE0`
 (`config/RBIEE9/game_settings.ini`); un runtime nativo tiene que dormir ahí en
 vez de girar.
 
-### Probar el traductor de WiiCompiled
+### El traductor de WiiCompiled (2026-11-08)
 
-*Magical Melody* ya pasó este paso: el traductor tradujo su juego entero en
-unos 20 segundos. Con este juego todavía no se ha corrido. Necesitas el SDK
-de .NET 8 y una copia de WiiCompiled:
+**Tradujo el juego entero.** Con el manifiesto `wiicompiled/RBIEE9.yml` y el
+mapa de `tools/export_wiicompiled_map.py`, `translate-recursive 0x80004050`
+tradujo **17 217 funciones en unos 35 segundos** (2 hilos), sin una sola
+instrucción que no conozca (`allow_unsupported_instructions` está apagado, así
+que una sola lo habría detenido). Escribió 17 217 archivos de C++ (146 MB) y
+`RuntimeConfig.h` con las bases de small data.
+
+| | |
+|---|---:|
+| Funciones alcanzadas desde `__start` por el grafo de llamadas | 4 114 |
+| Agregadas desde el mapa (punteros, vtables, tablas) | 13 103 |
+| Traducidas en total | 17 217 |
+| Llamadas en línea (*leaf inlining*) | 24 041, en 6 256 funciones |
+
+Sin el mapa, el traductor solo habría visto la cuarta parte del juego.
+
+**Dos cosas que hubo que corregir:**
+
+1. **Las llamadas fuera de la RAM.** `__OSDBJump` (`0x80251B90`) termina con
+   `bla 0x60`, un salto al depurador de la consola, y el traductor se detenía
+   ahí. Es lo mismo que le pasó a *Magical Melody*.
+   `patches/wiicompiled/skip-calls-outside-ram.patch` hace que no siga
+   direcciones fuera de la imagen del programa.
+2. **Las funciones nativas de Mario Kart Wii.** Si el manifiesto no dice dónde
+   están las funciones nativas, el traductor lee las de `runtime/src`, que
+   están en las direcciones de Mario Kart Wii. Con eso tomó 582 direcciones de
+   este juego como funciones nativas: las dejaba sin traducir y suponía efectos
+   de registros equivocados al llamarlas. El manifiesto ahora apunta a una
+   carpeta vacía (`native_registration_root`), y la traducción da 0 nativas.
+
+Lo que sigue es el runtime: registrar en las direcciones de Animal Parade las
+piezas de WiiCompiled que sirven (ver «Qué sigue»).
+
+**Para repetirlo.** Necesitas el SDK de .NET (8.0.200 o más nuevo: el
+generador de código de Tomlyn, una dependencia del traductor, pide el
+compilador de C# 4.9) y una copia de WiiCompiled en el commit `27ff3b0`:
 
 ```sh
 python3 tools/export_wiicompiled_map.py          # escribe build/RBIEE9_wiicompiled_map.txt
 
 git clone https://github.com/patchzyy/wiicompiled
-mkdir -p wiicompiled/projects/animal-parade
-cp wiicompiled/RBIEE9.yml wiicompiled/projects/animal-parade/recomp.yml   # el de este repo
-cp build/RBIEE9_wiicompiled_map.txt wiicompiled/projects/animal-parade/MAP.txt
-
 cd wiicompiled
+git checkout 27ff3b0
+git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
+mkdir -p projects/animal-parade/native              # vacía a propósito
+cp /ruta/a/harvest-moon-ap-recomp/wiicompiled/RBIEE9.yml projects/animal-parade/recomp.yml
+cp /ruta/a/harvest-moon-ap-recomp/build/RBIEE9_wiicompiled_map.txt projects/animal-parade/MAP.txt
+
 dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
-export RECOMP_RBIEE9_DOL=/ruta/a/orig/RBIEE9/sys/main.dol
+export RECOMP_RBIEE9_DOL=/ruta/a/harvest-moon-ap-recomp/orig/RBIEE9/sys/main.dol
 dotnet translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll \
     translate-recursive 0x80004050 --project projects/animal-parade/recomp.yml
 ```
 
-(En Windows, `set RECOMP_RBIEE9_DOL=...` en lugar de `export`.)
-
-El mapa nombra los cuatro grupos de thunks con los que CodeWarrior guarda y
-restaura registros (`_save_gpr_14` … `_rest_fpr_31`, en `0x8027E8DC`), porque
-el traductor solo los reconoce por esos nombres. *Magical Melody* necesitó un
-cambio local en el traductor (no seguir llamadas fuera de la RAM, por
-`__OSDBJump`); aquí puede pasar lo mismo.
+En Windows, `set RECOMP_RBIEE9_DOL=...` en lugar de `export`. Con el SDK de
+.NET que trae Ubuntu, agrega `-p:UseAppHost=false` a `dotnet build`: no trae el
+lanzador nativo para `linux-x64`, y no hace falta porque el traductor se corre
+con `dotnet`.
 
 ### Qué sigue
 
-1. Correr el traductor con el manifiesto de arriba y anotar qué pasa.
-2. Nombrar las 102 funciones de GX que faltan, y luego las de OS, DVD y VI.
-3. Una capa propia con las direcciones de este juego: las piezas de
+1. Nombrar las 102 funciones de GX que faltan, y luego las de OS, DVD y VI.
+2. Una capa propia con las direcciones de este juego: las piezas de
    WiiCompiled que sirven (GX, VI, OS, DVD, audio, IOS), registradas en las
    direcciones de Animal Parade. WiiCompiled es GPL-3.0 como este proyecto; lo
    que se tome de él se marca con su origen.
-4. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
+3. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
 
 ---
 
@@ -207,41 +238,72 @@ right after `OSSetCurrentContext` and `OSEnableInterrupts`). With ModernGekko
 the runner is told to skip it (`config/RBIEE9/game_settings.ini`); a native
 runtime has to sleep there instead of spinning.
 
-### Trying WiiCompiled's translator
+### WiiCompiled's translator (2026-11-08)
 
-*Magical Melody* already passed this step: the translator translated its whole
-game in about 20 seconds. It has not been run on this game yet. You need the
-.NET 8 SDK and a copy of WiiCompiled:
+**It translated the whole game.** With the manifest `wiicompiled/RBIEE9.yml`
+and the map from `tools/export_wiicompiled_map.py`,
+`translate-recursive 0x80004050` translated **17,217 functions in about 35
+seconds** (2 threads), with not a single instruction it does not know
+(`allow_unsupported_instructions` is off, so one would have stopped it). It
+wrote 17,217 C++ files (146 MB) and `RuntimeConfig.h` with the small data
+bases.
+
+| | |
+|---|---:|
+| Functions reached from `__start` by the call graph | 4,114 |
+| Added from the map (pointers, vtables, tables) | 13,103 |
+| Translated in all | 17,217 |
+| Calls inlined (leaf inlining) | 24,041, in 6,256 functions |
+
+Without the map, the translator would have seen a quarter of the game.
+
+**Two things had to be fixed:**
+
+1. **Calls outside RAM.** `__OSDBJump` (`0x80251B90`) ends with `bla 0x60`, a
+   jump into the console's debugger, and the translator stopped there. The same
+   happened to *Magical Melody*. `patches/wiicompiled/skip-calls-outside-ram.patch`
+   makes it not follow addresses outside the program image.
+2. **Mario Kart Wii's native functions.** When the manifest does not say where
+   the native functions are, the translator reads those in `runtime/src`, which
+   sit at Mario Kart Wii's addresses. With that it took 582 addresses of this
+   game as native functions: it left them untranslated and assumed the wrong
+   register effects when calling them. The manifest now points to an empty
+   folder (`native_registration_root`), and the translation has 0 natives.
+
+What follows is the runtime: registering the pieces of WiiCompiled that serve
+at Animal Parade's addresses (see "What comes next").
+
+**To repeat it.** You need the .NET SDK (8.0.200 or newer: the code generator
+of Tomlyn, one of the translator's dependencies, needs the C# 4.9 compiler) and
+a copy of WiiCompiled at commit `27ff3b0`:
 
 ```sh
 python3 tools/export_wiicompiled_map.py          # writes build/RBIEE9_wiicompiled_map.txt
 
 git clone https://github.com/patchzyy/wiicompiled
-mkdir -p wiicompiled/projects/animal-parade
-cp wiicompiled/RBIEE9.yml wiicompiled/projects/animal-parade/recomp.yml   # the one in this repository
-cp build/RBIEE9_wiicompiled_map.txt wiicompiled/projects/animal-parade/MAP.txt
-
 cd wiicompiled
+git checkout 27ff3b0
+git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
+mkdir -p projects/animal-parade/native              # empty on purpose
+cp /path/to/harvest-moon-ap-recomp/wiicompiled/RBIEE9.yml projects/animal-parade/recomp.yml
+cp /path/to/harvest-moon-ap-recomp/build/RBIEE9_wiicompiled_map.txt projects/animal-parade/MAP.txt
+
 dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
-export RECOMP_RBIEE9_DOL=/path/to/orig/RBIEE9/sys/main.dol
+export RECOMP_RBIEE9_DOL=/path/to/harvest-moon-ap-recomp/orig/RBIEE9/sys/main.dol
 dotnet translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll \
     translate-recursive 0x80004050 --project projects/animal-parade/recomp.yml
 ```
 
-(On Windows, `set RECOMP_RBIEE9_DOL=...` instead of `export`.)
-
-The map names the four runs of thunks with which CodeWarrior saves and restores
-registers (`_save_gpr_14` … `_rest_fpr_31`, at `0x8027E8DC`), because the
-translator recognises them only by those names. *Magical Melody* needed one
-local change to the translator (do not follow calls outside RAM, because of
-`__OSDBJump`); the same may happen here.
+On Windows, `set RECOMP_RBIEE9_DOL=...` instead of `export`. With the .NET SDK
+that Ubuntu ships, add `-p:UseAppHost=false` to `dotnet build`: it has no native
+launcher for `linux-x64`, and none is needed because the translator runs
+through `dotnet`.
 
 ### What comes next
 
-1. Run the translator with the manifest above and write down what happens.
-2. Name the 102 GX functions that are missing, then those of OS, DVD and VI.
-3. A layer of our own at this game's addresses: the pieces of WiiCompiled that
+1. Name the 102 GX functions that are missing, then those of OS, DVD and VI.
+2. A layer of our own at this game's addresses: the pieces of WiiCompiled that
    serve (GX, VI, OS, DVD, audio, IOS), registered at Animal Parade's
    addresses. WiiCompiled is GPL-3.0 like this project; whatever is taken from
    it is marked with where it came from.
-4. Reach the title screen and compare it with the version on ModernGekko.
+3. Reach the title screen and compare it with the version on ModernGekko.
