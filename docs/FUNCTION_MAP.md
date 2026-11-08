@@ -37,7 +37,7 @@ organiza el ejecutable son los mismos que en GameCube.
 | …destino de algún `bl` | 10 560 | 3 637 |
 | Tablas de `switch` | 220 (1 sin comprobación de límite) | 274 |
 | Datos dentro de código | 3 | 3 |
-| Funciones con nombre | 804, todas del SDK (19 por versión, 785 por firma) | 682 |
+| Funciones con nombre | 923, todas del SDK (19 por versión, 785 por firma, 119 de GX por el mapa de Mario Kart Wii o leyendo su código) | 682 |
 
 Bibliotecas del SDK identificadas: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI,
 NAND, SC, ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -89,7 +89,7 @@ ARC, WENC, WPAD, KPAD, WUD y la pila Bluetooth (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | VI | `0x80269020`–`0x8026C858` | 14 |
 | PAD | `0x8026CE40`–`0x8026E078` | 4 |
 | AI, AX, DSP | `0x8026E8B0`–`0x8027602C` | 12 |
-| GX | `0x80276250`–`0x8027DFC0` | 44 |
+| GX | `0x80276250`–`0x8027DFC0` | 44 (163 con la sección siguiente) |
 | EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 34 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
 | IPC | `0x8029CA70`–`0x8029F0C4` | 19 |
@@ -102,8 +102,58 @@ ARC, WENC, WPAD, KPAD, WUD y la pila Bluetooth (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | KPAD | `0x802ECE30`–`0x802ED284` | 2 |
 
 Muchas bibliotecas son más anchas que su rango: la mayoría de sus funciones
-todavía no tienen nombre (GX tiene 44 nombres entre 190 funciones). Qué falta
-nombrar, y para qué, está en [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+todavía no tienen nombre por firma (GX tenía 44 nombres entre 190 funciones).
+Qué falta nombrar, y para qué, está en [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+
+### GX por el mapa de Mario Kart Wii
+
+*Mario Kart Wii* se compiló con el mismo SDK, y WiiCompiled trae un mapa suyo
+con casi todo el SDK nombrado (`projects/mkwii/MAP.txt`). El enlazador pone las
+funciones de una biblioteca en el mismo orden en cada juego y el mismo código
+fuente da el mismo tamaño; lo que cambia es que cada juego quita las funciones
+que no usa. `tools/name_from_reference_map.py` aprovecha eso:
+
+1. **Anclas:** las funciones con el mismo nombre en los dos juegos, mientras el
+   orden coincida.
+2. Entre dos anclas, **alinea los tamaños**: dos funciones solo se emparejan si
+   miden lo mismo, y cualquiera de los dos lados puede saltarse funciones.
+3. Si varias funciones seguidas miden lo mismo, el emparejamiento podría
+   correrse, así que se alinea **de cuatro formas** y un nombre solo se queda
+   si las cuatro coinciden.
+4. Solo escribe sobre nombres provisionales (`fn_…`), solo nombres de la misma
+   biblioteca, y nunca un nombre que recibirían dos funciones.
+
+```sh
+python3 tools/name_from_reference_map.py GX --reference /ruta/a/wiicompiled/projects/mkwii/MAP.txt
+python3 tools/name_from_reference_map.py GX --reference ... --apply   # escribe los nombres
+```
+
+| | Funciones |
+|---|---:|
+| Nombradas por el mapa | 100 |
+| Nombradas leyendo su código (otro tamaño, o en una fila de funciones del mismo tamaño) | 19 |
+| Sin nombre todavía | 26 |
+| **Con nombre en GX** | **163 de 190** |
+
+**Lo que se comprobó leyendo el código.** Orden y tamaño son buena evidencia,
+pero no prueba. `tests/test_gx_names.py` comprueba contra `main.dol` las 19
+funciones nombradas a mano y algunas del mapa: las de dos o tres instrucciones,
+instrucción por instrucción (`GXGetTexObjWrapS` y `GXGetTexObjWrapT` leen la
+misma palabra y solo cambian los dos bits que se quedan); las demás, con los
+hechos en los que se apoya el nombre (registros BP como `0xF4`/`0xF5` de
+`GXSetZTexture`, campos de la estructura `gx` como `genMode` en `0x254`), que
+ninguna otra función de GX tiene. Dos funciones no están en el mapa de *Mario
+Kart Wii* porque ese juego no las usa: `GXAdjustForOverscan` y
+`GXReadGPMetric`.
+
+**Un error del mapa.** Le da el nombre `GXPokeAlphaUpdate` a dos funciones
+(`0x80279410` en este juego es en realidad `GXPokeAlphaRead`). La herramienta
+descarta un nombre que recibirían dos funciones, así que no nombró ninguna.
+
+**Lo que queda.** 12 funciones pequeñas que el juego solo usa por puntero
+(`0x802786B8`–`0x802787E4`, para mandar vértices; tampoco tienen nombre en el
+mapa de *Mario Kart Wii*) y funciones internas que el resto del juego no llama,
+como `0x80279750`, que por lo que hace parece `__GXSetDirtyState`.
 
 ### Otras cosas que se encontraron con las herramientas nuevas
 
@@ -157,7 +207,7 @@ executable are the same as on GameCube.
 | …called with `bl` | 10,560 | 3,637 |
 | `switch` tables | 220 (1 without a bounds check) | 274 |
 | Data inside code | 3 | 3 |
-| Named functions | 804, all from the SDK (19 by version, 785 by signature) | 682 |
+| Named functions | 923, all from the SDK (19 by version, 785 by signature, 119 of GX from Mario Kart Wii's map or by reading their code) | 682 |
 
 SDK libraries identified: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI, NAND, SC,
 ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -208,7 +258,7 @@ KPAD, WUD and the Bluetooth stack (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | VI | `0x80269020`–`0x8026C858` | 14 |
 | PAD | `0x8026CE40`–`0x8026E078` | 4 |
 | AI, AX, DSP | `0x8026E8B0`–`0x8027602C` | 12 |
-| GX | `0x80276250`–`0x8027DFC0` | 44 |
+| GX | `0x80276250`–`0x8027DFC0` | 44 (163 with the next section) |
 | EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 34 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
 | IPC | `0x8029CA70`–`0x8029F0C4` | 19 |
@@ -221,8 +271,59 @@ KPAD, WUD and the Bluetooth stack (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | KPAD | `0x802ECE30`–`0x802ED284` | 2 |
 
 Many libraries are wider than their range: most of their functions have no
-name yet (GX has 44 names among 190 functions). What is left to name, and why,
-is in [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+name from a signature (GX had 44 names among 190 functions). What is left to
+name, and why, is in [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+
+### GX from Mario Kart Wii's map
+
+*Mario Kart Wii* was built with the same SDK, and WiiCompiled ships a map of it
+with almost the whole SDK named (`projects/mkwii/MAP.txt`). The linker lays out
+a library's functions in the same order in every game, and the same source
+gives the same size; what changes is that each game drops the functions it does
+not use. `tools/name_from_reference_map.py` makes use of that:
+
+1. **Anchors:** the functions with the same name in both games, while the
+   order agrees.
+2. Between two anchors, it **lines up the sizes**: two functions pair up only
+   when their sizes are equal, and either side may skip functions.
+3. When several functions in a row have the same size, the pairing could
+   slide, so the alignment is done **four ways** and a name is kept only when
+   all four agree.
+4. It only writes over placeholder names (`fn_…`), only names of the same
+   library, and never a name two functions would get.
+
+```sh
+python3 tools/name_from_reference_map.py GX --reference /path/to/wiicompiled/projects/mkwii/MAP.txt
+python3 tools/name_from_reference_map.py GX --reference ... --apply   # write the names
+```
+
+| | Functions |
+|---|---:|
+| Named from the map | 100 |
+| Named by reading their code (another size, or in a run of functions of one size) | 19 |
+| Not named yet | 26 |
+| **Named in GX** | **163 of 190** |
+
+**What was checked by reading the code.** Order and size are good evidence,
+but not proof. `tests/test_gx_names.py` checks against `main.dol` the 19
+functions named by hand and some of those from the map: the ones of two or
+three instructions, instruction by instruction (`GXGetTexObjWrapS` and
+`GXGetTexObjWrapT` read the same word and differ only in which two bits they
+keep); the others, by the facts the name rests on (BP registers such as
+`0xF4`/`0xF5` in `GXSetZTexture`, fields of the `gx` structure such as
+`genMode` at `0x254`), which no other GX function has. Two functions are not in
+*Mario Kart Wii*'s map because that game does not use them:
+`GXAdjustForOverscan` and `GXReadGPMetric`.
+
+**A mistake in the map.** It gives the name `GXPokeAlphaUpdate` to two
+functions (`0x80279410` in this game is really `GXPokeAlphaRead`). The tool
+drops a name two functions would get, so it named neither.
+
+**What is left.** 12 small functions the game only uses through a pointer
+(`0x802786B8`–`0x802787E4`, for sending vertices; they have no name in *Mario
+Kart Wii*'s map either) and internal functions the rest of the game does not
+call, such as `0x80279750`, which by what it does looks like
+`__GXSetDirtyState`.
 
 ### Other findings from the new tools
 
