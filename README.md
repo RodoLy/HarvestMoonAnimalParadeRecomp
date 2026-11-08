@@ -19,12 +19,14 @@ disco.
 ### Estado
 
 - **Fase 0 terminada:** mapa de funciones del ejecutable (17 142 funciones,
-  validado contra el índice de excepciones de CodeWarrior). Ver
-  [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
+  validado contra el índice de excepciones de CodeWarrior), con 804 nombres
+  del SDK. Ver [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
 - **Fase 1 empezada:** el script para compilar y jugar en Linux o WSL2 ya
   está adaptado ([docs/BUILDING.md](docs/BUILDING.md)), pero todavía no se ha
-  probado con el juego. Falta el paquete nativo para Windows en ARM. Ver
-  [docs/PLAN.md](docs/PLAN.md).
+  probado con el juego. Falta el paquete nativo para Windows en ARM.
+- **Fase 2 (runtime sin Dolphin) preparada:** medido qué pide el juego y qué
+  ya da WiiCompiled, y listos el manifiesto y el mapa para su traductor. Ver
+  [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) y [docs/PLAN.md](docs/PLAN.md).
 
 ### Empezar
 
@@ -80,12 +82,15 @@ This repository contains no game data. You need your own backup of the disc.
 ### Status
 
 - **Phase 0 done:** function map of the executable (17,142 functions,
-  validated against CodeWarrior's exception index). See
+  validated against CodeWarrior's exception index), with 804 SDK names. See
   [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
 - **Phase 1 started:** the script to build and play on Linux or WSL2 is
   adapted ([docs/BUILDING.md](docs/BUILDING.md)) but not yet tested with the
-  game. The native package for Windows on ARM is still to do. See
-  [docs/PLAN.md](docs/PLAN.md).
+  game. The native package for Windows on ARM is still to do.
+- **Phase 2 (runtime without Dolphin) prepared:** measured what the game needs
+  and what WiiCompiled already provides, and the manifest and map for its
+  translator are ready. See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
+  and [docs/PLAN.md](docs/PLAN.md).
 
 ### Getting started
 
