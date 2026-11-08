@@ -128,6 +128,9 @@ python3 tools/name_from_reference_map.py GX --reference /ruta/a/wiicompiled/proj
 python3 tools/name_from_reference_map.py GX --reference ... --apply   # escribe los nombres
 ```
 
+El mapa no está en este repositorio: es de WiiCompiled. Se pasa con
+`--reference` o con `HM_AP_REFERENCE_MAP`.
+
 | | Funciones |
 |---|---:|
 | Nombradas por el mapa | 100 |
@@ -296,6 +299,9 @@ not use. `tools/name_from_reference_map.py` makes use of that:
 python3 tools/name_from_reference_map.py GX --reference /path/to/wiicompiled/projects/mkwii/MAP.txt
 python3 tools/name_from_reference_map.py GX --reference ... --apply   # write the names
 ```
+
+The map is not in this repository: it is WiiCompiled's. Pass it with
+`--reference` or `HM_AP_REFERENCE_MAP`.
 
 | | Functions |
 |---|---:|
