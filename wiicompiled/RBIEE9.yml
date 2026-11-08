@@ -1,0 +1,60 @@
+# Project manifest for WiiCompiled's translator: Harvest Moon: Animal Parade (USA), RBIEE9 revision 1.
+# Manifiesto del proyecto para el traductor de WiiCompiled: Harvest Moon: Animal Parade (USA).
+#
+# Copy this file to projects/animal-parade/recomp.yml inside a clone of
+# github.com/patchzyy/wiicompiled. docs/NATIVE_RUNTIME.md explains the steps.
+# Copia este archivo a projects/animal-parade/recomp.yml dentro de una copia de WiiCompiled.
+# docs/NATIVE_RUNTIME.md explica los pasos.
+#
+# Only the translation is set up. WiiCompiled's runtime replaces SDK functions at Mario Kart Wii's
+# addresses, so none of it is registered here: in this game those addresses hold other code.
+# Solo está preparada la traducción. El runtime de WiiCompiled reemplaza funciones del SDK en las
+# direcciones de Mario Kart Wii, así que aquí no se registra nada de él: en este juego esas
+# direcciones tienen otro código.
+
+schema_version: 1
+workspace_root: ../..
+
+project:
+  id: harvest-moon-animal-parade-rbiee9
+  display_name: "Harvest Moon: Animal Parade (USA)"
+  game_id: RBIEE9
+
+memory:
+  base: 0x80000000
+  size: 0x01800000  # MEM1, the console's 24 MB of main memory
+  # The small data area bases that __init_registers (0x800041C0) loads with lis/ori:
+  # r13 at 0x80004244 and r2 at 0x8000423C.
+  # Las bases del área de datos pequeños que carga __init_registers con lis/ori.
+  sda_base: 0x806BA620
+  sda2_base: 0x806BCE60
+
+inputs:
+  dol:
+    # Set RECOMP_RBIEE9_DOL to your extracted orig/RBIEE9/sys/main.dol.
+    # Pon en RECOMP_RBIEE9_DOL la ruta de tu orig/RBIEE9/sys/main.dol extraído.
+    path: "%RECOMP_RBIEE9_DOL%"
+    sha256: eb6a7be2cedc51a8ac8b0cd02bca71799d575fc2c84afd453f08da7f6f6dd38f
+
+translation:
+  entry_points:
+    - 0x80004050  # __start, the DOL's entry point
+  function_map:
+    # Written by tools/export_wiicompiled_map.py; copy it next to this file.
+    # Lo escribe tools/export_wiicompiled_map.py; cópialo junto a este archivo.
+    path: projects/animal-parade/MAP.txt
+  # Off, as in Mario Kart Wii: an instruction the translator does not know stops it, which is what
+  # we want to find out.
+  # Apagado, como en Mario Kart Wii: una instrucción que el traductor no conozca lo detiene, que es
+  # justo lo que queremos averiguar.
+  allow_unsupported_instructions: false
+
+runtime:
+  native_abi_directories: []
+
+output:
+  root: build/animal-parade
+  functions: functions
+  runtime_config: RuntimeConfig.h
+  data_initializer: data_sections_init.cpp
+  base_manifest: base/base_manifest.json
