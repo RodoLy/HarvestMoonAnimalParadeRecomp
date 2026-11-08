@@ -24,8 +24,9 @@ disco.
 - **Fase 1 empezada:** el script para compilar y jugar en Linux o WSL2 ya
   está adaptado ([docs/BUILDING.md](docs/BUILDING.md)), pero todavía no se ha
   probado con el juego. Falta el paquete nativo para Windows en ARM.
-- **Fase 2 (runtime sin Dolphin) preparada:** medido qué pide el juego y qué
-  ya da WiiCompiled, y listos el manifiesto y el mapa para su traductor. Ver
+- **Fase 2 (runtime sin Dolphin) empezada:** el traductor de WiiCompiled ya
+  traduce el juego entero (17 217 funciones), y está medido qué pide el juego y
+  qué ya da WiiCompiled. Ver
   [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) y [docs/PLAN.md](docs/PLAN.md).
 
 ### Empezar
@@ -87,9 +88,9 @@ This repository contains no game data. You need your own backup of the disc.
 - **Phase 1 started:** the script to build and play on Linux or WSL2 is
   adapted ([docs/BUILDING.md](docs/BUILDING.md)) but not yet tested with the
   game. The native package for Windows on ARM is still to do.
-- **Phase 2 (runtime without Dolphin) prepared:** measured what the game needs
-  and what WiiCompiled already provides, and the manifest and map for its
-  translator are ready. See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
+- **Phase 2 (runtime without Dolphin) started:** WiiCompiled's translator
+  already translates the whole game (17,217 functions), and what the game needs
+  and what WiiCompiled already provides is measured. See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
   and [docs/PLAN.md](docs/PLAN.md).
 
 ### Getting started
