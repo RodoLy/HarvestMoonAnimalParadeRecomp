@@ -9,44 +9,66 @@
 El mismo camino que el recomp de *Magical Melody*
 ([HMMMGC](https://github.com/RodoLy/hmmmgc)), adaptado a un juego de Wii.
 
+**Meta: un port nativo, sin código de Dolphin.** Igual que en HMMMGC, el
+runtime final será propio, sobre [WiiCompiled](https://github.com/patchzyy/wiicompiled)
+y [aurora](https://github.com/encounter/aurora). Mientras tanto, la versión que
+se juega es la de ModernGekko (CPU recompilada; video, audio, disco y controles
+del núcleo de Dolphin). Para un juego de Wii, WiiCompiled ya trae casi todo lo
+que *Magical Melody* tiene que escribir aparte: ver
+[NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+
 ### Fase 0 – Mapa de funciones ✅
 
-- Disco comprobado (`tools/check_disc.py`): `RBIEE9`, revisión 1.
-- 17 142 funciones, validadas contra `extabindex` (ver
-  [FUNCTION_MAP.md](FUNCTION_MAP.md)).
+- [x] Disco comprobado (`tools/check_disc.py`): `RBIEE9`, revisión 1.
+- [x] 17 142 funciones, validadas contra `extabindex`
+      ([FUNCTION_MAP.md](FUNCTION_MAP.md)).
+- [x] 785 nombres del SDK por firma (804 en total), con las bibliotecas de Wii
+      (IPC, NAND, SC, WPAD, KPAD, WUD, Bluetooth).
+- [x] Bucle ocioso (`0x8025ACE0`), escritores de la tubería de GX (121, 41
+      fuera de GX) y thunks de CodeWarrior (`0x8027E8DC`).
 
-### Fase 1 – Arrancar con DolRecomp + ModernGekko
+### Fase 1 – Jugar con DolRecomp + ModernGekko
 
-1. Recompilar `main.dol` con DolRecomp en modo Wii:
-   `dolrecomp orig/RBIEE9/sys/main.dol RBIEE9 build`.
-2. Empaquetar el resultado como módulo de ModernGekko, igual que en HMMMGC.
-   El núcleo de Dolphin dentro de ModernGekko ya maneja lo propio de Wii: IOS,
-   NAND, Wiimote, Nunchuk y la segunda zona de memoria (MEM2).
-3. Primera meta: que el juego llegue a la pantalla de título desde código
-   recompilado.
-4. Atajo de prueba: arrancar directo en una escena sencilla del menú de
-   desarrolladores (*Font Viewer*, *Sound Viewer*) con el parche descrito en el
-   repo de investigación, para probar el recomp sin depender de todo el juego.
-5. Verificación: la misma comparación instrucción por instrucción contra el
-   intérprete de Dolphin que usa HMMMGC.
+- [x] Script para compilar y jugar en Linux o WSL2, con los ajustes de Dolphin
+      del juego ([BUILDING.md](BUILDING.md)). Sin probar con el juego.
+- [ ] Recompilar `main.dol` con DolRecomp en modo Wii
+      (`dolrecomp orig/RBIEE9/sys/main.dol RBIEE9 build`).
+- [ ] Llegar a la pantalla de título desde código recompilado.
+- [ ] Atajo de prueba: arrancar directo en una escena del menú de
+      desarrolladores (*Font Viewer*, *Sound Viewer*) con el parche del repo
+      de investigación.
+- [ ] Validación: el verificador lockstep y la prueba por instrucción de HMMMGC.
+- [ ] Paquete nativo para Windows en ARM (WSL2 no usa la GPU en laptops
+      Snapdragon), adaptando `packaging/windows` de HMMMGC.
 
-### Fase 2 – Mejoras
+### Fase 2 – Runtime propio, sin Dolphin
+
+- [x] Medir qué pide el juego de cada biblioteca del SDK y qué ya da
+      WiiCompiled ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)): de las funciones
+      de GX con nombre, todas.
+- [x] Manifiesto y mapa de funciones para el traductor de WiiCompiled
+      (`wiicompiled/RBIEE9.yml`, `tools/export_wiicompiled_map.py`).
+- [ ] Correr el traductor de WiiCompiled con este juego.
+- [ ] Nombrar las 102 funciones de GX que faltan (leyendo su código, con
+      pruebas contra `main.dol`), luego OS, DVD y VI.
+- [ ] Capa propia: las piezas de WiiCompiled registradas en las direcciones de
+      este juego.
+- [ ] Pantalla de título sin Dolphin, comparada con la de ModernGekko.
+- [ ] Hito 1.0: jugable de principio a fin sin código de Dolphin.
+
+### Fase 3 – Mejoras
 
 Pantalla ancha, resolución alta, cargas rápidas, controles modernos en lugar
-del Wiimote, y mods con la ABI de ModernGekko (`RECOMP_PATCH`, `RECOMP_HOOK`).
-
-### Fase 3 – Runtime sin Dolphin (opcional)
-
-Cambiar el núcleo de Dolphin por un runtime propio basado en
-[aurora](https://git.axiodl.com/encounter/aurora), como hizo WiiCompiled con
-Mario Kart Wii. Es mucho más trabajo: hay que cubrir GX, audio, IOS y Wiimote
-sin ayuda de Dolphin.
+del Wii Remote y mods con la ABI de ModernGekko (`RECOMP_PATCH`,
+`RECOMP_HOOK`).
 
 ### Diferencias con Magical Melody que hay que tener en cuenta
 
 - Un ejecutable 3.8 veces más grande (17 142 funciones contra 4 486).
-- El juego se controla con Wiimote y Nunchuk: hay que decidir cómo mapearlos
-  a control y teclado.
+- El juego se controla con Wii Remote y Nunchuk: hay que decidir cómo
+  mapearlos a control y teclado. WiiCompiled también acepta Wii Remotes de
+  verdad.
+- 41 funciones fuera de GX escriben directo en la tubería de GX.
 - Usa las cartas de WiiConnect24 (para mandar fotos) y los Mii; se pueden
   dejar sin función al principio.
 
@@ -57,42 +79,65 @@ sin ayuda de Dolphin.
 The same path as the *Magical Melody* recompilation
 ([HMMMGC](https://github.com/RodoLy/hmmmgc)), adapted to a Wii game.
 
+**Goal: a native port, with no Dolphin code.** As in HMMMGC, the final runtime
+will be our own, on [WiiCompiled](https://github.com/patchzyy/wiicompiled) and
+[aurora](https://github.com/encounter/aurora). Meanwhile, the version that is
+played is ModernGekko's (recompiled CPU; video, audio, disc and input from the
+Dolphin core). For a Wii game, WiiCompiled already brings almost everything
+*Magical Melody* has to write on its own: see
+[NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+
 ### Phase 0 – Function map ✅
 
-- Disc checked (`tools/check_disc.py`): `RBIEE9`, revision 1.
-- 17,142 functions, validated against `extabindex` (see
-  [FUNCTION_MAP.md](FUNCTION_MAP.md)).
+- [x] Disc checked (`tools/check_disc.py`): `RBIEE9`, revision 1.
+- [x] 17,142 functions, validated against `extabindex`
+      ([FUNCTION_MAP.md](FUNCTION_MAP.md)).
+- [x] 785 SDK names by signature (804 in all), with the Wii libraries (IPC,
+      NAND, SC, WPAD, KPAD, WUD, Bluetooth).
+- [x] Idle loop (`0x8025ACE0`), GX pipe writers (121, 41 outside GX) and
+      CodeWarrior's thunks (`0x8027E8DC`).
 
-### Phase 1 – Boot with DolRecomp + ModernGekko
+### Phase 1 – Play with DolRecomp + ModernGekko
 
-1. Recompile `main.dol` with DolRecomp in Wii mode:
-   `dolrecomp orig/RBIEE9/sys/main.dol RBIEE9 build`.
-2. Package the result as a ModernGekko module, as HMMMGC does. The Dolphin
-   core inside ModernGekko already handles what is specific to the Wii: IOS,
-   NAND, Wii Remote, Nunchuk and the second memory area (MEM2).
-3. First goal: reach the title screen from recompiled code.
-4. Testing shortcut: boot straight into a simple scene from the developers'
-   menu (*Font Viewer*, *Sound Viewer*) with the patch described in the research
-   repository, to test the recompilation without depending on the whole game.
-5. Verification: the same instruction-by-instruction comparison against
-   Dolphin's interpreter that HMMMGC uses.
+- [x] Script to build and play on Linux or WSL2, with the game's Dolphin
+      settings ([BUILDING.md](BUILDING.md)). Not tested with the game.
+- [ ] Recompile `main.dol` with DolRecomp in Wii mode
+      (`dolrecomp orig/RBIEE9/sys/main.dol RBIEE9 build`).
+- [ ] Reach the title screen from recompiled code.
+- [ ] Testing shortcut: boot straight into a scene of the developers' menu
+      (*Font Viewer*, *Sound Viewer*) with the patch from the research
+      repository.
+- [ ] Validation: HMMMGC's lockstep verifier and instruction-level test.
+- [ ] Native package for Windows on ARM (WSL2 cannot use the GPU on Snapdragon
+      laptops), adapting HMMMGC's `packaging/windows`.
 
-### Phase 2 – Enhancements
+### Phase 2 – Our own runtime, without Dolphin
+
+- [x] Measure what the game needs from each SDK library and what WiiCompiled
+      already provides ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)): of the named GX
+      functions, all of them.
+- [x] Manifest and function map for WiiCompiled's translator
+      (`wiicompiled/RBIEE9.yml`, `tools/export_wiicompiled_map.py`).
+- [ ] Run WiiCompiled's translator on this game.
+- [ ] Name the 102 GX functions still missing (by reading their code, with
+      tests against `main.dol`), then OS, DVD and VI.
+- [ ] Our own layer: the pieces of WiiCompiled registered at this game's
+      addresses.
+- [ ] Title screen without Dolphin, compared with ModernGekko's.
+- [ ] Milestone 1.0: playable from start to end with no Dolphin code.
+
+### Phase 3 – Enhancements
 
 Widescreen, high resolution, faster loading, modern controls instead of the
-Wii Remote, and mods through ModernGekko's ABI (`RECOMP_PATCH`, `RECOMP_HOOK`).
-
-### Phase 3 – A runtime without Dolphin (optional)
-
-Replace the Dolphin core with a runtime of our own based on
-[aurora](https://git.axiodl.com/encounter/aurora), as WiiCompiled did for
-Mario Kart Wii. It is much more work: GX, audio, IOS and the Wii Remote have to
-be covered without Dolphin's help.
+Wii Remote, and mods through ModernGekko's ABI (`RECOMP_PATCH`,
+`RECOMP_HOOK`).
 
 ### Differences from Magical Melody to keep in mind
 
 - An executable 3.8 times larger (17,142 functions against 4,486).
 - The game is played with the Wii Remote and Nunchuk: we must decide how to
-  map them to a controller and the keyboard.
+  map them to a controller and the keyboard. WiiCompiled also takes real Wii
+  Remotes.
+- 41 functions outside GX write straight into the GX pipe.
 - It uses WiiConnect24 letters (to send photos) and Miis; those can stay
   disabled at first.
