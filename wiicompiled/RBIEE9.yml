@@ -39,8 +39,8 @@ translation:
   entry_points:
     - 0x80004050  # __start, the DOL's entry point
   function_map:
-    # Written by tools/export_wiicompiled_map.py; copy it next to this file.
-    # Lo escribe tools/export_wiicompiled_map.py; cópialo junto a este archivo.
+    # wiicompiled/RBIEE9-MAP.txt, written by tools/export_wiicompiled_map.py; copy it next to this file.
+    # wiicompiled/RBIEE9-MAP.txt, lo escribe tools/export_wiicompiled_map.py; cópialo junto a este archivo.
     path: projects/animal-parade/MAP.txt
   # Off, as in Mario Kart Wii: an instruction the translator does not know stops it, which is what
   # we want to find out.

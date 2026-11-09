@@ -320,13 +320,13 @@ git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addres
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 
 # Desde harvest-moon-ap-recomp: el mapa de funciones y la capa.
-python3 tools/export_wiicompiled_map.py          # escribe build/RBIEE9_wiicompiled_map.txt
+python3 tools/export_wiicompiled_map.py          # pone al día wiicompiled/RBIEE9-MAP.txt
 python3 tools/export_wiicompiled_layer.py --wiicompiled /ruta/a/wiicompiled --out build/wiicompiled
 
 # De vuelta en wiicompiled:
 mkdir -p projects/animal-parade/native
 cp /ruta/a/harvest-moon-ap-recomp/wiicompiled/RBIEE9.yml projects/animal-parade/recomp.yml
-cp /ruta/a/harvest-moon-ap-recomp/build/RBIEE9_wiicompiled_map.txt projects/animal-parade/MAP.txt
+cp /ruta/a/harvest-moon-ap-recomp/wiicompiled/RBIEE9-MAP.txt projects/animal-parade/MAP.txt
 cp /ruta/a/harvest-moon-ap-recomp/build/wiicompiled/native/natives.cpp projects/animal-parade/native/
 cp /ruta/a/harvest-moon-ap-recomp/build/wiicompiled/guest_abi/*.inc runtime/include/guest_abi/
 
@@ -697,13 +697,13 @@ git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addre
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 
 # From harvest-moon-ap-recomp: the function map and the layer.
-python3 tools/export_wiicompiled_map.py          # writes build/RBIEE9_wiicompiled_map.txt
+python3 tools/export_wiicompiled_map.py          # brings wiicompiled/RBIEE9-MAP.txt up to date
 python3 tools/export_wiicompiled_layer.py --wiicompiled /path/to/wiicompiled --out build/wiicompiled
 
 # Back in wiicompiled:
 mkdir -p projects/animal-parade/native
 cp /path/to/harvest-moon-ap-recomp/wiicompiled/RBIEE9.yml projects/animal-parade/recomp.yml
-cp /path/to/harvest-moon-ap-recomp/build/RBIEE9_wiicompiled_map.txt projects/animal-parade/MAP.txt
+cp /path/to/harvest-moon-ap-recomp/wiicompiled/RBIEE9-MAP.txt projects/animal-parade/MAP.txt
 cp /path/to/harvest-moon-ap-recomp/build/wiicompiled/native/natives.cpp projects/animal-parade/native/
 cp /path/to/harvest-moon-ap-recomp/build/wiicompiled/guest_abi/*.inc runtime/include/guest_abi/
 

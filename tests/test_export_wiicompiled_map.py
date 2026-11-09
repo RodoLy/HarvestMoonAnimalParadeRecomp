@@ -12,8 +12,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
 from dol import Dol, write_dol  # noqa: E402
-from export_wiicompiled_map import THUNK_FAMILIES, map_lines, thunk_names  # noqa: E402
+from export_wiicompiled_map import DEFAULT_MAP_PATH, THUNK_FAMILIES, map_lines, thunk_names  # noqa: E402
 from ppc_encode import BLR  # noqa: E402
+from project import SYMBOLS_PATH  # noqa: E402
 from symbols import Symbol, SymbolTable  # noqa: E402
 
 TEXT = 0x80004000
@@ -83,3 +84,11 @@ def test_the_game_has_the_four_runs_side_by_side_in_the_codewarrior_runtime():
     assert by_name["_rest_fpr_14"] == 0x8027E928
     assert by_name["_save_gpr_14"] == 0x8027E974
     assert by_name["_rest_gpr_14"] == 0x8027E9C0
+
+
+@needs_game_files
+def test_the_map_in_the_repository_is_the_one_the_exporter_writes_now():
+    """The Windows package translates from wiicompiled/RBIEE9-MAP.txt, so a new name in symbols.txt has
+    to reach it: run `python3 tools/export_wiicompiled_map.py` after naming functions."""
+    lines = map_lines(SymbolTable.read(SYMBOLS_PATH), thunk_names(Dol(Path(DOL_PATH))))
+    assert DEFAULT_MAP_PATH.read_text(encoding="utf-8").splitlines() == lines

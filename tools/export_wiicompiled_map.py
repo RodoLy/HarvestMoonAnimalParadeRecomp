@@ -32,7 +32,7 @@ funciones no las nombra, así que esta herramienta encuentra cada racha en main.
 exactas y escribe sus 18 nombres, en lugar de lo que diga symbols.txt en esas direcciones.
 
 Usage / Uso:
-    python3 tools/export_wiicompiled_map.py                 # -> build/RBIEE9_wiicompiled_map.txt
+    python3 tools/export_wiicompiled_map.py                 # -> wiicompiled/RBIEE9-MAP.txt
     python3 tools/export_wiicompiled_map.py --out MAP.txt
 """
 
@@ -44,10 +44,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dol import Dol  # noqa: E402
-from project import BUILD_DIRECTORY, GAME_ID, MAIN_DOL_PATH, SYMBOLS_PATH  # noqa: E402
+from project import GAME_ID, MAIN_DOL_PATH, REPOSITORY_ROOT, SYMBOLS_PATH  # noqa: E402
 from symbols import SymbolTable  # noqa: E402
 
-DEFAULT_MAP_PATH = BUILD_DIRECTORY / f"{GAME_ID}_wiicompiled_map.txt"
+# Kept in the repository: it holds only addresses and names, and the Windows package needs it
+# without the disc. tests/test_export_wiicompiled_map.py checks it is current.
+# Se guarda en el repositorio: solo tiene direcciones y nombres, y el paquete de Windows lo necesita
+# sin el disco.
+DEFAULT_MAP_PATH = REPOSITORY_ROOT / "wiicompiled" / f"{GAME_ID}-MAP.txt"
 
 FIRST_SAVED_REGISTER = 14
 LAST_SAVED_REGISTER = 31
