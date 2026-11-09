@@ -16,6 +16,7 @@ from dol import Dol  # noqa: E402
 from export_wiicompiled_layer import (  # noqa: E402
     ARENA_LO,
     FACTS,
+    IOS_VERSION,
     Placement,
     address_lines,
     place_natives,
@@ -100,6 +101,12 @@ def test_the_address_lines_are_sorted_and_must_agree():
     ]
     with pytest.raises(ValueError):
         address_lines(placed, [Placement(0x801AA9B8, 0x80000000, "something else")])
+
+
+def test_the_game_boots_under_ios53_with_the_number_in_the_high_half():
+    # OSInit compares the high half with the IOS the apploader asked for (0x80003188).
+    assert IOS_VERSION >> 16 == 53
+    assert IOS_VERSION & 0xFFFF == 5663
 
 
 DOL_PATH = os.environ.get("HM_AP_DOL")

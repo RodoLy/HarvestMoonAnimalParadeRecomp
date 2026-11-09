@@ -22,6 +22,7 @@ What it writes / Qué escribe
 - `guest_abi/foreign_game_addresses.inc`: one `MKW_FOREIGN_ADDRESS(pal, here)` per address, sorted.
   The natives come from tools/wiicompiled_coverage.py, matched by name with symbols.txt; the variables
   and the functions native code calls come from wiicompiled/RBIEE9-*-addresses.txt.
+- `guest_abi/foreign_game_ios.inc`: the IOS the game boots under.
 - `guest_abi/foreign_game_facts.inc`: what WiiCompiled needs to know of the game itself (its ID, its
   region, where the arena of MEM1 starts), one row of GuestRegion::kFacts.
 - `native/natives.cpp`: every native registration that has a counterpart here, copied from WiiCompiled
@@ -189,6 +190,21 @@ FACTS = (
 )
 ARENA_LO = 0x806CC680
 
+# The IOS the game boots under. Its disc's TMD names IOS53 (system title 00000001-00000035), and OSInit
+# stops with ERROR #002 unless the IOS in low memory (0x80003140) has that number. The version is
+# IOS53's last release, 5663 (0x161F); WiiCompiled seeds IOS36 for Mario Kart Wii.
+IOS_NUMBER = 53
+IOS_RELEASE = 5663
+IOS_VERSION = (IOS_NUMBER << 16) | IOS_RELEASE
+
+IOS_HEADER = """\
+// Written by tools/export_wiicompiled_layer.py from harvest-moon-ap-recomp; do not edit by hand.
+// Escrito por tools/export_wiicompiled_layer.py; no editar a mano.
+//
+// GuestRegion::kForeignGameIosVersion: the IOS Harvest Moon: Animal Parade (RBIEE9) boots under, as
+// its number in the high half and its release in the low half.
+"""
+
 FACTS_HEADER = """\
 // Written by tools/export_wiicompiled_layer.py from harvest-moon-ap-recomp; do not edit by hand.
 // Escrito por tools/export_wiicompiled_layer.py; no editar a mano.
@@ -240,6 +256,11 @@ def main() -> int:
 
     facts = arguments.out / "guest_abi" / "foreign_game_facts.inc"
     facts.write_text(FACTS_HEADER + "\n" + FACTS + "\n", encoding="utf-8")
+
+    ios = arguments.out / "guest_abi" / "foreign_game_ios.inc"
+    ios.write_text(
+        IOS_HEADER + f"\n0x{IOS_VERSION:08X}u  // IOS{IOS_NUMBER} v{IOS_RELEASE}\n", encoding="utf-8"
+    )
 
     registrations = arguments.out / "native" / "natives.cpp"
     registrations.parent.mkdir(parents=True, exist_ok=True)
