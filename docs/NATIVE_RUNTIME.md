@@ -190,8 +190,9 @@ RFL y los hilos de su reproductor THP. Tampoco se cubren `task_thread.cpp` ni
 lo que espera `DVDCancelAll` y `executing`) y el búfer de
 `SCGetProductCode`, que este juego no parece usar.
 
-**Para hacerlo posible** se nombraron AX (59 funciones), AXFX (13), AI (4),
-IPC (18), SC (11), DSP (4), SI (5) y PAD (6) con el mapa de *Mario Kart Wii*.
+**Para hacerlo posible** se nombraron con el mapa de *Mario Kart Wii* AX (59
+funciones), AXFX (13), IPC (20), SC (16), MTX (10), PAD (6), SI (5), AI (4),
+DSP (4) y DVD (1); los detalles están en [FUNCTION_MAP.md](FUNCTION_MAP.md).
 `tools/name_from_reference_map.py` ganó `--range` para una biblioteca con muy
 pocos nombres propios. También dejó de usar dos tipos de nombres: los que el
 mapa repite y los que el mapa inventa para funciones `static`
@@ -476,8 +477,9 @@ that game's, are not covered either.
 `ResumeFromHere`, what `DVDCancelAll` waits on, and `executing`) and the buffer
 of `SCGetProductCode`, which this game does not seem to use.
 
-**To make it possible**, AX (59 functions), AXFX (13), AI (4), IPC (18), SC
-(11), DSP (4), SI (5) and PAD (6) were named from *Mario Kart Wii*'s map.
+**To make it possible**, AX (59 functions), AXFX (13), IPC (20), SC (16), MTX
+(10), PAD (6), SI (5), AI (4), DSP (4) and DVD (1) were named from *Mario Kart
+Wii*'s map; the details are in [FUNCTION_MAP.md](FUNCTION_MAP.md).
 `tools/name_from_reference_map.py` gained `--range`, for a library with too
 few names of its own. It also stopped using two kinds of names: the ones the
 map gives twice and the ones the map makes up for `static` functions
