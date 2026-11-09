@@ -1,0 +1,201 @@
+diff --git a/runtime/include/abi_bridge.h b/runtime/include/abi_bridge.h
+index 4ca4439..cd7d8c4 100644
+--- a/runtime/include/abi_bridge.h
++++ b/runtime/include/abi_bridge.h
+@@ -161,13 +161,13 @@ public:
+ // per function; every translated function reaches the registry via the bulk
+ // BulkTranslatedFunctionRecord tables in the translator's *_registration TUs.
+ #define REGISTER_TRANSLATED_FUNCTION(address, fn) \
+-    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_trampoline_, __COUNTER__)(::GuestRegion::Translate(address), #fn, fn, FunctionKind::BaseTranslated, false, kPpcAllNonvolatileFprMask, 0, 0, nullptr, KnownTranslatedCpuCall<address>::kMustRemainDynamicallyDispatchable)
++    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_trampoline_, __COUNTER__)(::GuestRegion::TranslateRegistration(address), #fn, fn, FunctionKind::BaseTranslated, false, kPpcAllNonvolatileFprMask, 0, 0, nullptr, KnownTranslatedCpuCall<address>::kMustRemainDynamicallyDispatchable)
+ 
+ #define REGISTER_NATIVE_FUNCTION(address, fn) \
+-    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_, __COUNTER__)(::GuestRegion::Translate(address), #fn, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
++    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_, __COUNTER__)(::GuestRegion::TranslateRegistration(address), #fn, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
+ 
+ #define REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name) \
+-    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_named_, __COUNTER__)(::GuestRegion::Translate(address), pretty_name, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
++    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_named_, __COUNTER__)(::GuestRegion::TranslateRegistration(address), pretty_name, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
+ 
+ // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
+ #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
+diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
+index 1836717..ee1f65f 100644
+--- a/runtime/include/guest_abi/guest_region.h
++++ b/runtime/include/guest_abi/guest_region.h
+@@ -9,6 +9,11 @@
+ //
+ // guest_versions.inc maps PAL ranges to the other regions. A PAL address outside every range
+ // of a region does not compile.
++//
++// ForeignGame is another game built on the same SDK, whose addresses follow no PAL range: an
++// explicit table, guest_abi/foreign_game_addresses.inc, gives each PAL address it has. A native
++// registered at a PAL address that game lacks is left unregistered, and MKW_GADDR of such an
++// address stops the runtime when it is reached.
+ 
+ #include <cstddef>
+ #include <cstdint>
+@@ -19,8 +24,9 @@ enum class Id : uint8_t {
+     Pal = 0,
+     NtscU = 1,
+     NtscJ = 2,
++    ForeignGame = 3,
+ };
+-inline constexpr size_t kCount = 3;
++inline constexpr size_t kCount = 4;
+ 
+ struct Row {
+     uint32_t address[kCount];
+@@ -42,6 +48,33 @@ inline constexpr Range kRanges[] = {
+ };
+ inline constexpr size_t kRangeCount = sizeof(kRanges) / sizeof(kRanges[0]);
+ 
++struct ForeignAddress {
++    uint32_t pal;
++    uint32_t address;
++};
++
++// Written for the foreign game by its own project, sorted by PAL address. The last row only keeps
++// the array from being empty when no such file is there.
++inline constexpr ForeignAddress kForeignAddresses[] = {
++#if __has_include("guest_abi/foreign_game_addresses.inc")
++#define MKW_FOREIGN_ADDRESS(pal, address) {0x##pal##u, 0x##address##u},
++#include "guest_abi/foreign_game_addresses.inc"
++#undef MKW_FOREIGN_ADDRESS
++#endif
++    {0xFFFFFFFFu, 0u},
++};
++inline constexpr size_t kForeignAddressCount = sizeof(kForeignAddresses) / sizeof(kForeignAddresses[0]) - 1;
++
++constexpr bool ForeignAddressesAreSorted() {
++    for (size_t i = 1; i < kForeignAddressCount; ++i) {
++        if (kForeignAddresses[i - 1].pal >= kForeignAddresses[i].pal) {
++            return false;
++        }
++    }
++    return true;
++}
++static_assert(ForeignAddressesAreSorted(), "foreign_game_addresses.inc must be sorted by PAL address, each once");
++
+ constexpr bool Precedes(Id region, uint32_t address, const Range& range) {
+     return region < range.region || (region == range.region && address < range.first);
+ }
+@@ -65,10 +98,30 @@ struct Mapping {
+     uint32_t address;
+ };
+ 
++constexpr Mapping MapForeign(uint32_t pal) {
++    size_t lo = 0;
++    size_t hi = kForeignAddressCount;
++    while (lo < hi) {
++        const size_t mid = lo + (hi - lo) / 2;
++        if (kForeignAddresses[mid].pal < pal) {
++            lo = mid + 1;
++        } else {
++            hi = mid;
++        }
++    }
++    if (lo < kForeignAddressCount && kForeignAddresses[lo].pal == pal) {
++        return {true, kForeignAddresses[lo].address};
++    }
++    return {false, 0};
++}
++
+ constexpr Mapping Map(uint32_t pal, Id region) {
+     if (region == Id::Pal) {
+         return {true, pal};
+     }
++    if (region == Id::ForeignGame) {
++        return MapForeign(pal);
++    }
+     size_t lo = 0;
+     size_t hi = kRangeCount;
+     while (lo < hi) {
+@@ -89,10 +142,12 @@ constexpr Mapping Map(uint32_t pal, Id region) {
+     return {true, static_cast<uint32_t>(static_cast<int64_t>(pal) + range.delta)};
+ }
+ 
++// The foreign game's column is 0 where it has no such address.
+ constexpr Row RowOf(uint32_t pal) {
+     const Mapping ntscU = Map(pal, Id::NtscU);
+     const Mapping ntscJ = Map(pal, Id::NtscJ);
+-    return ntscU.found && ntscJ.found ? Row{{pal, ntscU.address, ntscJ.address}}
++    const Mapping foreign = Map(pal, Id::ForeignGame);
++    return ntscU.found && ntscJ.found ? Row{{pal, ntscU.address, ntscJ.address, foreign.address}}
+                                       : throw "PAL address outside guest_abi/guest_versions.inc";
+ }
+ 
+@@ -105,13 +160,19 @@ namespace GuestRegion {
+ 
+ inline Id Current() noexcept { return static_cast<Id>(kMkwGuestRegion); }
+ 
++[[noreturn]] void FatalUnknownAddress(uint32_t pal) noexcept;
++
+ template <uint32_t Pal>
+ inline uint32_t Address() noexcept {
+     constexpr Row row = RowOf(Pal);
+-    if constexpr (row.address[1] == Pal && row.address[2] == Pal) {
++    if constexpr (row.address[1] == Pal && row.address[2] == Pal && row.address[3] == Pal) {
+         return Pal;
+     } else {
+-        return row.In(Current());
++        const uint32_t address = row.In(Current());
++        if (address == 0) {
++            FatalUnknownAddress(Pal);
++        }
++        return address;
+     }
+ }
+ 
+@@ -123,8 +184,6 @@ inline bool Is(uint32_t target) noexcept {
+            target == row.In(Current());
+ }
+ 
+-[[noreturn]] void FatalUnknownAddress(uint32_t pal) noexcept;
+-
+ // For hand-written registrations, which name the PAL address.
+ inline uint32_t Translate(uint32_t pal) noexcept {
+     const Mapping mapping = Map(pal, Current());
+@@ -134,6 +193,15 @@ inline uint32_t Translate(uint32_t pal) noexcept {
+     return mapping.address;
+ }
+ 
++// For the registration macros: 0, which the registry skips, where the foreign game has no such
++// function. Any other region still stops at an unknown address.
++inline uint32_t TranslateRegistration(uint32_t pal) noexcept {
++    if (Current() == Id::ForeignGame && !Map(pal, Id::ForeignGame).found) {
++        return 0;
++    }
++    return Translate(pal);
++}
++
+ struct Facts {
+     const char* gameId;
+     char letter;
+@@ -152,6 +220,11 @@ inline constexpr Facts kFacts[kCount] = {
+     {"RMCP01", 'P', 0x524D4350u, 1u, 0x80399180u, "EUR", "RVL-001(EUR)", "LEH", "PAL", "EU"},
+     {"RMCE01", 'E', 0x524D4345u, 0u, 0x80394E00u, "USA", "RVL-001(USA)", "LU", "NTSC", "US"},
+     {"RMCJ01", 'J', 0x524D434Au, 0u, 0x80398B00u, "JPN", "RVL-001(JPN)", "LJ", "NTSC", "JP"},
++#if __has_include("guest_abi/foreign_game_facts.inc")
++#include "guest_abi/foreign_game_facts.inc"
++#else
++    {"", '\0', 0u, 0u, 0u, "", "", "", "", ""},
++#endif
+ };
+ 
+ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(Current())]; }
+diff --git a/runtime/src/abi_bridge.cpp b/runtime/src/abi_bridge.cpp
+index 55fe416..99fc9ef 100644
+--- a/runtime/src/abi_bridge.cpp
++++ b/runtime/src/abi_bridge.cpp
+@@ -332,6 +332,10 @@ void RegisterBulkTranslatedFunctions(const BulkTranslatedFunctionRecord* records
+ }
+ 
+ void TranslatedFunctionRegistry::Register(TranslatedFunctionInfo info) {
++    // GuestRegion::TranslateRegistration gives 0 for a function the foreign game does not have.
++    if (info.address == 0) {
++        return;
++    }
+     std::lock_guard<std::mutex> lock(RegistryMutex());
+     if (RegistryFrozen().load(std::memory_order_acquire)) {
+         RT_LOG(RT_TAG_RUNTIME) << "ERROR: Attempted to register function after registry was finalized: 0x"
