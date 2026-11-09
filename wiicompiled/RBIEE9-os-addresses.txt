@@ -9,7 +9,7 @@
 # El runtime de WiiCompiled nombra 25 direcciones de Mario Kart Wii en su OS. Para usar esas funciones
 # nativas aquí, cada una necesita la dirección de este juego. La prueba comprueba cada fila contra main.dol.
 #
-# covers: runtime/src/hle/os
+# covers: runtime/src/hle/os runtime/src/fiber_manager.cpp
 #
 # Columns / Columnas:
 #   1. the address in Mario Kart Wii (PAL), as MKW_GADDR() writes it
@@ -57,3 +57,4 @@
 0x80386298  -           Mario Kart Wii's RFL manager, for its own RFLiIsWorking: not an OS variable  -
 0x805529A8  -           THP::VideoDecoder, a thread of Mario Kart Wii's movie player that OSCreateThread treats apart  -
 0x80552A74  -           THP::VideoDecoderOnMemory, the same                -
+0x8024373C  -           EGG::Thread::start, which the fibers wait on: Mario Kart Wii's own thread library, not in this game  -

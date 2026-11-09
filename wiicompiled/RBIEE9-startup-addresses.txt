@@ -1,0 +1,17 @@
+# Where this game keeps what WiiCompiled's start-up code looks for at Mario Kart Wii's addresses.
+# Dónde guarda este juego lo que el arranque de WiiCompiled busca en las direcciones de Mario Kart Wii.
+#
+# The columns are those of RBIEE9-os-addresses.txt; tests/test_wiicompiled_addresses.py checks every row.
+# Las columnas son las de RBIEE9-os-addresses.txt.
+#
+# The runtime runs the DOL's static constructors itself, from the start of .ctors to its end. The end is
+# where .dtors starts, and the code that walks each table names its start.
+# El runtime ejecuta él mismo los constructores estáticos del DOL, del inicio de .ctors a su final. El
+# final es donde empieza .dtors, y el código que recorre cada tabla nombra su inicio.
+#
+# covers: runtime/src/system_bridge.cpp
+
+0x80244DE0  0x803A6220  .ctors, the table of static constructors  0x8025E420
+0x80244EA0  0x803A6480  the end of .ctors, which is where .dtors starts  0x8025E470
+0x8088F400  -           .ctors of StaticR.rel: this game has no REL  -
+0x8088F704  -           the end of StaticR.rel's .ctors  -

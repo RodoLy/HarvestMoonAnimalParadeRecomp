@@ -8,7 +8,8 @@
 # WiiCompiled's DVD reads the extracted folder, but it still sets the SDK's own flags so that what runs
 # translated (DVDCancel, __DVDPrepareReset...) finds the drive idle. This game's dvd.c is newer than Mario
 # Kart Wii's and has more variables, so its small ones are not at one distance from Mario Kart Wii's:
-# each is found by what the code does with it, and four are not found yet.
+# each is found by what the code does with it, and two are not found yet (the runtime skips them in this
+# game).
 #
 # covers: runtime/src/hle/storage
 
@@ -23,13 +24,13 @@
 0x803434E0  0x806135E0  the command contexts of the low level (0x2B0 bytes after WaitingQueue in both)  DVDLowInit
 
 # ---------------------------------------------------------------- dvd.c (.sbss)
-0x80386664  -           Canceling: not found yet in this game           -
+0x80386664  0x806B4470  Canceling: DVDCancelAsync gives up when it is set, and sets it  DVDCancelAsync
 0x80386668  -           ResumeFromHere: not found yet in this game      -
 0x80386670  0x806B4468  PausingFlag: DVDResume clears it and restarts the drive  DVDResume
 0x8038667C  -           what DVDCancelAll waits on: not found yet in this game  -
 0x803866A0  0x806B449C  DVDInitialized: DVDInit returns at once when it is set  DVDInit
 0x803866A8  0x806B44A4  what __DVDPrepareReset waits on, set by its callback  __DVDPrepareReset
-0x803866F0  -           executing, the command block in progress: not found yet in this game  -
+0x803866F0  0x806B44F0  executing, the command block in progress: DVDGetDriveStatus reads its state  DVDGetDriveStatus
 
 # ---------------------------------------------------------------- dvd_low.c (.sbss)
 0x80386720  0x806B4520  the context the low level uses next             DVDLowInit
