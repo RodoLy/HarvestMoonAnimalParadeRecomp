@@ -76,6 +76,9 @@ QUALIFIED_SDK_NAME = re.compile(
 )
 LABEL_INSIDE_FUNCTION = re.compile(r"(_switch$|_caseD_)")
 PLAIN_C_NAME = re.compile(r"^[A-Za-z_]\w*$")
+# A name with `__` in the middle was made up by the map, to tell apart static functions of two files that
+# the SDK calls the same: AXFXReverbStdExp__AllocDelayLine is the __AllocDelayLine of reverb_std_exp.c.
+NAME_MADE_UP_BY_THE_MAP = re.compile(r"^_*[A-Za-z0-9]+__")
 
 # Scores of the alignment: a pair of equal sizes, and skipping a function on either side.
 PAIR_SCORE = 3
@@ -266,7 +269,7 @@ def propose_names(
 class NamingResult:
     accepted: list[Proposal]
     already_named: list[Proposal]  # the function has a real name already: it is left alone
-    other_library: list[Proposal]  # the name does not say the library, or is not a C name
+    other_library: list[Proposal]  # the name does not say the library, or is not a name of the SDK
     shared: list[Proposal]  # two functions would get the name, or another symbol has it
 
 
@@ -279,7 +282,11 @@ def judge(table: SymbolTable, proposals: list[Proposal], library: str) -> Naming
         symbol: Symbol = table.by_address[proposal.address]
         if not symbol.has_generated_name:
             result.already_named.append(proposal)
-        elif not PLAIN_C_NAME.match(proposal.new_name) or library_of(proposal.new_name) != library:
+        elif (
+            not PLAIN_C_NAME.match(proposal.new_name)
+            or NAME_MADE_UP_BY_THE_MAP.match(proposal.new_name)
+            or library_of(proposal.new_name) != library
+        ):
             result.other_library.append(proposal)
         elif times_proposed[proposal.new_name] > 1 or table.by_name(proposal.new_name) is not None:
             result.shared.append(proposal)

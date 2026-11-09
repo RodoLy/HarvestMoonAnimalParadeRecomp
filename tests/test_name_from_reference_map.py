@@ -195,6 +195,12 @@ def test_a_name_is_written_only_on_a_placeholder_and_only_once():
     assert result.shared == proposals[3:4]
 
 
+def test_a_name_the_map_made_up_for_a_static_function_is_not_written():
+    table = hand_built_table()
+    proposal = Proposal(TEXT + 0x40, 0x10, "fn_80004040", "GXReverb__AllocDelayLine")
+    assert judge(table, [proposal], "GX").other_library == [proposal]
+
+
 def test_two_functions_offered_the_same_name_get_neither():
     table = hand_built_table()
     proposals = [
