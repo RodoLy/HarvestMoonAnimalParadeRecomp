@@ -77,6 +77,8 @@ def test_the_sdk_names_of_the_map_are_written_as_the_sdk_headers_write_them():
     assert plain_sdk_name("GX::SetViewport") == "GXSetViewport"
     assert plain_sdk_name("__GX::InitGX") == "__GXInitGX"
     assert plain_sdk_name("OS::__CacheInit") == "__OSCacheInit"  # the underscores after the library
+    assert plain_sdk_name("RVL::OS::ExitThread") == "OSExitThread"  # the SDK's namespace goes
+    assert plain_sdk_name("RVL::EXIImm") == "EXIImm"
     assert plain_sdk_name("nw4r::g3d::Draw") == "nw4r::g3d::Draw"  # not a C function of the SDK
     assert plain_sdk_name("main") == "main"
 

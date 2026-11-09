@@ -64,7 +64,8 @@ from symbols import Symbol, SymbolTable  # noqa: E402
 
 # The map writes C functions of the SDK as `GX::SetViewport`, and internal ones as `__GX::InitGX` or
 # `OS::__CacheInit`; this game's table, like the SDK's headers, writes them `GXSetViewport`, `__GXInitGX`
-# and `__OSCacheInit`.
+# and `__OSCacheInit`. A few carry the SDK's namespace in front (`RVL::EXIImm`, `RVL::OS::ExitThread`).
+SDK_NAMESPACE = "RVL::"
 QUALIFIED_SDK_NAME = re.compile(
     r"^(?P<before>_*)(?P<library>[A-Z][A-Z0-9]+)::(?P<after>_*)(?P<rest>[A-Za-z0-9]\w*)$"
 )
@@ -86,7 +87,8 @@ class Function:
 
 def plain_sdk_name(name: str) -> str:
     """`GX::SetViewport` -> `GXSetViewport`, `OS::__CacheInit` -> `__OSCacheInit`; any other name stays
-    as it is."""
+    as it is. The SDK's namespace goes: `RVL::OS::ExitThread` -> `OSExitThread`."""
+    name = name.removeprefix(SDK_NAMESPACE)
     match = QUALIFIED_SDK_NAME.match(name)
     if match is None:
         return name
