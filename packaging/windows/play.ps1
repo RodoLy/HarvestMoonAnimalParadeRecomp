@@ -121,6 +121,16 @@ function Expand-DiscImage([string]$Image) {
     return $dataRoot
 }
 
+# ---------------------------------------------------------------- the package's programs
+
+# Windows marks every file unzipped from a download as coming from the internet, and App Control
+# (Smart App Control) then may refuse to start a program that is not signed, like this package's
+# translator. They are the package's own programs, so the mark comes off them and their libraries.
+# Windows marca cada archivo descomprimido de una descarga como venido de internet, y el Control de
+# aplicaciones puede negarse a abrir un programa sin firma, como el traductor del paquete.
+Get-ChildItem -LiteralPath $toolkit, (Join-Path $workspace 'Dependencies') -Recurse -File |
+    Where-Object { $_.Extension -in '.exe', '.dll' } | Unblock-File
+
 # ---------------------------------------------------------------- the disc
 
 [IO.Directory]::CreateDirectory($userData) | Out-Null
