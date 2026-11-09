@@ -1,0 +1,46 @@
+diff --git a/translator/src/Translator.Cli/Program.cs b/translator/src/Translator.Cli/Program.cs
+index 55622b0..275b7df 100644
+--- a/translator/src/Translator.Cli/Program.cs
++++ b/translator/src/Translator.Cli/Program.cs
+@@ -231,6 +231,9 @@ RuntimeNativeIndex ResolveRegionalNativeIndex(string nativeSourceDirectory, stri
+ {
+     var index = RuntimeNativeIndexBuilder.Resolve(nativeSourceDirectory, indexPath, Console.Error);
+     var region = GuestRegions.FromGameId(RequireProject().Identity.GameId);
++    // A foreign game's native sources already name its own addresses.
++    if (region == GuestRegion.ForeignGame)
++        return index;
+     var tablePath = GuestAddressTable.DefaultPath(nativeSourceDirectory);
+     // A runtime without a table can only be built for PAL.
+     if (region == GuestRegion.Pal && !File.Exists(tablePath))
+diff --git a/translator/src/Translator.Core/GuestAddressTable.cs b/translator/src/Translator.Core/GuestAddressTable.cs
+index 871ee97..c08b0b4 100644
+--- a/translator/src/Translator.Core/GuestAddressTable.cs
++++ b/translator/src/Translator.Core/GuestAddressTable.cs
+@@ -8,13 +8,17 @@ public enum GuestRegion
+     Pal = 0,
+     NtscU = 1,
+     NtscJ = 2,
++    // Another game on the same SDK: the runtime reads its addresses from
++    // guest_abi/foreign_game_addresses.inc, and its natives are already at its own addresses.
++    ForeignGame = 3,
+ }
+ 
+ public static class GuestRegions
+ {
+     /// <summary>
+     /// The runtime region for a project's game id. Mario Kart Wii releases without a column in
+-    /// the address table are rejected; any other game has no region-specific runtime addresses.
++    /// the address table are rejected; any other game is a foreign game, whose addresses Mario Kart
++    /// Wii's PAL addresses never are.
+     /// </summary>
+     public static GuestRegion FromGameId(string? gameId) => gameId?.ToUpperInvariant() switch
+     {
+@@ -23,7 +27,7 @@ public static class GuestRegions
+         "RMCP01" => GuestRegion.Pal,
+         { } id when id.StartsWith("RMC", StringComparison.Ordinal) =>
+             throw new InvalidDataException($"Mario Kart Wii release '{gameId}' is not supported."),
+-        _ => GuestRegion.Pal,
++        _ => GuestRegion.ForeignGame,
+     };
+ }
+ 
