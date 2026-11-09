@@ -1,5 +1,5 @@
 diff --git a/translator/src/Translator.Cli/Program.cs b/translator/src/Translator.Cli/Program.cs
-index 55622b0..275b7df 100644
+index e1164dd..275b7df 100644
 --- a/translator/src/Translator.Cli/Program.cs
 +++ b/translator/src/Translator.Cli/Program.cs
 @@ -231,6 +231,9 @@ RuntimeNativeIndex ResolveRegionalNativeIndex(string nativeSourceDirectory, stri
@@ -12,6 +12,142 @@ index 55622b0..275b7df 100644
      var tablePath = GuestAddressTable.DefaultPath(nativeSourceDirectory);
      // A runtime without a table can only be built for PAL.
      if (region == GuestRegion.Pal && !File.Exists(tablePath))
+@@ -645,6 +648,14 @@ int RunTranslateRecursive(string[] argsTail)
+                 return true;
+             }
+ 
++            // A call that leaves RAM is not a function of the game. The SDK's __OSDBJump
++            // ends with `bla 0x60`, a jump into the console's debugger stub, which a
++            // retail console never reaches. There is nothing to translate there.
++            if (!image.Value.Contains(item.addr, sizeof(uint)))
++            {
++                return true;
++            }
++
+             return false;
+         }
+ 
+diff --git a/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.Locals.cs b/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.Locals.cs
+index 2fa7ef7..4129baf 100644
+--- a/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.Locals.cs
++++ b/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.Locals.cs
+@@ -274,6 +274,88 @@ public sealed partial class CxxLinearCodeGenerator
+         return set;
+     }
+ 
++    /// <summary>
++    /// Non-volatile float registers (f14..f31) that a function reads as paired-single values before it
++    /// writes them, so they can only have been left that way by a caller. Some games keep running totals
++    /// in f22..f27 across a family of small helper functions (one clears them, one adds a term, one stores
++    /// them); the helpers read each other's results as pairs. Reading such a register as a scalar would
++    /// take the packed pair for a double, and every term but the last would be lost.
++    ///
++    /// Only the entry block is looked at, and only an arithmetic paired-single operation or a single-float
++    /// quantized store counts as a read: a pair store at the top of a function is the prologue saving a
++    /// callee-saved register, whatever it holds.
++    /// </summary>
++    private static uint ComputeEntryPairedSeed(IrFunction func)
++    {
++        var entry = func.Blocks.FirstOrDefault(
++            b => b.Label.Equals(func.EntryLabel, StringComparison.OrdinalIgnoreCase));
++        if (entry is null)
++        {
++            return 0u;
++        }
++
++        const uint nonVolatileFloatRegisters = 0xFFFFC000u; // f14..f31
++        var written = 0u;
++        var seed = 0u;
++        foreach (var ins in entry.Instructions)
++        {
++            if (ins is IrCall call && IsPairedConsumerTarget(call.Target))
++            {
++                var isQuantizedStore = call.Target.Equals("PPC_PsqSt", StringComparison.OrdinalIgnoreCase);
++                var storesSingleFloat = isQuantizedStore &&
++                    call.Arguments.Count > 2 &&
++                    call.Arguments[2] is { Kind: "const", Constant: 1 };
++                if (!isQuantizedStore || storesSingleFloat)
++                {
++                    foreach (var argument in call.Arguments)
++                    {
++                        if (argument is not { Kind: "register", RegisterName: { } name })
++                        {
++                            continue;
++                        }
++
++                        var bit = PairedFloatRegisterBit(GetRegisterBaseName(name));
++                        if (bit < 0 || (nonVolatileFloatRegisters & (1u << bit)) == 0 ||
++                            (written & (1u << bit)) != 0)
++                        {
++                            continue;
++                        }
++
++                        seed |= 1u << bit;
++                    }
++                }
++            }
++
++            foreach (var destination in InstructionFloatDestinations(ins))
++            {
++                var bit = PairedFloatRegisterBit(GetRegisterBaseName(destination));
++                if (bit >= 0)
++                {
++                    written |= 1u << bit;
++                }
++            }
++        }
++
++        return seed;
++    }
++
++    private static IEnumerable<string> InstructionFloatDestinations(IrInstruction ins)
++    {
++        switch (ins)
++        {
++            case IrCall { Destination: { Length: > 0 } d }: yield return d; break;
++            case IrAssign a: yield return a.Destination; break;
++            case IrBinary b: yield return b.Destination; break;
++            case IrLoad l: yield return l.Destination; break;
++            case IrResolvedLoad l: yield return l.Destination; break;
++            case IrResolvedPsqLoad l: yield return l.Destination; break;
++            case IrResolvedLoadPair p:
++                yield return p.FirstDestination;
++                yield return p.SecondDestination;
++                break;
++        }
++    }
++
+     private static PairedFlowStateMaps ComputePairedFlowStates(
+         IrFunction func,
+         IrCfg cfg,
+@@ -296,6 +378,7 @@ public sealed partial class CxxLinearCodeGenerator
+             blockIndices[blocks[i].Label] = i;
+         }
+ 
++        var entryPairedSeed = ComputeEntryPairedSeed(func);
+         var isEntryBlock = new bool[blockCount];
+         var inMasks = new uint[blockCount];
+         var outMasks = new uint[blockCount];
+@@ -304,8 +387,8 @@ public sealed partial class CxxLinearCodeGenerator
+         for (var i = 0; i < blockCount; i++)
+         {
+             isEntryBlock[i] = blocks[i].Label.Equals(func.EntryLabel, StringComparison.OrdinalIgnoreCase);
+-            inMasks[i] = isEntryBlock[i] ? 0u : allFloatRegisters;
+-            outMasks[i] = isEntryBlock[i] ? 0u : allFloatRegisters;
++            inMasks[i] = isEntryBlock[i] ? entryPairedSeed : allFloatRegisters;
++            outMasks[i] = isEntryBlock[i] ? entryPairedSeed : allFloatRegisters;
+         }
+ 
+         // The CFG is immutable for the whole fixpoint, so the filtered
+@@ -493,7 +576,7 @@ public sealed partial class CxxLinearCodeGenerator
+                 // predecessor whose live FPRs use the scalar CpuContext representation.
+                 if (isEntryBlock[b] || preds.Count == 0)
+                 {
+-                    newIn = 0u;
++                    newIn = isEntryBlock[b] ? entryPairedSeed : 0u;
+                 }
+                 else
+                 {
 diff --git a/translator/src/Translator.Core/GuestAddressTable.cs b/translator/src/Translator.Core/GuestAddressTable.cs
 index 871ee97..c08b0b4 100644
 --- a/translator/src/Translator.Core/GuestAddressTable.cs
