@@ -28,9 +28,11 @@ How it works / Cómo funciona
    cualquiera de los dos lados puede saltarse funciones.
 3. When several functions in a row have the same size, the pairing could slide. So the alignment is done
    four ways (preferring pairs or skips, front to back and back to front), and a name is kept only when
-   all four agree.
+   all four agree. A stretch of the reference that holds another library or C++ code is skipped: there
+   the two anchors are not neighbours in the reference.
    Si varias funciones seguidas miden lo mismo, el emparejamiento podría correrse. Por eso se alinea de
-   cuatro formas y un nombre solo se queda si las cuatro coinciden.
+   cuatro formas y un nombre solo se queda si las cuatro coinciden. Un tramo de la referencia con otra
+   biblioteca o con código C++ se salta: ahí las dos anclas no son vecinas en la referencia.
 4. A name is written only on a function that still has a placeholder name (fn_...), only when it says the
    library, and never when two functions would get it.
    Solo se escribe sobre funciones sin nombre, solo si el nombre dice la biblioteca, y nunca si dos
@@ -60,9 +62,12 @@ from project import SYMBOLS_PATH  # noqa: E402
 from sdk_libraries import library_of  # noqa: E402
 from symbols import Symbol, SymbolTable  # noqa: E402
 
-# The map writes C functions of the SDK as `GX::SetViewport` and `__GX::InitGX`; this game's table, like
-# the SDK's headers, writes them `GXSetViewport` and `__GXInitGX`.
-QUALIFIED_SDK_NAME = re.compile(r"^(?P<underscores>_*)(?P<library>[A-Z][A-Z0-9]+)::(?P<rest>\w+)$")
+# The map writes C functions of the SDK as `GX::SetViewport`, and internal ones as `__GX::InitGX` or
+# `OS::__CacheInit`; this game's table, like the SDK's headers, writes them `GXSetViewport`, `__GXInitGX`
+# and `__OSCacheInit`.
+QUALIFIED_SDK_NAME = re.compile(
+    r"^(?P<before>_*)(?P<library>[A-Z][A-Z0-9]+)::(?P<after>_*)(?P<rest>[A-Za-z0-9]\w*)$"
+)
 LABEL_INSIDE_FUNCTION = re.compile(r"(_switch$|_caseD_)")
 PLAIN_C_NAME = re.compile(r"^[A-Za-z_]\w*$")
 
@@ -80,11 +85,12 @@ class Function:
 
 
 def plain_sdk_name(name: str) -> str:
-    """`GX::SetViewport` -> `GXSetViewport`; any other name stays as it is."""
+    """`GX::SetViewport` -> `GXSetViewport`, `OS::__CacheInit` -> `__OSCacheInit`; any other name stays
+    as it is."""
     match = QUALIFIED_SDK_NAME.match(name)
     if match is None:
         return name
-    return f"{match['underscores']}{match['library']}{match['rest']}"
+    return f"{match['before']}{match['after']}{match['library']}{match['rest']}"
 
 
 def read_reference_map(path: Path) -> list[Function]:
@@ -163,6 +169,19 @@ def unambiguous_pairs(ours: list[int], theirs: list[int]) -> set[tuple[int, int]
     return agreed or set()
 
 
+def belongs_with(reference_span: list[Function], library: str) -> bool:
+    """Whether the reference's stretch between two anchors holds only this library: its own functions,
+    static C functions and unnamed ones. When two anchors are far apart in the reference (the same name
+    sits elsewhere in that game), the stretch between them holds other libraries or the game's own C++
+    code, and lining it up would only pair functions by chance."""
+    for function in reference_span:
+        if "::" in function.name:
+            return False
+        if library_of(function.name) not in (None, library):
+            return False
+    return True
+
+
 def anchors_in_order(ours: list[Function], reference_index: dict[str, int]) -> list[tuple[int, int]]:
     """(index in ours, index in the reference) of the functions named in both, kept only while the order
     agrees: a name that would go backwards in the reference is not an anchor."""
@@ -204,6 +223,8 @@ def propose_names(table: SymbolTable, reference: list[Function], library: str) -
     for (our_start, their_start), (our_end, their_end) in zip(anchors, anchors[1:], strict=False):
         our_span = ours[our_start + 1 : our_end]
         their_span = reference[their_start + 1 : their_end]
+        if not belongs_with(their_span, library):
+            continue
         pairs = unambiguous_pairs([f.size for f in our_span], [f.size for f in their_span])
         for our_offset, their_offset in sorted(pairs):
             function, theirs = our_span[our_offset], their_span[their_offset]

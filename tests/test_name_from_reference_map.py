@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from name_from_reference_map import (  # noqa: E402
     Function,
     Proposal,
+    belongs_with,
     judge,
     plain_sdk_name,
     propose_names,
@@ -75,6 +76,7 @@ def write_reference(tmp_path: Path) -> Path:
 def test_the_sdk_names_of_the_map_are_written_as_the_sdk_headers_write_them():
     assert plain_sdk_name("GX::SetViewport") == "GXSetViewport"
     assert plain_sdk_name("__GX::InitGX") == "__GXInitGX"
+    assert plain_sdk_name("OS::__CacheInit") == "__OSCacheInit"  # the underscores after the library
     assert plain_sdk_name("nw4r::g3d::Draw") == "nw4r::g3d::Draw"  # not a C function of the SDK
     assert plain_sdk_name("main") == "main"
 
@@ -104,6 +106,24 @@ def test_a_pairing_that_could_slide_gives_no_name():
     assert unambiguous_pairs([0x20, 0x10, 0x10], [0x20, 0x10, 0x10, 0x10]) == {(0, 0)}
     # Against exactly two, there is only one way.
     assert unambiguous_pairs([0x10, 0x10], [0x10, 0x10]) == {(0, 0), (1, 1)}
+
+
+def test_a_stretch_of_the_reference_with_another_library_or_cpp_code_is_skipped():
+    own = [Function(0, 4, "GXSetFoo"), Function(4, 4, "__GXBar"), Function(8, 4, "0x80000008")]
+    assert belongs_with(own + [Function(12, 4, "staticHelper")], "GX")
+    assert not belongs_with(own + [Function(12, 4, "OSReport")], "GX")
+    assert not belongs_with(own + [Function(12, 4, "EGG::Heap::alloc")], "GX")
+
+
+def test_anchors_far_apart_in_the_reference_give_no_names(tmp_path):
+    # The same two anchors, but in the reference other code sits between them: another library and C++.
+    path = tmp_path / "MAP.txt"
+    path.write_text(
+        "80100000 GX::First\n80100010 GX::Twenty\n80100030 OS::Report\n80100040 Kart::Move\n"
+        "80100060 GX::Last\n80100070 GX::End\n",
+        encoding="utf-8",
+    )
+    assert propose_names(hand_built_table(), read_reference_map(path), "GX") == []
 
 
 def test_names_come_only_from_between_two_anchors_and_only_when_sure(tmp_path):
