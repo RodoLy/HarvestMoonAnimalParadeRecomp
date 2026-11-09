@@ -22,6 +22,8 @@ What it writes / Qué escribe
 - `guest_abi/foreign_game_addresses.inc`: one `MKW_FOREIGN_ADDRESS(pal, here)` per address, sorted.
   The natives come from tools/wiicompiled_coverage.py, matched by name with symbols.txt; the variables
   and the functions native code calls come from wiicompiled/RBIEE9-*-addresses.txt.
+- `guest_abi/foreign_game_facts.inc`: what WiiCompiled needs to know of the game itself (its ID, its
+  region, where the arena of MEM1 starts), one row of GuestRegion::kFacts.
 - `native/natives.cpp`: every native registration that has a counterpart here, copied from WiiCompiled
   with this game's address. The translator reads it (`native_registration_root` in
   wiicompiled/RBIEE9.yml) to know which functions not to translate. It is not compiled: the runtime
@@ -178,6 +180,23 @@ def address_lines(natives: list[NativePlacement], placements: list[Placement]) -
     ]
 
 
+# GuestRegion::Facts for this game. The arena of MEM1 starts at __ArenaLo, the address OSInit builds
+# (0x80251498) when the boot info has none; Mario Kart Wii's 0x80399180 is the same thing there. The
+# setting.txt defaults are those of a console of the United States.
+FACTS = (
+    "    {\"RBIEE9\", 'E', 0x52424945u /* RBIE */, 0u /* NTSC */, 0x806CC680u, "
+    '"USA", "RVL-001(USA)", "LU", "NTSC", "US"},'
+)
+ARENA_LO = 0x806CC680
+
+FACTS_HEADER = """\
+// Written by tools/export_wiicompiled_layer.py from harvest-moon-ap-recomp; do not edit by hand.
+// Escrito por tools/export_wiicompiled_layer.py; no editar a mano.
+//
+// GuestRegion::Facts for Harvest Moon: Animal Parade (RBIEE9): game ID, letter, game code, TV
+// format, start of the MEM1 arena, and the setting.txt defaults for a new NAND.
+"""
+
 ADDRESSES_HEADER = """\
 // Written by tools/export_wiicompiled_layer.py from harvest-moon-ap-recomp; do not edit by hand.
 // Escrito por tools/export_wiicompiled_layer.py; no editar a mano.
@@ -218,6 +237,9 @@ def main() -> int:
     addresses.parent.mkdir(parents=True, exist_ok=True)
     lines = address_lines(natives, placements)
     addresses.write_text(ADDRESSES_HEADER + "\n" + "\n".join(lines) + "\n", encoding="utf-8")
+
+    facts = arguments.out / "guest_abi" / "foreign_game_facts.inc"
+    facts.write_text(FACTS_HEADER + "\n" + FACTS + "\n", encoding="utf-8")
 
     registrations = arguments.out / "native" / "natives.cpp"
     registrations.parent.mkdir(parents=True, exist_ok=True)

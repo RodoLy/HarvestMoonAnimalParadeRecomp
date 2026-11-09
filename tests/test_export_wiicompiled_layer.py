@@ -3,6 +3,7 @@
 Colocar las funciones nativas de WiiCompiled en este juego, con registros y tablas de símbolos hechos a mano.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -10,13 +11,19 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
+from code_facts import read_code_facts  # noqa: E402
+from dol import Dol  # noqa: E402
 from export_wiicompiled_layer import (  # noqa: E402
+    ARENA_LO,
+    FACTS,
     Placement,
     address_lines,
     place_natives,
     same_letters,
     statement_at,
 )
+from function_finder import find_small_data_bases  # noqa: E402
+from project import SYMBOLS_PATH  # noqa: E402
 from symbols import Symbol, SymbolTable  # noqa: E402
 from wiicompiled_coverage import Replacement, name_from_function  # noqa: E402
 
@@ -93,3 +100,15 @@ def test_the_address_lines_are_sorted_and_must_agree():
     ]
     with pytest.raises(ValueError):
         address_lines(placed, [Placement(0x801AA9B8, 0x80000000, "something else")])
+
+
+DOL_PATH = os.environ.get("HM_AP_DOL")
+
+
+@pytest.mark.skipif(not DOL_PATH or not Path(DOL_PATH).is_file(), reason="set HM_AP_DOL to your main.dol")
+def test_the_arena_this_game_starts_with_is_the_one_osinit_builds():
+    dol = Dol(Path(DOL_PATH))
+    symbols = SymbolTable.read(SYMBOLS_PATH)
+    facts = read_code_facts(dol, symbols.by_name("OSInit"), symbols, find_small_data_bases(dol))
+    assert ARENA_LO in facts.addresses
+    assert f"0x{ARENA_LO:08X}u" in FACTS
