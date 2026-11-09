@@ -148,6 +148,23 @@ index 2fa7ef7..4129baf 100644
                  }
                  else
                  {
+diff --git a/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.cs b/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.cs
+index 2e0cee9..4189c26 100644
+--- a/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.cs
++++ b/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.cs
+@@ -190,7 +190,11 @@ public sealed partial class CxxLinearCodeGenerator
+         var suppressedInstructionMasks = BuildSuppressedInstructionMasks(func, flagElision);
+         var cxxName = SanitizeIdentifier(signature.Name);
+         var leafPreservedFprMask = LeafStackPreservedFprMask(architecturalFunc);
+-        var nonvolatileFprWriteMask = FunctionNonvolatileFprWriteMask(architecturalFunc) & ~leafPreservedFprMask;
++        // A register the function reads as a paired value before writing it is an in/out accumulator, not
++        // a callee-saved register it borrows: its caller expects the new value back, so the call boundary
++        // must not restore the old one.
++        var accumulatorFprMask = ComputeEntryPairedSeed(architecturalFunc);
++        var nonvolatileFprWriteMask = FunctionNonvolatileFprWriteMask(architecturalFunc) & ~leafPreservedFprMask & ~accumulatorFprMask;
+         var preservesNonvolatileFprs = nonvolatileFprWriteMask == 0;
+         var stackFacts = StackAddressFacts.Build(func, trustRegisterCopies: !resumableBody);
+         // Register residency supersedes the leaf register cache (localizes state via the
 diff --git a/translator/src/Translator.Core/GuestAddressTable.cs b/translator/src/Translator.Core/GuestAddressTable.cs
 index 871ee97..c08b0b4 100644
 --- a/translator/src/Translator.Core/GuestAddressTable.cs
