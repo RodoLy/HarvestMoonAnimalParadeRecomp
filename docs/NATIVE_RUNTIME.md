@@ -370,6 +370,28 @@ En Windows, `set RECOMP_RBIEE9_DOL=...` en lugar de `export`. Con el SDK de
 lanzador nativo para `linux-x64`, y no hace falta porque el traductor se corre
 con `dotnet`.
 
+### Encontrar de una vez lo que detendría el juego (2026-11-09)
+
+El runtime no tiene hardware detrás de los registros de la consola: una función
+traducida que toca uno detiene el juego. `tools/find_hardware_access.py` busca
+todas las funciones que construyen la dirección de un registro (`0xCC00xxxx`,
+`0xCD00xxxx`, `0xCD80xxxx`) o llaman a `IPCReadReg`/`IPCWriteReg`, sigue las
+llamadas desde `__start` y desde cada puntero a función sin entrar en las
+nativas, y lista las que el juego todavía puede alcanzar con el camino que
+llega a cada una:
+
+```sh
+python3 tools/find_hardware_access.py --natives build/wiicompiled/native/natives.cpp
+```
+
+Con ella se nombraron de una vez las 14 funciones que quedaban en el arranque
+(`IPCCltInit`, `PADRead`, `__DVDCheckDevice`, seis `DVDLow`...). Las 11 que
+lista ahora solo se alcanzan al salir del juego (`OSReturnToMenu`,
+`OSShutdownSystem`, `OSRestart`), desde manejadores de interrupción que el
+runtime no llama, o desde las funciones de la fuente del sistema
+(`OSGetFontTexel`...), que solo leen el registro de video si nadie fijó la
+codificación de la fuente.
+
 ### Qué sigue
 
 1. Compilar el runtime de WiiCompiled con la capa (los pasos de arriba) en
@@ -745,6 +767,26 @@ On Windows, `set RECOMP_RBIEE9_DOL=...` instead of `export`. With the .NET SDK
 that Ubuntu ships, add `-p:UseAppHost=false` to `dotnet build`: it has no native
 launcher for `linux-x64`, and none is needed because the translator runs
 through `dotnet`.
+
+### Finding at once what would stop the game (2026-11-09)
+
+The runtime has no hardware behind the console's registers: a translated
+function that touches one stops the game. `tools/find_hardware_access.py` finds
+every function that builds a register's address (`0xCC00xxxx`, `0xCD00xxxx`,
+`0xCD80xxxx`) or calls `IPCReadReg`/`IPCWriteReg`, follows the calls from
+`__start` and from every function pointer without going into the natives, and
+lists the ones the game can still reach, with the path to each:
+
+```sh
+python3 tools/find_hardware_access.py --natives build/wiicompiled/native/natives.cpp
+```
+
+It named at once the 14 functions left on the start-up path (`IPCCltInit`,
+`PADRead`, `__DVDCheckDevice`, six `DVDLow`...). The 11 it lists now are only
+reached when leaving the game (`OSReturnToMenu`, `OSShutdownSystem`,
+`OSRestart`), from interrupt handlers the runtime does not call, or from the
+system font functions (`OSGetFontTexel`...), which read the video register only
+if nobody set the font encoding.
 
 ### What comes next
 
