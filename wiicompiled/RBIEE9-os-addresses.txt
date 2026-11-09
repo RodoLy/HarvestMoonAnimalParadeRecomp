@@ -1,0 +1,56 @@
+# Where this game keeps what WiiCompiled's native OS looks for at Mario Kart Wii's addresses.
+# Dónde guarda este juego lo que el OS nativo de WiiCompiled busca en las direcciones de Mario Kart Wii.
+#
+# WiiCompiled's runtime/src/hle/os names 25 addresses of Mario Kart Wii (PAL, RMCP01) with MKW_GADDR():
+# functions it calls and variables of the SDK it reads and writes. To use those native functions here,
+# each needs this game's address. docs/NATIVE_RUNTIME.md explains why; tests/test_wiicompiled_addresses.py
+# checks every row against main.dol.
+#
+# El runtime de WiiCompiled nombra 25 direcciones de Mario Kart Wii en su OS. Para usar esas funciones
+# nativas aquí, cada una necesita la dirección de este juego. La prueba comprueba cada fila contra main.dol.
+#
+# Columns / Columnas:
+#   1. the address in Mario Kart Wii (PAL), as MKW_GADDR() writes it
+#   2. the address in this game (RBIEE9), or "-" when this game has no such thing
+#   3. what it is
+#   4. the evidence: a function of this game that touches the address (for a variable), or "name" (for a
+#      function: symbols.txt gives it that name), or "-" with the reason in column 3
+#
+# A variable's evidence is a function of this game that loads it, stores it or puts its address
+# together. The SDK's variables of one source file sit in the same order in both games, so when the
+# evidence alone does not say which of two neighbours is which, the order does: that is said in column 3.
+
+# ---------------------------------------------------------------- functions
+0x801A20BC  0x80253AC0  OSInitContext                                   name
+0x801A8088  0x80258FC0  __OSUnlockAllMutex                              name
+0x801AA0F0  0x8025B050  OSExitThread (the return address of every new thread)  name
+0x801ABC0C  0x8025C7B0  __OSDefaultPowerCallback                        name
+0x80192F7C  0x8029D9D0  IPCInit                                         name
+
+# ---------------------------------------------------------------- OSThread.c
+0x80347130  0x8060D4D0  the flag OSCreateThread reads before its slow path   OSCreateThread
+0x80347498  0x8060D878  DefaultThread (an OSThread, 0x318 bytes)        __OSThreadInit
+0x803477B0  0x8060DB90  RunQueue[32] (right after DefaultThread)        OSResumeThread
+0x803478B0  0x8060DC90  IdleContext (right after RunQueue)              0x8025AB90
+0x80385AA8  0x806B3168  the word OSCreateThread masks with 0xF8 (starts at 0xF8)  OSCreateThread
+0x80385AE0  0x806B3190  SwitchThreadCallback (starts at DefaultSwitchThreadCallback, 0x8025A5A0)  __OSThreadInit
+0x80386918  0x806B43B0  Reschedule: OSDisableScheduler's count          OSDisableScheduler
+0x8038691C  0x806B43B4  RunQueueHint (the next word, in the same order)  0x8025AB90
+0x80386920  0x806B43B8  RunQueueBits (the next word; the idle loop at 0x8025ACE0 waits on it)  0x8025AB90
+
+# ---------------------------------------------------------------- OSAlarm.c, OSInterrupt.c, OSIpc.c
+0x803868A0  0x806B4330  AlarmQueue (head, tail)                         OSCancelAlarm
+0x803868F8  0x806B4388  the pointer to the interrupt handler table      __OSGetInterruptHandler
+0x803867EC  0x806B3198  __OSIPCBufferLo (starts at -1)                  __OSGetIPCBufferLo
+
+# ---------------------------------------------------------------- OSStateTM.c (five words in the same order)
+0x80386934  0x806B43CC  StmReady: the state manager is set up           __OSInitSTM
+0x80386938  0x806B43D0  the handle of /dev/stm/immediate                __OSInitSTM
+0x8038693C  0x806B43D4  the handle of /dev/stm/eventhook                __OSInitSTM
+0x80386940  0x806B43D8  whether the event handler is waiting            OSSetPowerCallback
+0x80386948  0x806B43E0  PowerCallback                                   OSSetPowerCallback
+
+# ---------------------------------------------------------------- Mario Kart Wii only
+0x80386298  -           Mario Kart Wii's RFL manager, for its own RFLiIsWorking: not an OS variable  -
+0x805529A8  -           THP::VideoDecoder, a thread of Mario Kart Wii's movie player that OSCreateThread treats apart  -
+0x80552A74  -           THP::VideoDecoderOnMemory, the same                -
