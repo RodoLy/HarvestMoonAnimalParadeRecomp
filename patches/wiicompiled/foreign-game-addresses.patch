@@ -1399,11 +1399,13 @@ index 3dbdc8d..be45c92 100644
      EnsureAuroraFrameActive();
      GX_SYNC_INLINE();
 diff --git a/runtime/src/hle/gx/gx_dl.cpp b/runtime/src/hle/gx/gx_dl.cpp
-index daceeb7..af50e54 100644
+index daceeb7..9c2534c 100644
 --- a/runtime/src/hle/gx/gx_dl.cpp
 +++ b/runtime/src/hle/gx/gx_dl.cpp
-@@ -1,8 +1,10 @@
+@@ -1,8 +1,12 @@
  #include "gx_internal.h"
++
++#include <cstring>
 +#include "gx_frame_trace.h"
  #include "gx_stream_common.h"
  #include "gx_cp_decode.h"
@@ -1413,10 +1415,38 @@ index daceeb7..af50e54 100644
  #include <cstdlib>
  #include <unordered_map>
  
-@@ -1293,14 +1295,56 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1293,14 +1297,86 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
      GxGuestWrite::NotifyWrite(addr, size);
  }
  
++// For the frame trace: what a vertex array holds, read as three big-endian floats per entry. A model the
++// game skins on the CPU is drawn from arrays it filled itself; the first entries and the range of the first
++// few hundred show at a glance whether that skinning produced sane numbers (a model a few units wide has
++// values of that size) or garbage (huge, NaN, all zero).
++static void TraceArrayValues(const char* what, uint32_t base, uint32_t stride) {
++    if (base == 0 || stride < 12) return;
++    float lo = 1e30f, hi = -1e30f;
++    uint32_t nan = 0;
++    for (uint32_t i = 0; i < 512; ++i) {
++        for (uint32_t c = 0; c < 3; ++c) {
++            const uint32_t bits = Memory::Read32(base + i * stride + c * 4);
++            float v;
++            std::memcpy(&v, &bits, sizeof(v));
++            if (v != v) { ++nan; continue; }
++            if (v < lo) lo = v;
++            if (v > hi) hi = v;
++        }
++    }
++    float first[9];
++    for (uint32_t k = 0; k < 9; ++k) {
++        const uint32_t bits = Memory::Read32(base + (k / 3) * stride + (k % 3) * 4);
++        std::memcpy(&first[k], &bits, sizeof(float));
++    }
++    GxFrameTrace::Note("  %s: first entries (%g %g %g) (%g %g %g) (%g %g %g); range of the first 512 entries %g..%g, %u NaN",
++                       what, first[0], first[1], first[2], first[3], first[4], first[5], first[6], first[7],
++                       first[8], lo, hi, nan);
++}
++
 +// For the frame trace: the vertex layout a display list is drawn with, as the worker applies it (each
 +// present attribute as name:type, 1 direct, 2 index8, 3 index16, with n3/n9 for the normal), and the
 +// format of its first draw when the list starts with one.
@@ -1444,6 +1474,8 @@ index daceeb7..af50e54 100644
 +                       "frac %u, normals at 0x%08X stride %u",
 +                       listAddr, vf, layout, pos.base, pos.stride, static_cast<int>(posFmt.type), posFmt.frac,
 +                       nrm.base, nrm.stride);
++    TraceArrayValues("positions", pos.base, pos.stride);
++    TraceArrayValues("normals", nrm.base, nrm.stride);
 +}
 +
  extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes) {
