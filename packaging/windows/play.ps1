@@ -20,9 +20,13 @@ el paquete lo compila junto con el runtime de WiiCompiled, y el juego queda en G
 configuración en UserData\Config.toml. La siguiente vez solo se compila lo que cambió.
 
 .PARAMETER Disc
-The folder of your extracted disc: the one with sys\main.dol, sys\fst.bin and files\. Dolphin
-writes it with Properties > Filesystem > right click the data partition > Extract Entire Partition. Asked for if left out, and remembered after that.
-La carpeta de tu disco extraído, la que tiene sys\main.dol, sys\fst.bin y files\.
+Your disc image (.rvz, .iso, .wbfs, .wia or .ciso), as Dolphin plays it. The script extracts it
+once to Disc\ with nodtool, the same tool WiiCompiled uses. A folder already extracted by Dolphin
+(the one with sys\main.dol, sys\fst.bin and files\) works too. Asked for if left out, and
+remembered after that.
+Tu imagen del disco (.rvz, .iso, .wbfs, .wia o .ciso), la misma con la que juegas en Dolphin. El
+script la extrae una vez a Disc\ con nodtool, la herramienta que usa WiiCompiled. También sirve una
+carpeta ya extraída con Dolphin (la que tiene sys\main.dol, sys\fst.bin y files\).
 
 .PARAMETER Rebuild
 Translate and compile again even if nothing changed.
@@ -48,6 +52,7 @@ $workspace = Join-Path $root 'BuildWorkspace'
 $game = Join-Path $root 'Game'
 $userData = Join-Path $root 'UserData'
 $rememberedDisc = Join-Path $userData 'disc.txt'
+$extracted = Join-Path $root 'Disc'
 $project = 'projects\animal-parade\recomp.yml'
 $gameId = 'RBIEE9'
 
@@ -79,15 +84,39 @@ function Read-DiscId([string]$DiscRoot) {
     return [Text.Encoding]::ASCII.GetString($bytes, 0, 6)
 }
 
-function Select-DiscFolder {
+function Select-DiscImage {
     Add-Type -AssemblyName System.Windows.Forms
-    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dialog.Description = 'Extracted Harvest Moon: Animal Parade disc (sys + files) / Disco extraído (sys + files)'
-    $dialog.ShowNewFolderButton = $false
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Title = 'Harvest Moon: Animal Parade (RBIEE9) - disc image / imagen del disco'
+    $dialog.Filter = 'Wii disc images (*.rvz;*.iso;*.wbfs;*.wia;*.ciso)|*.rvz;*.iso;*.wbfs;*.wia;*.ciso|All files (*.*)|*.*'
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-        throw 'No disc folder was chosen. / No se eligió la carpeta del disco.'
+        throw 'No disc image was chosen. / No se eligió la imagen del disco.'
     }
-    return $dialog.SelectedPath
+    return $dialog.FileName
+}
+
+function Expand-DiscImage([string]$Image) {
+    <#
+    Extracts the image's data partition to Disc\DATA once. Disc\extracted-from.txt records which
+    image (path, size, date) it came from, so the same image is not extracted again; a half-finished
+    extraction has no record and is redone.
+    #>
+    $image = Get-Item -LiteralPath $Image
+    $source = "$($image.FullName)|$($image.Length)|$($image.LastWriteTimeUtc.ToString('o'))"
+    $record = Join-Path $extracted 'extracted-from.txt'
+    $dataRoot = Join-Path $extracted 'DATA'
+    if ((Test-Path -LiteralPath $record -PathType Leaf) -and ((Get-Content -LiteralPath $record -Raw).Trim() -eq $source) -and
+        (Find-DiscRoot $dataRoot)) {
+        return $dataRoot
+    }
+    Write-Step 'Extracting the disc image (once; a few minutes)' 'Extrayendo la imagen del disco (una sola vez; unos minutos)'
+    if (Test-Path -LiteralPath $extracted) { Remove-Item -LiteralPath $extracted -Recurse -Force }
+    [IO.Directory]::CreateDirectory($extracted) | Out-Null
+    $nodTool = Join-Path $toolkit 'nodtool.exe'
+    Assert-File $nodTool 'Disc tool'
+    Invoke-Checked $nodTool @('extract', $image.FullName, $dataRoot, '-q') 'Extracting the disc image'
+    Set-Content -LiteralPath $record -Value $source -Encoding UTF8
+    return $dataRoot
 }
 
 # ---------------------------------------------------------------- the disc
@@ -96,19 +125,26 @@ function Select-DiscFolder {
 if (-not $Disc -and (Test-Path -LiteralPath $rememberedDisc -PathType Leaf)) {
     $Disc = (Get-Content -LiteralPath $rememberedDisc -Raw).Trim()
 }
-if (-not $Disc) { $Disc = Select-DiscFolder }
-$discRoot = Find-DiscRoot $Disc
+if (-not $Disc) { $Disc = Select-DiscImage }
+if (-not (Test-Path -LiteralPath $Disc)) {
+    throw "$Disc does not exist. / $Disc no existe."
+}
+$Disc = [IO.Path]::GetFullPath($Disc)
+if (Test-Path -LiteralPath $Disc -PathType Leaf) {
+    $discRoot = Find-DiscRoot (Expand-DiscImage $Disc)
+} else {
+    $discRoot = Find-DiscRoot $Disc
+}
 if (-not $discRoot) {
-    throw "$Disc has no sys\main.dol, sys\fst.bin and files\. Extract the data partition with Dolphin " +
-        "(Properties > Filesystem > Extract Entire Partition) and choose that folder. / Esa carpeta no tiene " +
-        "sys\main.dol, sys\fst.bin y files\. Extrae la partición de datos con Dolphin y elige esa carpeta."
+    throw "$Disc is not a disc image nor a folder with sys\main.dol, sys\fst.bin and files\. " +
+        "/ $Disc no es una imagen de disco ni una carpeta con sys\main.dol, sys\fst.bin y files\."
 }
 $discId = Read-DiscId $discRoot
 if ($discId -and $discId -ne $gameId) {
     throw "This disc is $discId; the package is for $gameId (Harvest Moon: Animal Parade, USA). " +
         "/ Este disco es $discId; el paquete es para $gameId."
 }
-Set-Content -LiteralPath $rememberedDisc -Value $discRoot -Encoding UTF8
+Set-Content -LiteralPath $rememberedDisc -Value $Disc -Encoding UTF8
 $mainDol = Join-Path $discRoot 'sys\main.dol'
 Write-Host "Disc / Disco: $discRoot"
 

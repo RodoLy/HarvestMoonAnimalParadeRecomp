@@ -36,8 +36,9 @@ disco.
 
 El workflow **Windows x64 package** (pestaña Actions → Run workflow) arma un
 paquete sin datos del juego: el runtime de WiiCompiled con la capa de este juego,
-su traductor y su compilador portátil. En tu computadora, `play.cmd` traduce tu
-disco, compila el juego y lo inicia. Los pasos están en
+su traductor y su compilador portátil. En tu computadora, `play.cmd` toma tu
+imagen del disco (.rvz, .iso o .wbfs), la extrae, traduce el juego, lo compila y
+lo inicia. Los pasos están en
 [packaging/windows/README.txt](packaging/windows/README.txt). En Windows sobre ARM
 corre con la emulación de x86-64 de Windows.
 
@@ -112,8 +113,9 @@ This repository contains no game data. You need your own backup of the disc.
 
 The **Windows x64 package** workflow (Actions tab → Run workflow) builds a
 package with no game data: WiiCompiled's runtime with this game's layer, its
-translator and its portable compiler. On your computer, `play.cmd` translates
-your disc, compiles the game and starts it. The steps are in
+translator and its portable compiler. On your computer, `play.cmd` takes your
+disc image (.rvz, .iso or .wbfs), extracts it, translates the game, compiles it
+and starts it. The steps are in
 [packaging/windows/README.txt](packaging/windows/README.txt). On Windows on ARM
 it runs through Windows' x86-64 emulation.
 
