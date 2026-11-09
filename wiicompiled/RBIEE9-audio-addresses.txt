@@ -1,0 +1,47 @@
+# Where this game keeps what WiiCompiled's native audio looks for at Mario Kart Wii's addresses.
+# Dónde guarda este juego lo que el audio nativo de WiiCompiled busca en las direcciones de Mario Kart Wii.
+#
+# The columns are those of RBIEE9-os-addresses.txt; tests/test_wiicompiled_addresses.py checks every row.
+# Las columnas son las de RBIEE9-os-addresses.txt.
+#
+# WiiCompiled runs AX translated and replaces what is below it (DSP and AI). Its DSP builds AX's task
+# itself, so it needs the task, AX's microcode and the four callbacks the task points at. In this game
+# __AXOutInitDSP (0x80270AB0) fills the same task the same way: the same lengths (0x40 bytes of DRAM, at
+# DSP address 0xCD2), the DRAM 0x60 bytes after the task, and the callbacks in the same order.
+#
+# covers: runtime/src/hle/audio
+
+# ---------------------------------------------------------------- AXOut.c: the callbacks of AX's DSP task
+0x80126948  0x80270A20  __AXDSPInitCallback (the task's init_cb, at 0x28)  name
+0x80126954  0x80270A30  __AXDSPResumeCallback (res_cb, at 0x2C)         name
+0x801269A8  0x80270A90  __AXDSPRequestCallback (done_cb, at 0x30)       name
+0x801269B8  0x80270AA0  the next function, four bytes long (req_cb, at 0x34); neither map names it  0x80270AB0
+
+# ---------------------------------------------------------------- AXOut.c: the task and its microcode
+0x802F81A0  0x80617AE0  AX's DSP task                                   0x80270AB0
+0x8027F820  0x804C18A0  AX's microcode, which the task loads into the DSP's IRAM  0x80270AB0
+0x802F8200  0x80617B40  the DRAM the task sends the DSP (0x60 bytes after the task)  0x80270AB0
+0x80385800  0x806B3270  the DSP's start address for the microcode       0x80270AB0
+0x80385802  0x806B3272  the DSP's resume address                        0x80270AB0
+0x80385804  0x806B3274  the microcode's length                          0x80270AB0
+0x80386524  0x806B4724  a flag __AXOutInitDSP clears before it adds the task  0x80270AB0
+0x80386528  0x806B4728  set by __AXDSPInitCallback once the DSP runs AX; __AXOutInitDSP waits on it  __AXDSPInitCallback
+
+# ---------------------------------------------------------------- ai.c (.sbss, 0x332E1F8 further on)
+0x80386448  0x806B4640  the flag AIInit sets                            AICheckInit
+0x8038644C  0x806B4644  whether the DMA callback is running             __AIDHandler
+0x8038647C  0x806B4674  whether the DMA callback runs on its own stack  __AICallbackStackSwitch
+0x80386480  0x806B4678  the DMA callback                                __AIDHandler
+
+# ---------------------------------------------------------------- dsp.c, dsp_task.c (.sbss, 0x332E1B8 further on)
+0x80386608  0x806B47C0  the flag DSPInit sets                           DSPCheckInit
+0x80386610  0x806B47C8  whether DSPAssertTask has a task waiting        DSPAssertTask
+0x80386614  0x806B47CC  the task DSPAssertTask asked for                DSPAssertTask
+0x80386618  0x806B47D0  the next word, which DSPInit clears             DSPInit
+0x8038661C  0x806B47D4  __DSP_curr_task                                 DSPInit
+0x80386620  0x806B47D8  __DSP_first_task                                DSPAddTask
+0x80386624  0x806B47DC  the task that runs                              DSPAssertTask
+
+# ---------------------------------------------------------------- AXFXReverbStdExp (.sdata2)
+0x80388588  0x806B9190  1.0, which the reverb's callback loads          AXFXReverbStdExpCallback
+0x8038858C  0x806B9194  0.6, the scale of what is sent to the reverb    AXFXReverbStdExpCallback
