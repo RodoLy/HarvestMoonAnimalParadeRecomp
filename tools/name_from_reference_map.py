@@ -34,7 +34,7 @@ How it works / Cómo funciona
    cuatro formas y un nombre solo se queda si las cuatro coinciden. Un tramo de la referencia con otra
    biblioteca o con código C++ se salta: ahí las dos anclas no son vecinas en la referencia.
 4. A name is written only on a function that still has a placeholder name (fn_...), only when it says the
-   library, and never when two functions would get it.
+   library, and never when two functions would get it or the reference gives it to two of its own.
    Solo se escribe sobre funciones sin nombre, solo si el nombre dice la biblioteca, y nunca si dos
    funciones lo recibirían.
 
@@ -47,6 +47,7 @@ Order and size are evidence, not proof: docs/FUNCTION_MAP.md tells what was chec
 Usage / Uso:
     python3 tools/name_from_reference_map.py GX --reference MAP.txt            # report; changes nothing
     python3 tools/name_from_reference_map.py GX --reference MAP.txt --apply    # write the names
+    python3 tools/name_from_reference_map.py AX --range 0x8026EE30-0x80272CF0  # a stretch given by hand
 """
 
 import argparse
@@ -58,6 +59,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from find_library_entry_points import parse_address_range  # noqa: E402
 from project import SYMBOLS_PATH  # noqa: E402
 from sdk_libraries import library_of  # noqa: E402
 from symbols import Symbol, SymbolTable  # noqa: E402
@@ -175,15 +177,18 @@ def unambiguous_pairs(ours: list[int], theirs: list[int]) -> set[tuple[int, int]
     return agreed or set()
 
 
-def belongs_with(reference_span: list[Function], library: str) -> bool:
+def belongs_with(reference_span: list[Function], library: str | None) -> bool:
     """Whether the reference's stretch between two anchors holds only this library: its own functions,
     static C functions and unnamed ones. When two anchors are far apart in the reference (the same name
     sits elsewhere in that game), the stretch between them holds other libraries or the game's own C++
-    code, and lining it up would only pair functions by chance."""
+    code, and lining it up would only pair functions by chance.
+
+    With library None, any library of the SDK will do, but still no C++: that is for a stretch given by
+    hand that crosses from one library into the next (AX into AXFX)."""
     for function in reference_span:
         if "::" in function.name:
             return False
-        if library_of(function.name) not in (None, library):
+        if library is not None and library_of(function.name) not in (None, library):
             return False
     return True
 
@@ -210,30 +215,49 @@ class Proposal:
     new_name: str
 
 
-def propose_names(table: SymbolTable, reference: list[Function], library: str) -> list[Proposal]:
-    """The names this game's library can take from the reference, before the uniqueness checks."""
+def propose_names(
+    table: SymbolTable, reference: list[Function], library: str, stretch: tuple[int, int] | None = None
+) -> list[Proposal]:
+    """The names this game's library can take from the reference, before the uniqueness checks.
+
+    The library's stretch of this game runs from its first named function to its last. A library with
+    too few names for that (one, or none) can be given a stretch by hand, `stretch` = (first, end): the
+    functions there, of whatever library, are lined up with the reference."""
     ours = sorted(
         (Function(symbol.address, symbol.size, symbol.name) for symbol in table if symbol.kind == "function"),
         key=lambda function: function.address,
     )
-    named_in_library = [index for index, function in enumerate(ours) if library_of(function.name) == library]
-    if not named_in_library:
-        return []
-    ours = ours[named_in_library[0] : named_in_library[-1] + 1]
+    if stretch is not None:
+        first, end = stretch
+        ours = [function for function in ours if first <= function.address < end]
+    else:
+        named_in_library = [
+            index for index, function in enumerate(ours) if library_of(function.name) == library
+        ]
+        if not named_in_library:
+            return []
+        ours = ours[named_in_library[0] : named_in_library[-1] + 1]
     reference_index = {}
     for index, function in enumerate(reference):
         reference_index.setdefault(function.name, index)
+    # A name the reference gives to two functions is a mistake of the map for one of them, and nothing
+    # says which: GXPokeAlphaUpdate and AXFXReverbHiCallback are given twice in Mario Kart Wii's map.
+    seen, given_twice = set(), set()
+    for function in reference:
+        (given_twice if function.name in seen else seen).add(function.name)
 
     proposals = []
     anchors = anchors_in_order(ours, reference_index)
     for (our_start, their_start), (our_end, their_end) in zip(anchors, anchors[1:], strict=False):
         our_span = ours[our_start + 1 : our_end]
         their_span = reference[their_start + 1 : their_end]
-        if not belongs_with(their_span, library):
+        if not belongs_with(their_span, None if stretch is not None else library):
             continue
         pairs = unambiguous_pairs([f.size for f in our_span], [f.size for f in their_span])
         for our_offset, their_offset in sorted(pairs):
             function, theirs = our_span[our_offset], their_span[their_offset]
+            if theirs.name in given_twice:
+                continue
             proposals.append(Proposal(function.address, function.size, function.name, theirs.name))
     return proposals
 
@@ -276,6 +300,11 @@ def main() -> int:
         help="WiiCompiled's projects/mkwii/MAP.txt (default: the HM_AP_REFERENCE_MAP environment variable)",
     )
     parser.add_argument("--symbols", type=Path, default=SYMBOLS_PATH, help=f"default: {SYMBOLS_PATH}")
+    parser.add_argument(
+        "--range",
+        dest="address_range",
+        help="FIRST-END: line up this stretch of the game instead of the one the library's names give",
+    )
     parser.add_argument("--apply", action="store_true", help="write the accepted names into symbols.txt")
     arguments = parser.parse_args()
     if arguments.reference is None or not Path(arguments.reference).is_file():
@@ -283,7 +312,13 @@ def main() -> int:
 
     table = SymbolTable.read(arguments.symbols)
     reference = read_reference_map(Path(arguments.reference))
-    result = judge(table, propose_names(table, reference, arguments.library), arguments.library)
+    stretch = None
+    if arguments.address_range:
+        try:
+            stretch = parse_address_range(arguments.address_range)
+        except ValueError as problem:
+            parser.error(str(problem))
+    result = judge(table, propose_names(table, reference, arguments.library, stretch), arguments.library)
 
     print(f"{len(result.accepted)} functions of {arguments.library} can be named from the reference map")
     for proposal in result.accepted:

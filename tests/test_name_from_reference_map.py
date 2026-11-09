@@ -130,6 +130,47 @@ def test_anchors_far_apart_in_the_reference_give_no_names(tmp_path):
     assert propose_names(hand_built_table(), read_reference_map(path), "GX") == []
 
 
+def test_a_name_the_reference_gives_twice_is_not_used(tmp_path):
+    path = tmp_path / "MAP.txt"
+    path.write_text(
+        "80100000 GX::First\n80100010 GX::Twenty\n80100030 GX::Last\n80100040 GX::Twenty\n80100060 GX::End\n",
+        encoding="utf-8",
+    )
+    table = SymbolTable(
+        [
+            function_symbol("GXFirst", TEXT + 0x00, 0x20),
+            function_symbol("fn_80004020", TEXT + 0x20, 0x20),
+            function_symbol("GXLast", TEXT + 0x40, 0x10),
+        ]
+    )
+    assert propose_names(table, read_reference_map(path), "GX") == []
+
+
+def test_a_stretch_given_by_hand_lines_up_a_library_with_no_names_of_its_own(tmp_path):
+    # Neither anchor is of AX, and the reference's stretch crosses into AXFX: with the stretch given by
+    # hand, that is fine.
+    path = tmp_path / "MAP.txt"
+    path.write_text(
+        "80100000 OS::Last\n80100010 AX::Init\n80100030 AXFX::Hook\n80100040 SC::First\n80100050 SC::End\n",
+        encoding="utf-8",
+    )
+    table = SymbolTable(
+        [
+            function_symbol("OSLast", TEXT + 0x00, 0x10),
+            function_symbol("fn_80004010", TEXT + 0x10, 0x20),
+            function_symbol("fn_80004030", TEXT + 0x30, 0x10),
+            function_symbol("SCFirst", TEXT + 0x40, 0x10),
+        ]
+    )
+    reference = read_reference_map(path)
+    assert propose_names(table, reference, "AX") == []  # AX has no names: no stretch of its own
+    stretch = (TEXT, TEXT + 0x50)
+    assert [proposal.new_name for proposal in propose_names(table, reference, "AX", stretch)] == [
+        "AXInit",
+        "AXFXHook",
+    ]
+
+
 def test_names_come_only_from_between_two_anchors_and_only_when_sure(tmp_path):
     table = hand_built_table()
     reference = read_reference_map(write_reference(tmp_path))
