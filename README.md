@@ -19,7 +19,7 @@ disco.
 ### Estado
 
 - **Fase 0 terminada:** mapa de funciones del ejecutable (17 142 funciones,
-  validado contra el índice de excepciones de CodeWarrior), con 1 067 nombres
+  validado contra el índice de excepciones de CodeWarrior), con 1 211 nombres
   del SDK. Ver [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
 - **Fase 1 empezada:** el script para compilar y jugar en Linux o WSL2 ya
   está adaptado ([docs/BUILDING.md](docs/BUILDING.md)), pero todavía no se ha
@@ -27,7 +27,8 @@ disco.
 - **Fase 2 (runtime sin Dolphin) empezada:** el traductor de WiiCompiled ya
   traduce el juego entero (17 217 funciones), y está medido qué pide el juego y
   qué ya da WiiCompiled. GX, OS, DVD, VI y PPC ya tienen nombre en casi todo lo que
-  el juego llama (GX 117 de 129, OS 101 de 108). Ver
+  el juego llama (GX 117 de 129, OS 101 de 108), y
+  ubicadas las direcciones que usa el código nativo de WiiCompiled. Ver
   [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) y [docs/PLAN.md](docs/PLAN.md).
 
 ### Empezar
@@ -84,7 +85,7 @@ This repository contains no game data. You need your own backup of the disc.
 ### Status
 
 - **Phase 0 done:** function map of the executable (17,142 functions,
-  validated against CodeWarrior's exception index), with 1,067 SDK names. See
+  validated against CodeWarrior's exception index), with 1,211 SDK names. See
   [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
 - **Phase 1 started:** the script to build and play on Linux or WSL2 is
   adapted ([docs/BUILDING.md](docs/BUILDING.md)) but not yet tested with the
@@ -92,7 +93,8 @@ This repository contains no game data. You need your own backup of the disc.
 - **Phase 2 (runtime without Dolphin) started:** WiiCompiled's translator
   already translates the whole game (17,217 functions), and what the game needs
   and what WiiCompiled already provides is measured. GX, OS, DVD, VI and PPC now have
-  a name for almost everything the game calls (GX 117 of 129, OS 101 of 108). See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
+  a name for almost everything the game calls (GX 117 of 129, OS 101 of 108),
+  and the addresses WiiCompiled's native code uses are found. See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
   and [docs/PLAN.md](docs/PLAN.md).
 
 ### Getting started
