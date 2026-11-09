@@ -281,3 +281,23 @@ def test_a_bluetooth_item_accessor_loads_the_item_and_jumps_to_the_right_functio
     offset = jump & 0x03FFFFFC
     destination = function.address + 8 + (offset - 0x04000000 if offset & 0x02000000 else offset)
     assert symbols.by_address[destination].name == target
+
+
+# SelectThread, OSThread.c's scheduler: it saves the running thread's context, picks the highest thread off
+# the run queues (RunQueueBits 0x806B43B8, RunQueueHint 0x806B43B4, Reschedule 0x806B43B0) and loads its
+# context; with nothing to run it spins with interrupts on until RunQueueBits changes. Every thread call
+# reaches it, and it comes right after __OSPromoteThread, as in the SDK. WiiCompiled has it as a native
+# because a PC cannot spin there: nothing else would run.
+@needs_game_files
+def test_select_thread_is_the_scheduler_every_thread_call_reaches(game):
+    from find_callers import build_call_map
+
+    dol, symbols, bases, _ = game
+    select_thread = symbols.by_name("SelectThread")
+    assert select_thread.address == 0x8025AB90
+    facts = read_code_facts(dol, select_thread, symbols, bases)
+    assert {"OSSaveContext", "OSLoadContext", "OSSetCurrentContext", "OSEnableInterrupts"} <= facts.callees
+    assert {0x806B43B0, 0x806B43B4, 0x806B43B8} <= facts.accessed_addresses
+    assert facts.previous_function == "__OSPromoteThread"
+    callers = {site.caller.name for site in build_call_map(dol, symbols).call_sites[select_thread.address]}
+    assert {"OSSleepThread", "OSWakeupThread", "OSResumeThread", "OSSuspendThread", "OSExitThread"} <= callers
