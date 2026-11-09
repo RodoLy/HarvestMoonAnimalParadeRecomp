@@ -301,3 +301,39 @@ def test_select_thread_is_the_scheduler_every_thread_call_reaches(game):
     assert facts.previous_function == "__OSPromoteThread"
     callers = {site.caller.name for site in build_call_map(dol, symbols).call_sites[select_thread.address]}
     assert {"OSSleepThread", "OSWakeupThread", "OSResumeThread", "OSSuspendThread", "OSExitThread"} <= callers
+
+
+# GKI, the Bluetooth stack's small kernel: on the Wii GKI_run, GKI_sched_lock, GKI_sched_unlock and
+# GKI_delay do nothing (each is a lone blr), and they sit in that order, as in Mario Kart Wii's map.
+# Bluetooth start-up waits in `while (!BTA_DmIsDeviceUp()) GKI_delay(2000);`, which on a PC spins
+# forever unless GKI_delay is WiiCompiled's native, which runs the alarms and lets time pass.
+GKI_EMPTY = ["GKI_run", "GKI_sched_lock", "GKI_sched_unlock", "GKI_delay"]
+RETURN = 0x4E800020
+
+
+@needs_game_files
+def test_the_empty_gki_functions_are_four_lone_returns_in_order(game):
+    dol, symbols, _, _ = game
+    functions = [symbols.by_name(name) for name in GKI_EMPTY]
+    assert [function.address for function in functions] == [0x802BC8B0 + 0x10 * index for index in range(4)]
+    for function in functions:
+        assert function.size == 4
+        assert dol.u32(function.address) == RETURN
+
+
+@needs_game_files
+def test_bluetooth_start_up_waits_with_gki_delay_until_the_device_is_up(game):
+    dol, symbols, _, _ = game
+    delay, device_up = symbols.by_name("GKI_delay"), symbols.by_name("BTA_DmIsDeviceUp")
+
+    def calls(address, target):
+        word = dol.u32(address)
+        offset = word & 0x03FFFFFC
+        return word & 0xFC000003 == 0x48000001 and address + (
+            offset - 0x04000000 if offset & 0x02000000 else offset
+        ) == target
+
+    # li r3, 2000 / bl GKI_delay / bl BTA_DmIsDeviceUp, at 0x802BE130.
+    assert dol.u32(0x802BE130) == 0x386007D0
+    assert calls(0x802BE134, delay.address)
+    assert calls(0x802BE138, device_up.address)

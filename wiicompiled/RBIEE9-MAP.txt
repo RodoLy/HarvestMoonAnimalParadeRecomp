@@ -13441,10 +13441,10 @@
 802bc640 0x802bc640
 802bc770 GKI_init
 802bc800 0x802bc800
-802bc8b0 0x802bc8b0
-802bc8c0 0x802bc8c0
-802bc8d0 0x802bc8d0
-802bc8e0 0x802bc8e0
+802bc8b0 GKI_run
+802bc8c0 GKI_sched_lock
+802bc8d0 GKI_sched_unlock
+802bc8e0 GKI_delay
 802bc8f0 0x802bc8f0
 802bc9a0 0x802bc9a0
 802bc9b0 0x802bc9b0
