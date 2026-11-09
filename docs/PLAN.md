@@ -54,7 +54,11 @@ que *Magical Melody* tiene que escribir aparte: ver
 - [x] Nombrar GX: 119 nombres, 100 con el mapa de *Mario Kart Wii* y 19
       leyendo su código, con pruebas contra `main.dol`. 117 de las 129
       funciones que el juego llama tienen nombre; WiiCompiled da 98.
-- [ ] Nombrar OS, DVD y VI de la misma forma.
+- [x] Nombrar OS, DVD, VI y PPC: 96 nombres por el mapa y 48 leyendo su
+      código. De lo que el juego llama tienen nombre 101 de 108 en OS, 21 de
+      24 en DVD, 29 de 32 en VI y todas en PPC; WiiCompiled da 35, 5, 10 y 15.
+- [ ] Decidir qué partes de OS se hacen nativas enteras: hilos, alarmas y mutex
+      mezclan funciones nativas y traducidas ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
 - [ ] Capa propia: las piezas de WiiCompiled registradas en las direcciones de
       este juego.
 - [ ] Pantalla de título sin Dolphin, comparada con la de ModernGekko.
@@ -128,7 +132,13 @@ Dolphin core). For a Wii game, WiiCompiled already brings almost everything
 - [x] Name GX: 119 names, 100 from *Mario Kart Wii*'s map and 19 by reading
       their code, with tests against `main.dol`. 117 of the 129 functions the
       game calls have a name; WiiCompiled provides 98.
-- [ ] Name OS, DVD and VI the same way.
+- [x] Name OS, DVD, VI and PPC: 96 names from the map and 48 by reading
+      their code. Of what the game calls, 101 of 108 have a name in OS, 21 of
+      24 in DVD, 29 of 32 in VI and all in PPC; WiiCompiled provides 35, 5, 10
+      and 15.
+- [ ] Decide which parts of OS become fully native: threads, alarms and
+      mutexes mix native and translated functions
+      ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
 - [ ] Our own layer: the pieces of WiiCompiled registered at this game's
       addresses.
 - [ ] Title screen without Dolphin, compared with ModernGekko's.
