@@ -1,0 +1,12 @@
+# Where this game keeps what WiiCompiled's native SC (the console's settings) looks for at Mario Kart
+# Wii's addresses.
+# Dónde guarda este juego lo que el SC nativo de WiiCompiled busca en las direcciones de Mario Kart Wii.
+#
+# The columns are those of RBIEE9-os-addresses.txt; tests/test_wiicompiled_addresses.py checks every row.
+# Las columnas son las de RBIEE9-os-addresses.txt.
+#
+# covers: runtime/src/hle/sc.cpp
+
+0x8029CEB0  0x804C64C0  the table of AREA names: JPN, USA, EUR... (five bytes each)  SCGetProductArea
+0x8029CEF8  0x804C6508  the table of GAME names: JP, US, EU... (four bytes each; 0x48 after the first in both)  SCGetProductGameRegion
+0x803869E0  -           the buffer of SCGetProductCode: this game does not seem to call it  -
