@@ -1812,7 +1812,7 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_vertex.cpp b/runtime/src/hle/gx/gx_vertex.cpp
-index 3a8c43b..061af15 100644
+index 3a8c43b..1df0c2c 100644
 --- a/runtime/src/hle/gx/gx_vertex.cpp
 +++ b/runtime/src/hle/gx/gx_vertex.cpp
 @@ -3,6 +3,7 @@
@@ -1823,7 +1823,20 @@ index 3a8c43b..061af15 100644
  #include "runtime_log.h"
  
  #include <cstdio>
-@@ -312,6 +313,26 @@ void ServiceDeferredTimingDuringGxWork() {
+@@ -208,6 +209,12 @@ extern "C" void GX__SetArray_8016e32c(uint32_t a, uint32_t ba, uint32_t str) {
+     if (!GxWorker::OnWorker()) {
+         const uint32_t attr = CanonicalVtxAttr(a);
+         if (attr < 26) g_apiVtxArrays[attr] = {ba, str};
++        if (attr == GX_VA_POS && GxFrameTrace::Active()) {
++            // Who points the position array where, for the frame trace: the caller shows which game code
++            // owns the model whose vertices come out wrong.
++            auto* cpu = TryGetCpuContext();
++            GxFrameTrace::Note("SetArray positions 0x%08X stride %u lr=0x%08X", ba, str, cpu ? cpu->lr : 0u);
++        }
+     }
+     GX_DEFER_CALL(GX__SetArray_8016e32c, a, ba, str);
+     const uint32_t attr = CanonicalVtxAttr(a);
+@@ -312,6 +319,26 @@ void ServiceDeferredTimingDuringGxWork() {
  
  static void GxBeginImpl(uint32_t t, uint32_t vf, uint32_t nv);
  
@@ -1850,7 +1863,7 @@ index 3a8c43b..061af15 100644
  extern "C" void GX__Begin_8016f0f0(uint32_t t, uint32_t vf, uint32_t nv) {
      if(IsDisplayListActive()){
          WriteDisplayListData((u8)(t|vf), 1);
-@@ -324,6 +345,8 @@ extern "C" void GX__Begin_8016f0f0(uint32_t t, uint32_t vf, uint32_t nv) {
+@@ -324,6 +351,8 @@ extern "C" void GX__Begin_8016f0f0(uint32_t t, uint32_t vf, uint32_t nv) {
  }
  
  static void GxBeginImpl(uint32_t t, uint32_t vf, uint32_t nv) {
