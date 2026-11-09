@@ -191,7 +191,7 @@ lo que espera `DVDCancelAll` y `executing`) y el búfer de
 `SCGetProductCode`, que este juego no parece usar.
 
 **Para hacerlo posible** se nombraron AX (59 funciones), AXFX (13), AI (4),
-IPC (18), SC (13), DSP (4), SI (5) y PAD (6) con el mapa de *Mario Kart Wii*.
+IPC (18), SC (11), DSP (4), SI (5) y PAD (6) con el mapa de *Mario Kart Wii*.
 `tools/name_from_reference_map.py` ganó `--range` para una biblioteca con muy
 pocos nombres propios. También dejó de usar dos tipos de nombres: los que el
 mapa repite y los que el mapa inventa para funciones `static`
@@ -477,7 +477,7 @@ that game's, are not covered either.
 of `SCGetProductCode`, which this game does not seem to use.
 
 **To make it possible**, AX (59 functions), AXFX (13), AI (4), IPC (18), SC
-(13), DSP (4), SI (5) and PAD (6) were named from *Mario Kart Wii*'s map.
+(11), DSP (4), SI (5) and PAD (6) were named from *Mario Kart Wii*'s map.
 `tools/name_from_reference_map.py` gained `--range`, for a library with too
 few names of its own. It also stopped using two kinds of names: the ones the
 map gives twice and the ones the map makes up for `static` functions
