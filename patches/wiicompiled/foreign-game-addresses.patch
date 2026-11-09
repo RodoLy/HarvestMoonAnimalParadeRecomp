@@ -1371,6 +1371,67 @@ index b76e5e1..95ed9a3 100644
  }
  
  // 0x8015EA1C -> DVDInit
+diff --git a/runtime/src/hle/storage/nand_isfs.cpp b/runtime/src/hle/storage/nand_isfs.cpp
+index 6111b20..c21340e 100644
+--- a/runtime/src/hle/storage/nand_isfs.cpp
++++ b/runtime/src/hle/storage/nand_isfs.cpp
+@@ -1017,6 +1017,46 @@ static int32_t HandleIsfsReadDir(uint32_t numIn, uint32_t numOut, uint32_t vecto
+     return ISFS_OK;
+ }
+ 
++// GetUsage: the clusters (16 KiB each) and the entries under a directory. NANDCheck adds them to what the
++// game wants to write and compares the sum with the title's quota, so the real use of the host folder is
++// what keeps it honest; a made-up large number makes every game say the Wii's memory is full.
++static int32_t HandleIsfsGetUsage(uint32_t numIn, uint32_t numOut, uint32_t vectorPtr) {
++    if (numIn != 1 || numOut != 2) {
++        LogNandWarning("IOS_Ioctlv", "GETUSAGE unsupported vector shape numIn=%u numOut=%u", numIn, numOut);
++        return ISFS_EINVAL;
++    }
++    const IosVector pathVec = ReadIosVector(vectorPtr, 0);
++    const IosVector blocksOut = ReadIosVector(vectorPtr, 1);
++    const IosVector inodesOut = ReadIosVector(vectorPtr, 2);
++    if (blocksOut.size < 4 || !Memory::Contains(blocksOut.address, 4) ||
++        inodesOut.size < 4 || !Memory::Contains(inodesOut.address, 4)) {
++        return ISFS_EINVAL;
++    }
++    const std::string wiiPath = ReadGuestCString(pathVec.address, 64);
++    if (wiiPath.empty()) {
++        return ISFS_EINVAL;
++    }
++    const std::filesystem::path hostPath = TranslateNandPath(wiiPath.c_str());
++    if (!IsDirectory(hostPath)) {
++        return PathExists(hostPath) ? ISFS_EINVAL : ISFS_ENOENT;
++    }
++    constexpr uint64_t kClusterSize = 0x4000;
++    uint64_t clusters = 0;
++    uint32_t entries = 0;
++    std::error_code ec;
++    for (auto it = std::filesystem::recursive_directory_iterator(hostPath, ec);
++         !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
++        ++entries;
++        if (it->is_regular_file(ec)) {
++            const uint64_t size = it->file_size(ec);
++            clusters += (size + kClusterSize - 1) / kClusterSize;
++        }
++    }
++    Memory::Write32(blocksOut.address, static_cast<uint32_t>(clusters));
++    Memory::Write32(inodesOut.address, entries);
++    return ISFS_OK;
++}
++
+ extern "C" int32_t NAND_IOS_Ioctlv_HLE(
+     uint32_t fd,
+     uint32_t cmd,
+@@ -1047,6 +1087,9 @@ extern "C" int32_t NAND_IOS_Ioctlv_HLE(
+         if (cmd == ISFS_IOCTL_READDIR) {
+             return HandleIsfsReadDir(numIn, numOut, vectorPtr);
+         }
++        if (cmd == ISFS_IOCTL_GETUSAGE) {
++            return HandleIsfsGetUsage(numIn, numOut, vectorPtr);
++        }
+         return ISFS_OK;
+     }
+ 
 diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
 index cd236a9..f7eeb84 100644
 --- a/runtime/src/hle/vi.cpp
