@@ -20,7 +20,7 @@ index 4ca4439..cd7d8c4 100644
  // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
  #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
-index 1836717..7c7627e 100644
+index 1836717..a572704 100644
 --- a/runtime/include/guest_abi/guest_region.h
 +++ b/runtime/include/guest_abi/guest_region.h
 @@ -9,6 +9,11 @@
@@ -184,7 +184,7 @@ index 1836717..7c7627e 100644
  };
  
  inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(Current())]; }
-@@ -160,6 +233,21 @@ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(
+@@ -160,7 +233,35 @@ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(
  
  #define MKW_GADDR(pal) (::GuestRegion::Address<0x##pal##u>())
  
@@ -204,8 +204,23 @@ index 1836717..7c7627e 100644
 +#define MKW_GADDR_LAZY(pal) (::GuestRegion::LazyAddress<0x##pal##u>{})
 +
  #if defined(MKW_TRANSLATED_GUEST_REGION)
++namespace GuestRegion {
++
++// The compile-time address for template keys such as KnownNativeCpuCall<>. A foreign game that has
++// no such function gets the address with its top bit cleared: never a code address (code starts at
++// 0x80000000), so no call matches it, and still one key per address, so two missing functions do
++// not both become KnownNativeCpuCall<0>.
++constexpr uint32_t CompileTimeAddress(uint32_t pal, Id region) noexcept {
++    const uint32_t address = RowOf(pal).In(region);
++    return address != 0 ? address : (pal & 0x7FFFFFFFu);
++}
++
++} // namespace GuestRegion
++
  #define MKW_GADDR_CT(pal) \
-     (::GuestRegion::RowOf(0x##pal##u).In(static_cast<::GuestRegion::Id>(MKW_TRANSLATED_GUEST_REGION)))
+-    (::GuestRegion::RowOf(0x##pal##u).In(static_cast<::GuestRegion::Id>(MKW_TRANSLATED_GUEST_REGION)))
++    (::GuestRegion::CompileTimeAddress(0x##pal##u, static_cast<::GuestRegion::Id>(MKW_TRANSLATED_GUEST_REGION)))
+ #endif
 diff --git a/runtime/src/abi_bridge.cpp b/runtime/src/abi_bridge.cpp
 index 55fe416..99fc9ef 100644
 --- a/runtime/src/abi_bridge.cpp
