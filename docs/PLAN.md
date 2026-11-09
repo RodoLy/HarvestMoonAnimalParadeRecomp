@@ -57,8 +57,13 @@ que *Magical Melody* tiene que escribir aparte: ver
 - [x] Nombrar OS, DVD, VI y PPC: 96 nombres por el mapa y 48 leyendo su
       código. De lo que el juego llama tienen nombre 101 de 108 en OS, 21 de
       24 en DVD, 29 de 32 en VI y todas en PPC; WiiCompiled da 35, 5, 10 y 15.
-- [ ] Decidir qué partes de OS se hacen nativas enteras: hilos, alarmas y mutex
-      mezclan funciones nativas y traducidas ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
+- [x] Decidir qué partes de OS se hacen nativas: las de WiiCompiled tal como
+      están, porque guardan el estado donde lo guarda el SDK y *Mario Kart Wii*
+      ya corre la misma mezcla ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
+- [x] Las 25 direcciones que usa el OS nativo de WiiCompiled, con las de este
+      juego (`wiicompiled/RBIEE9-os-addresses.txt`).
+- [ ] Un reemplazo nativo de `GXReadGPMetric` que devuelva ceros, y comprobar
+      que el planificador nativo le da turno al hilo ocioso del juego.
 - [ ] Capa propia: las piezas de WiiCompiled registradas en las direcciones de
       este juego.
 - [ ] Pantalla de título sin Dolphin, comparada con la de ModernGekko.
@@ -136,9 +141,13 @@ Dolphin core). For a Wii game, WiiCompiled already brings almost everything
       their code. Of what the game calls, 101 of 108 have a name in OS, 21 of
       24 in DVD, 29 of 32 in VI and all in PPC; WiiCompiled provides 35, 5, 10
       and 15.
-- [ ] Decide which parts of OS become fully native: threads, alarms and
-      mutexes mix native and translated functions
-      ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
+- [x] Decide which parts of OS go native: WiiCompiled's as they are, because
+      they keep the state where the SDK keeps it and *Mario Kart Wii* already
+      runs the same mix ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
+- [x] The 25 addresses WiiCompiled's native OS uses, with this game's
+      (`wiicompiled/RBIEE9-os-addresses.txt`).
+- [ ] A native replacement of `GXReadGPMetric` that returns zeros, and check
+      that the native scheduler gives the game's idle thread a turn.
 - [ ] Our own layer: the pieces of WiiCompiled registered at this game's
       addresses.
 - [ ] Title screen without Dolphin, compared with ModernGekko's.
