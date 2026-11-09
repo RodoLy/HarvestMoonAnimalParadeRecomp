@@ -50,6 +50,12 @@ def test_encoders_match_capstone():
         ppc_encode.mtmsr(5): "mtmsr r5",
         ppc_encode.mtcrf(0xFF, 7): "mtcrf 0xff, r7",
         ppc_encode.mtfsf(0xFF, 2): "mtfsf 0xff, f2",
+        ppc_encode.mffs(31): "mffs f31",
+        ppc_encode.mtfsb1(29): "mtfsb1 0x1d",
+        ppc_encode.mfspr(3, 1008): "mfspr r3, 0x3f0",  # HID0
+        ppc_encode.mfspr(3, 1): "mfxer r3",
+        ppc_encode.SYNC: "sync",
+        ppc_encode.SC: "sc",
         ppc_encode.BCTR: "bctr",
         ppc_encode.BLR: "blr",
         ppc_encode.b(ADDRESS, ADDRESS + 0x30): "b 0x80004030",

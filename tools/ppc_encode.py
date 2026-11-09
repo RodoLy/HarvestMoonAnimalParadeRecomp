@@ -48,11 +48,14 @@ OPCODE_FLOAT_DOUBLE = 63
 EXTENDED_LWZX = 23
 EXTENDED_CMPL = 32
 EXTENDED_MFMSR = 83
+EXTENDED_MFSPR = 339
 EXTENDED_MTMSR = 146
 EXTENDED_MTCRF = 144
 EXTENDED_OR = 444
 EXTENDED_MTSPR = 467
 EXTENDED_MTFSF = 711
+EXTENDED_MFFS = 583
+EXTENDED_MTFSB1 = 38
 EXTENDED_NEG = 104
 
 SPR_CTR = 9
@@ -64,6 +67,8 @@ CR0_EQUAL = 2
 
 BLR = 0x4E800020
 BCTR = 0x4E800420
+SYNC = 0x7C0004AC  # wait until every earlier instruction is done
+SC = 0x44000002  # system call
 
 
 def _d_form(opcode: int, rd: int, ra: int, immediate: int) -> int:
@@ -204,10 +209,19 @@ def neg(rd: int, ra: int) -> int:
     return (OPCODE_EXTENDED << 26) | (rd << 21) | (ra << 16) | (EXTENDED_NEG << 1)
 
 
+def _swapped_spr(spr: int) -> int:
+    """mfspr and mtspr store the two 5-bit halves of the SPR number swapped."""
+    return ((spr & 0x1F) << 5) | (spr >> 5)
+
+
 def mtspr(spr: int, rs: int) -> int:
     """mtspr SPR, rS. The instruction stores the two halves of the SPR number swapped."""
-    swapped_spr = ((spr & 0x1F) << 5) | (spr >> 5)
-    return (OPCODE_EXTENDED << 26) | (rs << 21) | (swapped_spr << 11) | (EXTENDED_MTSPR << 1)
+    return (OPCODE_EXTENDED << 26) | (rs << 21) | (_swapped_spr(spr) << 11) | (EXTENDED_MTSPR << 1)
+
+
+def mfspr(rd: int, spr: int) -> int:
+    """mfspr rD, SPR, with the SPR number stored swapped as in mtspr."""
+    return (OPCODE_EXTENDED << 26) | (rd << 21) | (_swapped_spr(spr) << 11) | (EXTENDED_MFSPR << 1)
 
 
 def mtctr(rs: int) -> int:
@@ -230,6 +244,16 @@ def mtcrf(field_mask: int, rs: int) -> int:
 def mtfsf(field_mask: int, frb: int) -> int:
     """mtfsf FM, frB: copy into the FPSCR the 4-bit fields of the low word of frB that the mask selects."""
     return (OPCODE_FLOAT_DOUBLE << 26) | ((field_mask & 0xFF) << 17) | (frb << 11) | (EXTENDED_MTFSF << 1)
+
+
+def mffs(frd: int) -> int:
+    """mffs frD: copy the FPSCR into the low word of frD."""
+    return (OPCODE_FLOAT_DOUBLE << 26) | (frd << 21) | (EXTENDED_MFFS << 1)
+
+
+def mtfsb1(bit: int) -> int:
+    """mtfsb1 crbD: set one bit of the FPSCR, numbered from 0 at the most significant."""
+    return (OPCODE_FLOAT_DOUBLE << 26) | (bit << 21) | (EXTENDED_MTFSB1 << 1)
 
 
 def b(from_address: int, to_address: int) -> int:
