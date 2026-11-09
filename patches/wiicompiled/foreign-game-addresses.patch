@@ -1,3 +1,23 @@
+diff --git a/runtime/cmake/PlatformTests.cmake b/runtime/cmake/PlatformTests.cmake
+index 1a31b82..98b6d72 100644
+--- a/runtime/cmake/PlatformTests.cmake
++++ b/runtime/cmake/PlatformTests.cmake
+@@ -82,6 +82,15 @@ target_include_directories(mkw_bluetooth_controller_tests PRIVATE "${MKW_TEST_RU
+ target_compile_features(mkw_bluetooth_controller_tests PRIVATE cxx_std_20)
+ add_test(NAME mkw_bluetooth_controller_tests COMMAND mkw_bluetooth_controller_tests)
+ 
++# The emulated Wii Remote of a foreign game is pure host code too.
++add_executable(mkw_emulated_remote_tests
++    "${MKW_TEST_RUNTIME_DIR}/tests/emulated_remote_tests.cpp"
++    "${MKW_TEST_RUNTIME_DIR}/src/hle/bluetooth/emulated_remote.cpp"
++    "${MKW_TEST_RUNTIME_DIR}/src/wiimote/wiimote_ext_crypto.cpp")
++target_include_directories(mkw_emulated_remote_tests PRIVATE "${MKW_TEST_RUNTIME_DIR}/include")
++target_compile_features(mkw_emulated_remote_tests PRIVATE cxx_std_20)
++add_test(NAME mkw_emulated_remote_tests COMMAND mkw_emulated_remote_tests)
++
+ # HostContext deliberately keeps the platform-specific context primitive out
+ # of fiber_manager.cpp. Exercise the Linux libco handoff directly so future
+ # refactors cannot silently remove its headers, implementation, or link edge.
 diff --git a/runtime/include/abi_bridge.h b/runtime/include/abi_bridge.h
 index 4ca4439..cd7d8c4 100644
 --- a/runtime/include/abi_bridge.h
@@ -38,6 +58,143 @@ index f44f861..94bfbfb 100644
 +    HangWatch::g_windowUpdates.fetch_add(1, std::memory_order_relaxed);
      ProcessAuroraEvents(aurora_update());
  }
+diff --git a/runtime/include/bluetooth/emulated_remote.h b/runtime/include/bluetooth/emulated_remote.h
+new file mode 100644
+index 0000000..353b7fe
+--- /dev/null
++++ b/runtime/include/bluetooth/emulated_remote.h
+@@ -0,0 +1,112 @@
++#pragma once
++
++// A Wii Remote with a Nunchuk, made from the PC's own controls, for a game that needs one and has no
++// real remote on the PC. It speaks the remote's HID protocol to the game's Bluetooth stack the way a
++// physical remote does through RemoteHost: the game asks for a reporting mode, reads the calibration
++// and the extension's ID, switches the IR camera on, and the remote answers with input reports.
++// Pure host code, like bt_controller.h: no guest memory and no SDL, so it is unit-testable.
++// emulated_remote_host.cpp feeds it the GameCube pad mapping and the mouse.
++
++#include <array>
++#include <cstddef>
++#include <cstdint>
++#include <deque>
++#include <optional>
++#include <vector>
++
++namespace Bluetooth {
++
++// Core buttons, as the remote reports them: the first report byte in the high half, the second in the
++// low half.
++namespace RemoteButton {
++inline constexpr uint16_t kLeft = 0x0100;
++inline constexpr uint16_t kRight = 0x0200;
++inline constexpr uint16_t kDown = 0x0400;
++inline constexpr uint16_t kUp = 0x0800;
++inline constexpr uint16_t kPlus = 0x1000;
++inline constexpr uint16_t kTwo = 0x0001;
++inline constexpr uint16_t kOne = 0x0002;
++inline constexpr uint16_t kB = 0x0004;
++inline constexpr uint16_t kA = 0x0008;
++inline constexpr uint16_t kMinus = 0x0010;
++inline constexpr uint16_t kHome = 0x0080;
++} // namespace RemoteButton
++
++// What the player is doing with the emulated remote this moment.
++struct EmulatedInput {
++    uint16_t buttons = 0;  // RemoteButton bits
++    // Where the remote points, -1..1 from the left and top edges of the screen to the right and
++    // bottom ones; off the screen when pointerValid is false.
++    bool pointerValid = false;
++    float pointerX = 0.0f;
++    float pointerY = 0.0f;
++    // The Nunchuk's stick, -1..1 to the right and up, and its two buttons.
++    float stickX = 0.0f;
++    float stickY = 0.0f;
++    bool c = false;
++    bool z = false;
++};
++
++// A GameCube pad as Aurora's PADRead and the runtime's input bindings give it.
++struct GameCubePad {
++    bool connected = false;
++    uint16_t buttons = 0;  // PAD_BUTTON_* / PAD_TRIGGER_* bits
++    int8_t stickX = 0;
++    int8_t stickY = 0;
++    int8_t substickX = 0;
++    int8_t substickY = 0;
++    uint8_t triggerL = 0;
++    uint8_t triggerR = 0;
++};
++
++// The GameCube layout of the emulated remote: stick -> Nunchuk stick, A -> A, B -> B, X -> 1, Y -> 2,
++// L -> Z, R -> C, Start -> +, Z -> -, Start and Z together -> Home, D-pad and C-stick -> D-pad.
++EmulatedInput MapGameCubePad(const GameCubePad& pad);
++
++class EmulatedRemote {
++public:
++    EmulatedRemote();
++
++    // A fresh connection: reporting mode 0x30, IR off, the extension not set up yet.
++    void Reset();
++    void SetInput(const EmulatedInput& input);
++    // An output report from the game (report id first).
++    void HandleOutputReport(const uint8_t* report, size_t size);
++    // The next input report (report id first): an answer to the game first, then the controls in the
++    // reporting mode, at most every 5 ms when continuous and only on a change otherwise.
++    bool PopInputReport(std::vector<uint8_t>& report, uint64_t nowUs);
++
++    uint8_t Leds() const { return m_leds; }
++    uint8_t ReportingMode() const { return m_mode; }
++
++private:
++    void QueueAcknowledge(uint8_t reportId, uint8_t error);
++    void QueueStatus();
++    void WriteMemory(const uint8_t* payload, size_t size);
++    void ReadMemory(const uint8_t* payload, size_t size);
++    std::vector<uint8_t> InputReport() const;
++    void AppendButtons(std::vector<uint8_t>& out) const;
++    void AppendAccelerometer(std::vector<uint8_t>& out) const;
++    void AppendIr(std::vector<uint8_t>& out, size_t bytes) const;
++    void AppendExtension(std::vector<uint8_t>& out, size_t bytes) const;
++    bool ExtensionEncrypted() const;
++
++    EmulatedInput m_input;
++    std::deque<std::vector<uint8_t>> m_answers;
++    std::vector<uint8_t> m_lastReport;
++    uint64_t m_lastReportUs = 0;
++    bool m_reportPending = false;
++
++    uint8_t m_leds = 0;
++    uint8_t m_mode = 0x30;
++    bool m_continuous = false;
++    bool m_irClock = false;
++    bool m_irCamera = false;
++    bool m_speaker = false;
++
++    std::array<uint8_t, 0x1700> m_eeprom{};
++    std::array<uint8_t, 0x100> m_extension{};  // registers 0xA400xx
++    std::array<uint8_t, 0x40> m_camera{};      // registers 0xB000xx
++};
++
++} // namespace Bluetooth
+diff --git a/runtime/include/bluetooth/emulated_remote_host.h b/runtime/include/bluetooth/emulated_remote_host.h
+new file mode 100644
+index 0000000..12f6789
+--- /dev/null
++++ b/runtime/include/bluetooth/emulated_remote_host.h
+@@ -0,0 +1,13 @@
++#pragma once
++
++// The remotes the Bluetooth emulation offers the game: the PC's real Wii Remotes (wiimote_host.h), and
++// for a foreign game, an emulated remote with a Nunchuk on the first slot while no real remote is
++// there (emulated_remote.h), played with the GameCube pad mapping and the mouse.
++
++#include "bluetooth/bt_controller.h"
++
++namespace Bluetooth {
++
++RemoteHost& RemoteHostForThisGame();
++
++} // namespace Bluetooth
 diff --git a/runtime/include/guest_abi/cpu_context.h b/runtime/include/guest_abi/cpu_context.h
 index 70e2f2b..e00b23c 100644
 --- a/runtime/include/guest_abi/cpu_context.h
@@ -431,6 +588,723 @@ index 87fb7c5..3e592ea 100644
          uint32_t vtable = 0;
          uint32_t startFn = 0;
          try {
+diff --git a/runtime/src/hle/bluetooth/bt_usb_device.cpp b/runtime/src/hle/bluetooth/bt_usb_device.cpp
+index eab7934..7b04834 100644
+--- a/runtime/src/hle/bluetooth/bt_usb_device.cpp
++++ b/runtime/src/hle/bluetooth/bt_usb_device.cpp
+@@ -1,6 +1,7 @@
+ #include "hle/bluetooth_hle.h"
+ 
+ #include "bluetooth/bt_controller.h"
++#include "bluetooth/emulated_remote_host.h"
+ #include "hle/runtime_parse_helpers.h"
+ #include "memory.h"
+ #include "runtime_log.h"
+@@ -64,7 +65,7 @@ uint64_t NowUs() {
+ 
+ Bluetooth::Controller& ControllerFor(Device& device) {
+     if (!device.controller) {
+-        device.controller = std::make_unique<Bluetooth::Controller>(Wiimote::Host());
++        device.controller = std::make_unique<Bluetooth::Controller>(Bluetooth::RemoteHostForThisGame());
+     }
+     return *device.controller;
+ }
+diff --git a/runtime/src/hle/bluetooth/emulated_remote.cpp b/runtime/src/hle/bluetooth/emulated_remote.cpp
+new file mode 100644
+index 0000000..1d2a9f9
+--- /dev/null
++++ b/runtime/src/hle/bluetooth/emulated_remote.cpp
+@@ -0,0 +1,502 @@
++// The emulated Wii Remote's protocol (emulated_remote.h). The report layouts are the remote's own:
++// every input report starts with the two core button bytes, then carries the accelerometer, the IR
++// camera's dots and the extension's bytes in the mix the reporting mode asks for.
++
++#include "bluetooth/emulated_remote.h"
++
++#include "wiimote_ext_crypto.h"
++
++#include <algorithm>
++#include <cmath>
++#include <cstring>
++
++namespace Bluetooth {
++namespace {
++
++// Output reports (game -> remote).
++constexpr uint8_t kRumble = 0x10;
++constexpr uint8_t kLeds = 0x11;
++constexpr uint8_t kReportingMode = 0x12;
++constexpr uint8_t kIrClock = 0x13;
++constexpr uint8_t kSpeakerEnable = 0x14;
++constexpr uint8_t kStatusRequest = 0x15;
++constexpr uint8_t kWriteMemory = 0x16;
++constexpr uint8_t kReadMemory = 0x17;
++constexpr uint8_t kSpeakerData = 0x18;
++constexpr uint8_t kSpeakerMute = 0x19;
++constexpr uint8_t kIrCamera = 0x1A;
++
++// Input reports (remote -> game).
++constexpr uint8_t kStatus = 0x20;
++constexpr uint8_t kReadData = 0x21;
++constexpr uint8_t kAcknowledge = 0x22;
++
++// Flags in the first byte of most output reports.
++constexpr uint8_t kAcknowledgeWanted = 0x02;
++constexpr uint8_t kEnable = 0x04;
++
++// The address spaces of memory reads and writes.
++constexpr uint8_t kRegisterSpace = 0x04;
++constexpr uint32_t kExtensionRegisters = 0xA40000;
++constexpr uint32_t kCameraRegisters = 0xB00000;
++
++constexpr uint8_t kErrorNone = 0x00;
++constexpr uint8_t kErrorBadAddress = 0x08;
++
++constexpr uint64_t kContinuousIntervalUs = 5000;
++
++// The accelerometers' calibration: 0x80 at rest on every axis and 0x9A (remote) or 0xB3 (Nunchuk)
++// with 1 g on it. Held pointing at the screen, gravity is on Z.
++constexpr uint8_t kAccelZero = 0x80;
++constexpr uint8_t kRemoteOneG = 0x9A;
++constexpr uint8_t kNunchukOneG = 0xB3;
++
++// The Nunchuk's stick: 0x80 in the middle, 0x20..0xE0 at the edges.
++constexpr uint8_t kStickCenter = 0x80;
++constexpr float kStickReach = 0x60;
++
++// The IR camera sees the sensor bar's two lights 1024 x 768. Pointing right moves them left, pointing
++// down moves them up.
++constexpr int kCameraCenterX = 512;
++constexpr int kCameraCenterY = 384;
++constexpr float kCameraReachX = 400.0f;
++constexpr float kCameraReachY = 300.0f;
++constexpr int kDotHalfDistance = 100;
++constexpr uint8_t kDotSize = 3;
++
++constexpr std::array<uint8_t, 6> kNunchukId = {0x00, 0x00, 0xA4, 0x20, 0x00, 0x00};
++
++// Calibration blocks end in two checksums: the sum of the rest plus 0x55, then that plus 0xAA.
++template <size_t N>
++void PutCalibration(uint8_t* dst, const std::array<uint8_t, N>& values, bool secondChecksum) {
++    uint8_t sum = 0x55;
++    for (size_t i = 0; i < N; ++i) {
++        dst[i] = values[i];
++        sum = static_cast<uint8_t>(sum + values[i]);
++    }
++    dst[N] = sum;
++    if (secondChecksum) {
++        dst[N + 1] = static_cast<uint8_t>(sum + 0xAA);
++    }
++}
++
++int ClampCamera(int value, int maximum) {
++    return std::clamp(value, 0, maximum);
++}
++
++} // namespace
++
++EmulatedInput MapGameCubePad(const GameCubePad& pad) {
++    // PAD_* bits of dolphin/pad.h.
++    constexpr uint16_t kPadLeft = 0x0001, kPadRight = 0x0002, kPadDown = 0x0004, kPadUp = 0x0008;
++    constexpr uint16_t kPadZ = 0x0010, kPadR = 0x0020, kPadL = 0x0040;
++    constexpr uint16_t kPadA = 0x0100, kPadB = 0x0200, kPadX = 0x0400, kPadY = 0x0800;
++    constexpr uint16_t kPadStart = 0x1000;
++    constexpr int kSubstickThreshold = 40;
++    constexpr uint8_t kTriggerThreshold = 0x60;
++
++    EmulatedInput input;
++    if (!pad.connected) {
++        return input;
++    }
++    const uint16_t b = pad.buttons;
++    auto set = [&](bool held, uint16_t button) {
++        if (held) input.buttons |= button;
++    };
++    set((b & kPadA) != 0, RemoteButton::kA);
++    set((b & kPadB) != 0, RemoteButton::kB);
++    set((b & kPadX) != 0, RemoteButton::kOne);
++    set((b & kPadY) != 0, RemoteButton::kTwo);
++    const bool start = (b & kPadStart) != 0;
++    const bool z = (b & kPadZ) != 0;
++    if (start && z) {
++        input.buttons |= RemoteButton::kHome;
++    } else {
++        set(start, RemoteButton::kPlus);
++        set(z, RemoteButton::kMinus);
++    }
++    set((b & kPadLeft) != 0 || pad.substickX < -kSubstickThreshold, RemoteButton::kLeft);
++    set((b & kPadRight) != 0 || pad.substickX > kSubstickThreshold, RemoteButton::kRight);
++    set((b & kPadDown) != 0 || pad.substickY < -kSubstickThreshold, RemoteButton::kDown);
++    set((b & kPadUp) != 0 || pad.substickY > kSubstickThreshold, RemoteButton::kUp);
++
++    input.stickX = std::clamp(pad.stickX / 127.0f, -1.0f, 1.0f);
++    input.stickY = std::clamp(pad.stickY / 127.0f, -1.0f, 1.0f);
++    input.z = (b & kPadL) != 0 || pad.triggerL >= kTriggerThreshold;
++    input.c = (b & kPadR) != 0 || pad.triggerR >= kTriggerThreshold;
++    return input;
++}
++
++EmulatedRemote::EmulatedRemote() {
++    // EEPROM: the IR camera's calibration at 0x00 and the accelerometer's at 0x16, each twice.
++    const std::array<uint8_t, 10> ir = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
++    PutCalibration(&m_eeprom[0x00], ir, false);
++    PutCalibration(&m_eeprom[0x0B], ir, false);
++    const std::array<uint8_t, 9> accel = {kAccelZero, kAccelZero, kAccelZero, 0x00,
++                                          kRemoteOneG, kRemoteOneG, kRemoteOneG, 0x00, 0x40};
++    PutCalibration(&m_eeprom[0x16], accel, false);
++    PutCalibration(&m_eeprom[0x20], accel, false);
++    Reset();
++}
++
++void EmulatedRemote::Reset() {
++    m_answers.clear();
++    m_lastReport.clear();
++    m_lastReportUs = 0;
++    m_reportPending = false;
++    m_leds = 0;
++    m_mode = 0x30;
++    m_continuous = false;
++    m_irClock = false;
++    m_irCamera = false;
++    m_speaker = false;
++    m_camera.fill(0);
++
++    // The Nunchuk's registers: its calibration at 0x20 (and 0x30), its ID at 0xFA.
++    m_extension.fill(0);
++    const std::array<uint8_t, 14> nunchuk = {kAccelZero, kAccelZero, kAccelZero, 0x00,
++                                             kNunchukOneG, kNunchukOneG, kNunchukOneG, 0x00,
++                                             0xE0, 0x20, kStickCenter, 0xE0, 0x20, kStickCenter};
++    PutCalibration(&m_extension[0x20], nunchuk, true);
++    PutCalibration(&m_extension[0x30], nunchuk, true);
++    std::copy(kNunchukId.begin(), kNunchukId.end(), m_extension.begin() + 0xFA);
++
++    // A remote that just connected tells the game what it has, the Nunchuk among it.
++    QueueStatus();
++}
++
++void EmulatedRemote::SetInput(const EmulatedInput& input) {
++    m_input = input;
++}
++
++void EmulatedRemote::HandleOutputReport(const uint8_t* report, size_t size) {
++    if (size < 2) {
++        return;
++    }
++    const uint8_t id = report[0];
++    const uint8_t flags = report[1];
++    const bool acknowledge = (flags & kAcknowledgeWanted) != 0;
++    switch (id) {
++    case kRumble:
++        break;
++    case kLeds:
++        m_leds = flags >> 4;
++        if (acknowledge) QueueAcknowledge(id, kErrorNone);
++        break;
++    case kReportingMode:
++        if (size >= 3) {
++            m_continuous = (flags & kEnable) != 0;
++            m_mode = report[2];
++            m_reportPending = true;
++        }
++        if (acknowledge) QueueAcknowledge(id, kErrorNone);
++        break;
++    case kIrClock:
++        m_irClock = (flags & kEnable) != 0;
++        if (acknowledge) QueueAcknowledge(id, kErrorNone);
++        break;
++    case kIrCamera:
++        m_irCamera = (flags & kEnable) != 0;
++        if (acknowledge) QueueAcknowledge(id, kErrorNone);
++        break;
++    case kSpeakerEnable:
++        m_speaker = (flags & kEnable) != 0;
++        if (acknowledge) QueueAcknowledge(id, kErrorNone);
++        break;
++    case kSpeakerMute:
++        if (acknowledge) QueueAcknowledge(id, kErrorNone);
++        break;
++    case kStatusRequest:
++        QueueStatus();
++        break;
++    case kWriteMemory:
++        WriteMemory(report + 1, size - 1);
++        break;
++    case kReadMemory:
++        ReadMemory(report + 1, size - 1);
++        break;
++    case kSpeakerData:
++        break;
++    default:
++        break;
++    }
++}
++
++void EmulatedRemote::QueueAcknowledge(uint8_t reportId, uint8_t error) {
++    std::vector<uint8_t> out = {kAcknowledge};
++    AppendButtons(out);
++    out.push_back(reportId);
++    out.push_back(error);
++    m_answers.push_back(std::move(out));
++}
++
++void EmulatedRemote::QueueStatus() {
++    std::vector<uint8_t> out = {kStatus};
++    AppendButtons(out);
++    constexpr uint8_t kExtensionConnected = 0x02;
++    constexpr uint8_t kSpeakerOn = 0x04;
++    constexpr uint8_t kIrOn = 0x08;
++    uint8_t status = static_cast<uint8_t>(m_leds << 4) | kExtensionConnected;
++    if (m_speaker) status |= kSpeakerOn;
++    if (m_irCamera) status |= kIrOn;
++    out.push_back(status);
++    out.push_back(0x00);
++    out.push_back(0x00);
++    out.push_back(0xC0);  // battery: plenty
++    m_answers.push_back(std::move(out));
++    // The remote stops reporting after a status report until the game sets the mode again; a
++    // continuous mode resumes at once.
++    m_reportPending = true;
++}
++
++void EmulatedRemote::WriteMemory(const uint8_t* payload, size_t size) {
++    // space, address (3 bytes), length, 16 bytes of data
++    if (size < 6) {
++        QueueAcknowledge(kWriteMemory, kErrorBadAddress);
++        return;
++    }
++    const bool registers = (payload[0] & kRegisterSpace) != 0;
++    const uint32_t address = (uint32_t{payload[1]} << 16) | (uint32_t{payload[2]} << 8) | payload[3];
++    const size_t length = std::min<size_t>({payload[4], 16, size - 5});
++    const uint8_t* data = payload + 5;
++
++    uint8_t error = kErrorNone;
++    if (!registers) {
++        if (address + length <= m_eeprom.size()) {
++            std::memcpy(&m_eeprom[address], data, length);
++        } else {
++            error = kErrorBadAddress;
++        }
++    } else if ((address & 0xFF0000) == kExtensionRegisters) {
++        const uint32_t offset = address & 0xFF;
++        for (size_t i = 0; i < length && offset + i < m_extension.size(); ++i) {
++            m_extension[offset + i] = data[i];
++        }
++    } else if ((address & 0xFF0000) == kCameraRegisters) {
++        const uint32_t offset = address & 0xFF;
++        for (size_t i = 0; i < length && offset + i < m_camera.size(); ++i) {
++            m_camera[offset + i] = data[i];
++        }
++    } else {
++        // The speaker's registers (0xA2xxxx) and anything else: taken, kept nowhere.
++    }
++    QueueAcknowledge(kWriteMemory, error);
++}
++
++void EmulatedRemote::ReadMemory(const uint8_t* payload, size_t size) {
++    // space, address (3 bytes), length (2 bytes)
++    if (size < 6) {
++        return;
++    }
++    const bool registers = (payload[0] & kRegisterSpace) != 0;
++    const uint32_t address = (uint32_t{payload[1]} << 16) | (uint32_t{payload[2]} << 8) | payload[3];
++    const uint32_t length = (uint32_t{payload[4]} << 8) | payload[5];
++
++    std::vector<uint8_t> data(length, 0);
++    bool valid = true;
++    if (!registers) {
++        valid = address + length <= m_eeprom.size();
++        if (valid) std::memcpy(data.data(), &m_eeprom[address], length);
++    } else if ((address & 0xFF0000) == kExtensionRegisters) {
++        const uint32_t offset = address & 0xFF;
++        for (uint32_t i = 0; i < length; ++i) {
++            data[i] = offset + i < m_extension.size() ? m_extension[offset + i] : 0;
++        }
++        if (ExtensionEncrypted()) {
++            std::array<uint8_t, 16> key{};
++            std::copy(m_extension.begin() + 0x40, m_extension.begin() + 0x50, key.begin());
++            if (const auto tables = Wiimote::ExtCrypto::FromKey(key)) {
++                tables->Encrypt(data.data(), offset, data.size());
++            }
++        }
++    } else if ((address & 0xFF0000) == kCameraRegisters) {
++        const uint32_t offset = address & 0xFF;
++        for (uint32_t i = 0; i < length; ++i) {
++            data[i] = offset + i < m_camera.size() ? m_camera[offset + i] : 0;
++        }
++    } else {
++        valid = false;
++    }
++
++    if (!valid) {
++        std::vector<uint8_t> out = {kReadData};
++        AppendButtons(out);
++        out.push_back(0xF0 | kErrorBadAddress);
++        out.push_back(static_cast<uint8_t>(address >> 8));
++        out.push_back(static_cast<uint8_t>(address));
++        out.resize(out.size() + 16, 0);
++        m_answers.push_back(std::move(out));
++        return;
++    }
++    // The answer comes 16 bytes at a time, each with the low 16 bits of its address.
++    for (uint32_t done = 0; done < length || done == 0; done += 16) {
++        const uint32_t chunk = std::min<uint32_t>(16, length - done);
++        const uint32_t at = address + done;
++        std::vector<uint8_t> out = {kReadData};
++        AppendButtons(out);
++        out.push_back(static_cast<uint8_t>(((chunk == 0 ? 0 : chunk - 1) << 4) | kErrorNone));
++        out.push_back(static_cast<uint8_t>(at >> 8));
++        out.push_back(static_cast<uint8_t>(at));
++        for (uint32_t i = 0; i < 16; ++i) {
++            out.push_back(i < chunk ? data[done + i] : 0);
++        }
++        m_answers.push_back(std::move(out));
++        if (chunk == 0) break;
++    }
++}
++
++bool EmulatedRemote::ExtensionEncrypted() const {
++    // Writing 0x55 to 0xA400F0 starts the Nunchuk without encryption; the older 0xAA start encrypts
++    // with the key the game wrote to 0xA40040..0x4F.
++    return m_extension[0xF0] == 0xAA;
++}
++
++bool EmulatedRemote::PopInputReport(std::vector<uint8_t>& report, uint64_t nowUs) {
++    if (!m_answers.empty()) {
++        report = std::move(m_answers.front());
++        m_answers.pop_front();
++        return true;
++    }
++    std::vector<uint8_t> next = InputReport();
++    if (next.empty()) {
++        return false;
++    }
++    const bool changed = next != m_lastReport;
++    const bool due = m_continuous && nowUs - m_lastReportUs >= kContinuousIntervalUs;
++    if (!changed && !due && !m_reportPending) {
++        return false;
++    }
++    m_reportPending = false;
++    m_lastReport = next;
++    m_lastReportUs = nowUs;
++    report = std::move(next);
++    return true;
++}
++
++std::vector<uint8_t> EmulatedRemote::InputReport() const {
++    std::vector<uint8_t> out = {m_mode};
++    switch (m_mode) {
++    case 0x30:
++        AppendButtons(out);
++        break;
++    case 0x31:
++        AppendButtons(out);
++        AppendAccelerometer(out);
++        break;
++    case 0x32:
++        AppendButtons(out);
++        AppendExtension(out, 8);
++        break;
++    case 0x33:
++        AppendButtons(out);
++        AppendAccelerometer(out);
++        AppendIr(out, 12);
++        break;
++    case 0x34:
++        AppendButtons(out);
++        AppendExtension(out, 19);
++        break;
++    case 0x35:
++        AppendButtons(out);
++        AppendAccelerometer(out);
++        AppendExtension(out, 16);
++        break;
++    case 0x36:
++        AppendButtons(out);
++        AppendIr(out, 10);
++        AppendExtension(out, 9);
++        break;
++    case 0x37:
++        AppendButtons(out);
++        AppendAccelerometer(out);
++        AppendIr(out, 10);
++        AppendExtension(out, 6);
++        break;
++    case 0x3D:
++        AppendExtension(out, 21);
++        break;
++    default:
++        // 0x3E/0x3F (full IR, interleaved) are not offered; the buttons still get through.
++        out[0] = 0x30;
++        AppendButtons(out);
++        break;
++    }
++    return out;
++}
++
++void EmulatedRemote::AppendButtons(std::vector<uint8_t>& out) const {
++    out.push_back(static_cast<uint8_t>(m_input.buttons >> 8));
++    out.push_back(static_cast<uint8_t>(m_input.buttons));
++}
++
++void EmulatedRemote::AppendAccelerometer(std::vector<uint8_t>& out) const {
++    // Held still, pointing at the screen: 1 g on Z. The low bits in the button bytes stay 0.
++    out.push_back(kAccelZero);
++    out.push_back(kAccelZero);
++    out.push_back(kRemoteOneG);
++}
++
++void EmulatedRemote::AppendIr(std::vector<uint8_t>& out, size_t bytes) const {
++    const bool on = m_irClock && m_irCamera && m_input.pointerValid;
++    struct Dot {
++        int x;
++        int y;
++    };
++    std::array<std::optional<Dot>, 4> dots{};
++    if (on) {
++        const int centerX = kCameraCenterX - static_cast<int>(std::lround(m_input.pointerX * kCameraReachX));
++        const int centerY = kCameraCenterY - static_cast<int>(std::lround(m_input.pointerY * kCameraReachY));
++        dots[0] = Dot{ClampCamera(centerX - kDotHalfDistance, 1023), ClampCamera(centerY, 767)};
++        dots[1] = Dot{ClampCamera(centerX + kDotHalfDistance, 1023), ClampCamera(centerY, 767)};
++    }
++    if (bytes == 12) {
++        // Extended: three bytes a dot, with its size.
++        for (const auto& dot : dots) {
++            if (!dot) {
++                out.insert(out.end(), {0xFF, 0xFF, 0xFF});
++                continue;
++            }
++            out.push_back(static_cast<uint8_t>(dot->x));
++            out.push_back(static_cast<uint8_t>(dot->y));
++            out.push_back(static_cast<uint8_t>(((dot->y >> 8) & 3) << 6 | ((dot->x >> 8) & 3) << 4 | kDotSize));
++        }
++        return;
++    }
++    // Basic: two dots in five bytes, twice.
++    for (size_t pair = 0; pair < 2; ++pair) {
++        const auto& a = dots[pair * 2];
++        const auto& b = dots[pair * 2 + 1];
++        const int ax = a ? a->x : 0x3FF, ay = a ? a->y : 0x3FF;
++        const int bx = b ? b->x : 0x3FF, by = b ? b->y : 0x3FF;
++        out.push_back(static_cast<uint8_t>(ax));
++        out.push_back(static_cast<uint8_t>(ay));
++        out.push_back(static_cast<uint8_t>(((ay >> 8) & 3) << 6 | ((ax >> 8) & 3) << 4 | ((by >> 8) & 3) << 2 |
++                                           ((bx >> 8) & 3)));
++        out.push_back(static_cast<uint8_t>(bx));
++        out.push_back(static_cast<uint8_t>(by));
++    }
++}
++
++void EmulatedRemote::AppendExtension(std::vector<uint8_t>& out, size_t bytes) const {
++    // The Nunchuk's six bytes: stick X and Y, accelerometer X, Y, Z, then C and Z (0 when held).
++    std::array<uint8_t, 6> nunchuk = {
++        static_cast<uint8_t>(std::lround(kStickCenter + m_input.stickX * kStickReach)),
++        static_cast<uint8_t>(std::lround(kStickCenter + m_input.stickY * kStickReach)),
++        kAccelZero,
++        kAccelZero,
++        kNunchukOneG,
++        static_cast<uint8_t>((m_input.c ? 0x00 : 0x02) | (m_input.z ? 0x00 : 0x01)),
++    };
++    if (ExtensionEncrypted()) {
++        std::array<uint8_t, 16> key{};
++        std::copy(m_extension.begin() + 0x40, m_extension.begin() + 0x50, key.begin());
++        if (const auto tables = Wiimote::ExtCrypto::FromKey(key)) {
++            tables->Encrypt(nunchuk.data(), 0x08, nunchuk.size());
++        }
++    }
++    for (size_t i = 0; i < bytes; ++i) {
++        out.push_back(i < nunchuk.size() ? nunchuk[i] : 0x00);
++    }
++}
++
++} // namespace Bluetooth
+diff --git a/runtime/src/hle/bluetooth/emulated_remote_host.cpp b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
+new file mode 100644
+index 0000000..a228188
+--- /dev/null
++++ b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
+@@ -0,0 +1,182 @@
++// Routes the first remote slot to the emulated Wii Remote (emulated_remote.h) for a foreign game while
++// no real remote is attached there, and feeds it the PC's controls: the GameCube pad as the runtime's
++// input bindings map it (F10), and the mouse as the pointer, its buttons as A and B.
++
++#include "bluetooth/emulated_remote_host.h"
++
++#include "bluetooth/emulated_remote.h"
++#include "guest_abi/guest_region.h"
++#include "input_bindings.h"
++#include "runtime_log.h"
++#include "wiimote_host.h"
++
++#include <SDL3/SDL_mouse.h>
++#include <SDL3/SDL_video.h>
++#include <dolphin/pad.h>
++
++#include <chrono>
++
++namespace Bluetooth {
++namespace {
++
++constexpr size_t kEmulatedSlot = 0;
++constexpr uint64_t kSampleIntervalUs = 4000;
++
++uint64_t NowUs() {
++    using namespace std::chrono;
++    return static_cast<uint64_t>(duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count());
++}
++
++GameCubePad ReadFirstGameCubePad() {
++    static bool padStarted = false;
++    if (!padStarted) {
++        // The game may never start the GameCube pads itself; PADInit only once.
++        PADInit();
++        padStarted = true;
++    }
++    PADStatus statuses[PAD_CHANMAX]{};
++    PADRead(statuses);
++    InputBindings::Apply(statuses);
++    const PADStatus& status = statuses[0];
++    GameCubePad pad;
++    pad.connected = status.err == PAD_ERR_NONE;
++    pad.buttons = status.button;
++    pad.stickX = status.stickX;
++    pad.stickY = status.stickY;
++    pad.substickX = status.substickX;
++    pad.substickY = status.substickY;
++    pad.triggerL = status.triggerL;
++    pad.triggerR = status.triggerR;
++    return pad;
++}
++
++EmulatedInput ReadControls() {
++    if (InputBindings::InputBlocked()) {
++        // The settings overlay owns the controls: the remote is at rest.
++        return {};
++    }
++    EmulatedInput input = MapGameCubePad(ReadFirstGameCubePad());
++
++    float x = 0.0f;
++    float y = 0.0f;
++    const SDL_MouseButtonFlags mouse = SDL_GetMouseState(&x, &y);
++    SDL_Window* window = SDL_GetMouseFocus();
++    int width = 0;
++    int height = 0;
++    if (window != nullptr && SDL_GetWindowSize(window, &width, &height) && width > 0 && height > 0 &&
++        x >= 0.0f && y >= 0.0f && x < width && y < height) {
++        input.pointerValid = true;
++        input.pointerX = x / width * 2.0f - 1.0f;
++        input.pointerY = y / height * 2.0f - 1.0f;
++        if ((mouse & SDL_BUTTON_LMASK) != 0) input.buttons |= RemoteButton::kA;
++        if ((mouse & SDL_BUTTON_RMASK) != 0) input.buttons |= RemoteButton::kB;
++    }
++    return input;
++}
++
++class Host final : public RemoteHost {
++public:
++    explicit Host(RemoteHost& real) : m_real(real) {}
++
++    bool IsAttached(size_t slot) const override {
++        return Emulates(slot) || m_real.IsAttached(slot);
++    }
++
++    bool ConsumeWake(size_t slot) override {
++        if (!Emulates(slot)) {
++            return m_real.ConsumeWake(slot);
++        }
++        // Like a real remote: it asks to connect once at start, and again after the game let it go
++        // when a button is pressed.
++        if (!m_woken) {
++            m_woken = true;
++            return true;
++        }
++        if (m_releasedByGame && Sample().buttons != 0) {
++            m_releasedByGame = false;
++            return true;
++        }
++        return false;
++    }
++
++    bool PopInputReport(size_t slot, std::vector<uint8_t>& report) override {
++        if (!Emulates(slot)) {
++            return m_real.PopInputReport(slot, report);
++        }
++        const uint64_t now = NowUs();
++        m_remote.SetInput(Sample(now));
++        return m_remote.PopInputReport(report, now);
++    }
++
++    void SendOutputReport(size_t slot, const uint8_t* report, size_t size) override {
++        if (!Emulates(slot)) {
++            m_real.SendOutputReport(slot, report, size);
++            return;
++        }
++        m_remote.HandleOutputReport(report, size);
++    }
++
++    void OnLinkStateChanged(size_t slot, LinkState state) override {
++        if (!Emulates(slot)) {
++            m_real.OnLinkStateChanged(slot, state);
++            return;
++        }
++        if (state == LinkState::Ready && m_link != LinkState::Ready) {
++            m_remote.Reset();
++            RT_LOG(RT_TAG_HLE) << "Emulated Wii Remote with Nunchuk connected to the game "
++                                  "(GameCube pad mapping and mouse)" << std::endl;
++        }
++        m_link = state;
++    }
++
++    void OnGuestDisconnect(size_t slot) override {
++        if (!Emulates(slot)) {
++            m_real.OnGuestDisconnect(slot);
++            return;
++        }
++        m_releasedByGame = true;
++    }
++
++    void OnGuestInquiry(bool active) override {
++        m_real.OnGuestInquiry(active);
++    }
++
++    const char* DeviceName(size_t slot) const override {
++        return Emulates(slot) ? "Nintendo RVL-CNT-01" : m_real.DeviceName(slot);
++    }
++
++private:
++    // The first slot is emulated for a foreign game while no real remote is attached there, and stays
++    // emulated while its connection is up, so a remote that arrives meanwhile waits for the next one.
++    bool Emulates(size_t slot) const {
++        if (slot != kEmulatedSlot || !GuestRegion::IsForeignGame()) {
++            return false;
++        }
++        return m_link != LinkState::Down || !m_real.IsAttached(slot);
++    }
++
++    const EmulatedInput& Sample(uint64_t now = NowUs()) {
++        if (now - m_sampledUs >= kSampleIntervalUs) {
++            m_input = ReadControls();
++            m_sampledUs = now;
++        }
++        return m_input;
++    }
++
++    RemoteHost& m_real;
++    EmulatedRemote m_remote;
++    EmulatedInput m_input;
++    uint64_t m_sampledUs = 0;
++    LinkState m_link = LinkState::Down;
++    bool m_woken = false;
++    bool m_releasedByGame = false;
++};
++
++} // namespace
++
++RemoteHost& RemoteHostForThisGame() {
++    static Host host(Wiimote::Host());
++    return host;
++}
++
++} // namespace Bluetooth
 diff --git a/runtime/src/hle/gx/gx_fatal_stubs.cpp b/runtime/src/hle/gx/gx_fatal_stubs.cpp
 index 0baaa0f..42e9b83 100644
 --- a/runtime/src/hle/gx/gx_fatal_stubs.cpp
@@ -738,3 +1612,202 @@ index 99f2abd..71347a4 100644
  
      if (mem1Size != 0) {
          const uint32_t mem1End = Memory::kMem1CachedBase + mem1Size;
+diff --git a/runtime/tests/emulated_remote_tests.cpp b/runtime/tests/emulated_remote_tests.cpp
+new file mode 100644
+index 0000000..0c4e3a9
+--- /dev/null
++++ b/runtime/tests/emulated_remote_tests.cpp
+@@ -0,0 +1,193 @@
++// The emulated Wii Remote (bluetooth/emulated_remote.h) answers the game the way a real remote with a
++// Nunchuk does. Each test plays the game's side of one exchange.
++
++#include "bluetooth/emulated_remote.h"
++
++#include <cstdio>
++#include <vector>
++
++namespace {
++
++using Bytes = std::vector<uint8_t>;
++using Bluetooth::EmulatedInput;
++using Bluetooth::EmulatedRemote;
++using Bluetooth::GameCubePad;
++namespace RemoteButton = Bluetooth::RemoteButton;
++
++int g_failures = 0;
++
++#define CHECK(cond)                                                                    \
++    do {                                                                               \
++        if (!(cond)) {                                                                 \
++            std::fprintf(stderr, "%s:%d: CHECK failed: %s\n", __FILE__, __LINE__, #cond); \
++            ++g_failures;                                                              \
++        }                                                                              \
++    } while (0)
++
++uint64_t g_now = 1000000;
++
++Bytes Next(EmulatedRemote& remote) {
++    Bytes report;
++    if (!remote.PopInputReport(report, g_now)) {
++        return {};
++    }
++    return report;
++}
++
++void Send(EmulatedRemote& remote, const Bytes& report) {
++    remote.HandleOutputReport(report.data(), report.size());
++}
++
++// A remote that just connected has said what it has, and nothing is waiting.
++EmulatedRemote Connected() {
++    EmulatedRemote remote;
++    remote.Reset();
++    while (!Next(remote).empty()) {
++    }
++    return remote;
++}
++
++void TestAStatusReportSaysTheNunchukIsIn() {
++    EmulatedRemote remote = Connected();
++    Send(remote, {0x15, 0x00});
++    const Bytes status = Next(remote);
++    CHECK(status.size() == 7);
++    CHECK(status[0] == 0x20);
++    CHECK((status[3] & 0x02) != 0);  // extension connected
++}
++
++void TestTheModeDecidesTheReport() {
++    EmulatedRemote remote = Connected();
++    EmulatedInput input;
++    input.buttons = RemoteButton::kA | RemoteButton::kUp;
++    input.stickX = 1.0f;
++    input.z = true;
++    remote.SetInput(input);
++    Send(remote, {0x12, 0x04, 0x35});  // continuous, buttons + accelerometer + 16 extension bytes
++    const Bytes report = Next(remote);
++    CHECK(report.size() == 1 + 2 + 3 + 16);
++    CHECK(report[0] == 0x35);
++    CHECK(report[1] == 0x08);  // Up
++    CHECK(report[2] == 0x08);  // A
++    CHECK(report[6] == 0xE0);  // stick all the way right
++    CHECK(report[7] == 0x80);  // stick centred up and down
++    CHECK((report[11] & 0x01) == 0);  // Z held
++    CHECK((report[11] & 0x02) != 0);  // C not held
++}
++
++void TestAContinuousModeRepeatsAndAnOtherOneWaitsForAChange() {
++    EmulatedRemote remote = Connected();
++    Send(remote, {0x12, 0x04, 0x30});
++    CHECK(!Next(remote).empty());
++    CHECK(Next(remote).empty());  // too soon
++    g_now += 5000;
++    CHECK(!Next(remote).empty());
++
++    Send(remote, {0x12, 0x00, 0x30});
++    CHECK(!Next(remote).empty());  // the new mode reports once
++    g_now += 50000;
++    CHECK(Next(remote).empty());
++    EmulatedInput input;
++    input.buttons = RemoteButton::kB;
++    remote.SetInput(input);
++    CHECK(!Next(remote).empty());
++}
++
++void TestTheNunchukIsReadBack() {
++    EmulatedRemote remote = Connected();
++    // The game starts the extension without encryption, then reads its ID.
++    Send(remote, {0x16, 0x04, 0xA4, 0x00, 0xF0, 0x01, 0x55});
++    CHECK(Next(remote) == (Bytes{0x22, 0x00, 0x00, 0x16, 0x00}));
++    Send(remote, {0x16, 0x04, 0xA4, 0x00, 0xFB, 0x01, 0x00});
++    CHECK(Next(remote) == (Bytes{0x22, 0x00, 0x00, 0x16, 0x00}));
++    Send(remote, {0x17, 0x04, 0xA4, 0x00, 0xFA, 0x00, 0x06});
++    const Bytes id = Next(remote);
++    CHECK(id.size() == 22);
++    CHECK(id[0] == 0x21);
++    CHECK(id[3] == 0x50);  // six bytes, no error
++    CHECK(id[4] == 0x00 && id[5] == 0xFA);
++    CHECK((Bytes(id.begin() + 6, id.begin() + 12) == Bytes{0x00, 0x00, 0xA4, 0x20, 0x00, 0x00}));
++}
++
++void TestTheCalibrationChecksumsAdd() {
++    EmulatedRemote remote = Connected();
++    Send(remote, {0x17, 0x04, 0xA4, 0x00, 0x20, 0x00, 0x10});
++    const Bytes block = Next(remote);
++    uint8_t sum = 0x55;
++    for (int i = 0; i < 14; ++i) sum = static_cast<uint8_t>(sum + block[6 + i]);
++    CHECK(block[6 + 14] == sum);
++    CHECK(block[6 + 15] == static_cast<uint8_t>(sum + 0xAA));
++
++    Send(remote, {0x17, 0x00, 0x00, 0x00, 0x16, 0x00, 0x0A});  // the accelerometer's, in EEPROM
++    const Bytes accel = Next(remote);
++    sum = 0x55;
++    for (int i = 0; i < 9; ++i) sum = static_cast<uint8_t>(sum + accel[6 + i]);
++    CHECK(accel[6 + 9] == sum);
++}
++
++void TestALongReadComesSixteenBytesAtATime() {
++    EmulatedRemote remote = Connected();
++    Send(remote, {0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A});
++    CHECK(Next(remote)[3] == 0xF0);
++    CHECK(Next(remote)[3] == 0xF0);
++    const Bytes last = Next(remote);
++    CHECK(last[3] == 0x90);  // ten bytes
++    CHECK(last[5] == 0x20);
++}
++
++void TestThePointerMovesTheSensorBarTheOtherWay() {
++    EmulatedRemote remote = Connected();
++    Send(remote, {0x13, 0x04});
++    Send(remote, {0x1A, 0x04});
++    Send(remote, {0x12, 0x04, 0x33});  // buttons + accelerometer + 12 IR bytes
++    EmulatedInput input;
++    input.pointerValid = true;
++    input.pointerX = 0.5f;
++    remote.SetInput(input);
++    const Bytes report = Next(remote);
++    CHECK(report.size() == 1 + 2 + 3 + 12);
++    const int x = report[6] | ((report[8] >> 4) & 3) << 8;
++    CHECK(x < 512 - 100);  // pointing right puts the left light left of centre
++
++    input.pointerValid = false;
++    remote.SetInput(input);
++    const Bytes off = Next(remote);
++    CHECK(off[6] == 0xFF && off[7] == 0xFF && off[8] == 0xFF);
++}
++
++void TestTheGameCubeLayout() {
++    GameCubePad pad;
++    pad.connected = true;
++    pad.buttons = 0x0100 | 0x0400 | 0x1000;  // A, X, Start
++    pad.stickY = 127;
++    pad.triggerR = 0xFF;
++    pad.substickX = -100;
++    const EmulatedInput input = Bluetooth::MapGameCubePad(pad);
++    CHECK(input.buttons == (RemoteButton::kA | RemoteButton::kOne | RemoteButton::kPlus | RemoteButton::kLeft));
++    CHECK(input.stickY == 1.0f);
++    CHECK(input.c && !input.z);
++
++    pad.buttons = 0x1000 | 0x0010;  // Start and Z
++    CHECK(Bluetooth::MapGameCubePad(pad).buttons == (RemoteButton::kHome | RemoteButton::kLeft));
++    pad.connected = false;
++    CHECK(Bluetooth::MapGameCubePad(pad).buttons == 0);
++}
++
++} // namespace
++
++int main() {
++    TestAStatusReportSaysTheNunchukIsIn();
++    TestTheModeDecidesTheReport();
++    TestAContinuousModeRepeatsAndAnOtherOneWaitsForAChange();
++    TestTheNunchukIsReadBack();
++    TestTheCalibrationChecksumsAdd();
++    TestALongReadComesSixteenBytesAtATime();
++    TestThePointerMovesTheSensorBarTheOtherWay();
++    TestTheGameCubeLayout();
++    if (g_failures != 0) {
++        std::fprintf(stderr, "%d check(s) failed\n", g_failures);
++        return 1;
++    }
++    std::printf("emulated remote: all checks passed\n");
++    return 0;
++}
