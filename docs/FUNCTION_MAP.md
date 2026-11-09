@@ -37,7 +37,7 @@ organiza el ejecutable son los mismos que en GameCube.
 | …destino de algún `bl` | 10 560 | 3 637 |
 | Tablas de `switch` | 220 (1 sin comprobación de límite) | 274 |
 | Datos dentro de código | 3 | 3 |
-| Funciones con nombre | 1 211, todas del SDK (19 por versión, 785 por firma, 334 por el mapa de Mario Kart Wii, 73 leyendo su código) | 682 |
+| Funciones con nombre | 1 223, todas del SDK (19 por versión, 785 por firma, 334 por el mapa de Mario Kart Wii, 85 leyendo su código) | 682 |
 
 Bibliotecas del SDK identificadas: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI,
 NAND, SC, ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -84,16 +84,16 @@ ARC, WENC, WPAD, KPAD, WUD y la pila Bluetooth (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | Biblioteca | Rango (por los nombres) | Con nombre |
 |---|---|---:|
 | PPC | `0x802505A0`–`0x802507C0` | 24 |
-| OS | `0x802508C0`–`0x8025D258` (y `0x802938C0`) | 152 |
+| OS | `0x802508C0`–`0x8025D258` (y `0x802938C0`) | 155 |
 | MTX | `0x8025E4C0`–`0x8025F27C` | 28 |
 | DVD | `0x8025F400`–`0x80266034` | 31 |
 | VI | `0x80268C60`–`0x8026C858` | 31 |
 | PAD | `0x8026CE40`–`0x8026E078` | 10 |
-| AI, AX, AXFX, DSP | `0x8026E8B0`–`0x8027602C` | 93 |
+| AI, AX, AXFX, DSP | `0x8026E860`–`0x8027602C` | 97 |
 | GX | `0x80276250`–`0x8027DFC0` | 163 |
-| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 39 |
+| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 41 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
-| IPC | `0x8029C410`–`0x8029F0C4` | 40 |
+| IPC | `0x8029C410`–`0x8029F1AC` | 43 |
 | NAND | `0x802A0100`–`0x802A261C` | 2 |
 | SC | `0x802A3520`–`0x802A5524` | 24 |
 | WENC, ARC | `0x802A5524`–`0x802A610C` | 5 |
@@ -277,7 +277,7 @@ executable are the same as on GameCube.
 | …called with `bl` | 10,560 | 3,637 |
 | `switch` tables | 220 (1 without a bounds check) | 274 |
 | Data inside code | 3 | 3 |
-| Named functions | 1,211, all from the SDK (19 by version, 785 by signature, 334 from Mario Kart Wii's map, 73 by reading their code) | 682 |
+| Named functions | 1,223, all from the SDK (19 by version, 785 by signature, 334 from Mario Kart Wii's map, 85 by reading their code) | 682 |
 
 SDK libraries identified: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI, NAND, SC,
 ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -323,16 +323,16 @@ KPAD, WUD and the Bluetooth stack (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | Library | Range (from the names) | Named |
 |---|---|---:|
 | PPC | `0x802505A0`–`0x802507C0` | 24 |
-| OS | `0x802508C0`–`0x8025D258` (and `0x802938C0`) | 152 |
+| OS | `0x802508C0`–`0x8025D258` (and `0x802938C0`) | 155 |
 | MTX | `0x8025E4C0`–`0x8025F27C` | 28 |
 | DVD | `0x8025F400`–`0x80266034` | 31 |
 | VI | `0x80268C60`–`0x8026C858` | 31 |
 | PAD | `0x8026CE40`–`0x8026E078` | 10 |
-| AI, AX, AXFX, DSP | `0x8026E8B0`–`0x8027602C` | 93 |
+| AI, AX, AXFX, DSP | `0x8026E860`–`0x8027602C` | 97 |
 | GX | `0x80276250`–`0x8027DFC0` | 163 |
-| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 39 |
+| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 41 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
-| IPC | `0x8029C410`–`0x8029F0C4` | 40 |
+| IPC | `0x8029C410`–`0x8029F1AC` | 43 |
 | NAND | `0x802A0100`–`0x802A261C` | 2 |
 | SC | `0x802A3520`–`0x802A5524` | 24 |
 | WENC, ARC | `0x802A5524`–`0x802A610C` | 5 |
