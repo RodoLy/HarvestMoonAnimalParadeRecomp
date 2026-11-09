@@ -29,6 +29,14 @@ They disagree at least once: WiiCompiled replaces OSSuspendThread at 0x801AA6A8,
 name, and the map puts OSSuspendThread at 0x801AA824. The tool takes both names and lists every
 disagreement, so the reader can judge.
 
+Translated functions come in two kinds. Most of them Mario Kart Wii has too, and WiiCompiled leaves them
+translated there as well, so they already run next to its native functions (OSCancelAlarm next to a native
+OSSetAlarm, for one). The others Mario Kart Wii does not have: those are the new mixes to watch.
+
+Las funciones traducidas son de dos clases. La mayoría también las tiene Mario Kart Wii, y WiiCompiled las
+deja traducidas allí también, así que ya corren junto a sus funciones nativas. Las otras Mario Kart Wii no
+las tiene: esas son las mezclas nuevas que hay que vigilar.
+
 Usage / Uso:
     python3 tools/wiicompiled_coverage.py OS DVD VI --wiicompiled /path/to/wiicompiled
 """
@@ -138,16 +146,31 @@ class Coverage:
     named: list[str]
     provided: list[str]
 
+    in_reference_game: set[str]  # the names Mario Kart Wii's map has
+
     @property
     def translated(self) -> list[str]:
         return [name for name in self.named if name not in self.provided]
 
+    @property
+    def translated_in_both_games(self) -> list[str]:
+        """Translated here and in Mario Kart Wii too: WiiCompiled already runs them next to its native
+        functions, so that mix is tried."""
+        return [name for name in self.translated if name in self.in_reference_game]
 
-def measure(library: str, call_map, symbols: SymbolTable, replaced_names: set[str]) -> Coverage:
+    @property
+    def translated_only_here(self) -> list[str]:
+        """Mario Kart Wii does not have them, so nobody has run them next to WiiCompiled's natives yet."""
+        return [name for name in self.translated if name not in self.in_reference_game]
+
+
+def measure(
+    library: str, call_map, symbols: SymbolTable, replaced_names: set[str], in_reference_game: set[str]
+) -> Coverage:
     entry_points = find_entry_points(call_map, symbols, stretches_of_library(symbols, library))
     named = [entry.function.name for entry in entry_points if entry.is_named]
     provided = [name for name in named if name in replaced_names]
-    return Coverage(library, len(entry_points), named, provided)
+    return Coverage(library, len(entry_points), named, provided, in_reference_game)
 
 
 def main() -> int:
@@ -169,20 +192,34 @@ def main() -> int:
 
     replacements = read_replacements(Path(arguments.wiicompiled))
     replaced_names = set().union(*(replacement.names for replacement in replacements))
+    in_reference_game = {
+        function.name for function in read_reference_map(Path(arguments.wiicompiled) / REFERENCE_MAP)
+    }
     symbols = SymbolTable.read(arguments.symbols)
     call_map = build_call_map(Dol(arguments.dol), symbols)
 
     print(f"{len(replacements)} native replacements in WiiCompiled")
-    print(f"{'library':8} {'called':>6} {'named':>6} {'native':>6}")
+    print(f"{'library':8} {'called':>6} {'named':>6} {'native':>6} {'both':>6} {'only here':>9}")
     coverages = [
-        measure(library.upper(), call_map, symbols, replaced_names) for library in arguments.libraries
+        measure(library.upper(), call_map, symbols, replaced_names, in_reference_game)
+        for library in arguments.libraries
     ]
     for coverage in coverages:
-        named, provided = len(coverage.named), len(coverage.provided)
-        print(f"{coverage.library:8} {coverage.entry_points:>6} {named:>6} {provided:>6}")
+        counts = (
+            coverage.entry_points,
+            len(coverage.named),
+            len(coverage.provided),
+            len(coverage.translated_in_both_games),
+            len(coverage.translated_only_here),
+        )
+        print(f"{coverage.library:8} " + " ".join(f"{count:>6}" for count in counts[:4]) + f" {counts[4]:>9}")
     for coverage in coverages:
-        print(f"\n{coverage.library}, named but translated ({len(coverage.translated)}):")
-        print("  " + " ".join(coverage.translated))
+        for title, names in (
+            ("translated here and in Mario Kart Wii", coverage.translated_in_both_games),
+            ("translated, and Mario Kart Wii does not have them", coverage.translated_only_here),
+        ):
+            print(f"\n{coverage.library}, {title} ({len(names)}):")
+            print("  " + " ".join(names))
 
     disagreements = [replacement for replacement in replacements if replacement.disagrees]
     print(f"\n{len(disagreements)} replacements whose C++ name and map name are two different SDK names:")
