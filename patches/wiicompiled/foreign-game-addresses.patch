@@ -19,6 +19,47 @@ index 4ca4439..cd7d8c4 100644
  
  // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
  #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
+diff --git a/runtime/include/aurora_events.h b/runtime/include/aurora_events.h
+index f44f861..94bfbfb 100644
+--- a/runtime/include/aurora_events.h
++++ b/runtime/include/aurora_events.h
+@@ -13,6 +13,7 @@
+ 
+ #include <cstdlib>
+ #include <atomic>
++#include "guest_abi/hang_watch.h"
+ #include <chrono>
+ 
+ #if defined(_WIN32)
+@@ -180,5 +181,6 @@ inline void EndAuroraFrame() {
+ 
+ // Poll Aurora events and update cached window/framebuffer dimensions.
+ inline void UpdateAuroraAndProcessEvents() {
++    HangWatch::g_windowUpdates.fetch_add(1, std::memory_order_relaxed);
+     ProcessAuroraEvents(aurora_update());
+ }
+diff --git a/runtime/include/guest_abi/cpu_context.h b/runtime/include/guest_abi/cpu_context.h
+index 70e2f2b..9ab66ca 100644
+--- a/runtime/include/guest_abi/cpu_context.h
++++ b/runtime/include/guest_abi/cpu_context.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include "isa/ppc_isa_fpenv.h"
++#include "guest_abi/hang_watch.h"
+ 
+ #include <cstdint>
+ 
+@@ -55,6 +56,9 @@ public:
+         : previous_(g_currentCpuContext)
+     {
+         g_currentCpuContext = ctx;
++        if (ctx != nullptr) {
++            HangWatch::g_lastGuestCpuContext.store(ctx, std::memory_order_relaxed);
++        }
+ 
+         savedMxcsr_ = MkwGetHostFpControl();
+         if (ctx != nullptr)
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
 index 1836717..728eb0a 100644
 --- a/runtime/include/guest_abi/guest_region.h
@@ -252,6 +293,30 @@ index 1836717..728eb0a 100644
 -    (::GuestRegion::RowOf(0x##pal##u).In(static_cast<::GuestRegion::Id>(MKW_TRANSLATED_GUEST_REGION)))
 +    (::GuestRegion::CompileTimeAddress(0x##pal##u, static_cast<::GuestRegion::Id>(MKW_TRANSLATED_GUEST_REGION)))
  #endif
+diff --git a/runtime/include/guest_abi/hang_watch.h b/runtime/include/guest_abi/hang_watch.h
+new file mode 100644
+index 0000000..15ca9df
+--- /dev/null
++++ b/runtime/include/guest_abi/hang_watch.h
+@@ -0,0 +1,18 @@
++#pragma once
++
++// What the hang watch (SystemBridge, foreign games only) looks at: the last guest CPU context that ran
++// and how many times the window has been updated. When the window stops being updated for a while,
++// the watch prints where the guest is from another thread, because the game's own thread is the one
++// that is stuck.
++
++#include <atomic>
++#include <cstdint>
++
++struct CpuContext;
++
++namespace HangWatch {
++
++inline std::atomic<CpuContext*> g_lastGuestCpuContext{nullptr};
++inline std::atomic<uint64_t> g_windowUpdates{0};
++
++} // namespace HangWatch
 diff --git a/runtime/src/abi_bridge.cpp b/runtime/src/abi_bridge.cpp
 index 55fe416..99fc9ef 100644
 --- a/runtime/src/abi_bridge.cpp
@@ -465,10 +530,76 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/system_bridge.cpp b/runtime/src/system_bridge.cpp
-index 99f2abd..d2df584 100644
+index 99f2abd..9407dcb 100644
 --- a/runtime/src/system_bridge.cpp
 +++ b/runtime/src/system_bridge.cpp
-@@ -370,6 +370,12 @@ void SystemBridge::Initialize() {
+@@ -8,6 +8,8 @@
+ #include <sstream>
+ #include <string>
+ #include <vector>
++#include <chrono>
++#include <thread>
+ 
+ #if defined(_WIN32)
+ #ifndef NOMINMAX
+@@ -18,6 +20,7 @@
+ 
+ 
+ #include "abi_bridge.h"
++#include "guest_abi/hang_watch.h"
+ #include "memory.h"
+ #include "ppc_runtime.h"
+ #include "recomp_mod_loader.h"
+@@ -309,9 +312,48 @@ void DumpGuestCrashHints(std::ostream& os, const CpuContext* cpu) {
+ 
+ } // namespace
+ 
++// A foreign game is still being brought up, and when it hangs, its own thread is the one that is stuck.
++// This thread notices when the window has not been updated for a while and prints where the guest is
++// (the registers and the stack's back chain), every few seconds while it stays that way, so the log
++// says where to look. Mario Kart Wii does not start it.
++void StartForeignGameHangWatch() {
++    if (!::GuestRegion::IsForeignGame()) {
++        return;
++    }
++    std::thread([] {
++        constexpr int kQuietSecondsBeforeReport = 5;
++        constexpr int kReports = 6;
++        uint64_t lastUpdates = HangWatch::g_windowUpdates.load(std::memory_order_relaxed);
++        int quietSeconds = 0;
++        int reports = 0;
++        while (reports < kReports) {
++            std::this_thread::sleep_for(std::chrono::seconds(1));
++            const uint64_t updates = HangWatch::g_windowUpdates.load(std::memory_order_relaxed);
++            if (updates != lastUpdates) {
++                lastUpdates = updates;
++                quietSeconds = 0;
++                continue;
++            }
++            if (++quietSeconds % kQuietSecondsBeforeReport != 0) {
++                continue;
++            }
++            const CpuContext* cpu = HangWatch::g_lastGuestCpuContext.load(std::memory_order_relaxed);
++            if (cpu == nullptr) {
++                continue;
++            }
++            std::cerr << "[hang-watch] the window has not been updated for " << quietSeconds
++                      << " s; the last guest context that ran:" << std::endl;
++            SystemBridge::DumpCpuState(std::cerr, cpu);
++            std::cerr.flush();
++            ++reports;
++        }
++    }).detach();
++}
++
+ void SystemBridge::Initialize() {
+     const auto memoryConfig = Memory::Config::WiiDefaults();
+     Memory::Init(memoryConfig);
++    StartForeignGameHangWatch();
+ 
+     SeedLowMemDefaults(memoryConfig);
+ 
+@@ -370,6 +412,12 @@ void SystemBridge::Initialize() {
      }
      RT_LOG(RT_TAG_RUNTIME) << "Executed " << dolCount << " main DOL static constructors." << std::endl;
  
@@ -481,7 +612,7 @@ index 99f2abd..d2df584 100644
      // StaticR.rel ctors must be run manually since we aren't using OSLink
      RT_LOG(RT_TAG_RUNTIME) << "Running static constructors for StaticR.rel..." << std::endl;
  
-@@ -539,8 +545,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
+@@ -539,8 +587,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
      // Seed OS clock values used by SDK timing helpers (OSBusClock/OSClock).
      entries.push_back({0x800000F8u, kBusClockHz, "__OSBusClock"});
      entries.push_back({0x800000FCu, kCpuClockHz, "__OSClock"});
