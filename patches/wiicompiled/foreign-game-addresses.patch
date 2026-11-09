@@ -498,10 +498,18 @@ index b76e5e1..95ed9a3 100644
  
  // 0x8015EA1C -> DVDInit
 diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
-index cd236a9..00d3693 100644
+index cd236a9..f7eeb84 100644
 --- a/runtime/src/hle/vi.cpp
 +++ b/runtime/src/hle/vi.cpp
-@@ -149,7 +149,7 @@ const uint32_t kViNextFrameBufferHwAddr = MKW_GADDR(80350890);
+@@ -20,6 +20,7 @@
+ #include <cstdio>
+ #include <iostream>
+ #include <mutex>
++#include <string>
+ #include <thread>
+ 
+ #if defined(_WIN32)
+@@ -149,7 +150,7 @@ const uint32_t kViNextFrameBufferHwAddr = MKW_GADDR(80350890);
  const uint32_t kViRetraceQueueAddr      = MKW_GADDR(80386bc0); // Thread queue for VIWaitForRetrace
  
  // EGG::BaseSystem::sSystem pointer - must be non-null before post-retrace callback is valid
@@ -510,7 +518,7 @@ index cd236a9..00d3693 100644
  
  std::chrono::microseconds IntervalForFormat(uint32_t tvFormat) {
      // NTSC-ish defaults to 60 Hz; PAL uses 50 Hz.
-@@ -343,7 +343,8 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
+@@ -343,7 +344,8 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
          if (postCb) {
              // Guard: only invoke callback if sSystem is initialized
              // The callback dereferences sSystem which must be non-null
@@ -520,6 +528,26 @@ index cd236a9..00d3693 100644
              if (sSystemPtr != 0) {
                  InvokeIndirectCpu(postCb, ctx);
              }
+@@ -424,6 +426,19 @@ bool VI_HLE_IsAdvancingRetrace() {
+     return s_inAdvanceRetrace.load(std::memory_order_acquire);
+ }
+ 
++// One line on what VI would show, for the hang watch's snapshots (system_bridge.cpp): a game whose
++// frames never appear is black, has no frame copied, or shows a different buffer than it copied.
++std::string VI_HLE_DescribeState() {
++    std::lock_guard<std::mutex> lock(g_viMutex);
++    char line[256];
++    std::snprintf(line, sizeof(line),
++                  "retraces=%u black=%d next_fb=0x%08X current_fb=0x%08X copied_xfb=0x%08X "
++                  "has_copy=%d gx_frames=%d",
++                  g_vi.retraceCount, g_vi.black ? 1 : 0, g_vi.nextFrameBuffer, g_vi.currentFrameBuffer,
++                  g_vi.readyXfb, g_vi.hasValidXfb ? 1 : 0, g_gxFrameCount);
++    return line;
++}
++
+ // Advance every retrace whose interval has already elapsed. Safe to call from
+ // busy loops (GX drawing, the scheduler's idle spin) to keep VBlank ticking.
+ void VI_HLE_PollRetrace(CpuContext* ctx) {
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
 index 56bec9f..9bb0fb7 100644
 --- a/runtime/src/main.cpp
@@ -587,7 +615,7 @@ index 6c2083a..9448080 100644
             g_presentedFrame < g_startupDismissFrame.load(std::memory_order_relaxed);
  }
 diff --git a/runtime/src/system_bridge.cpp b/runtime/src/system_bridge.cpp
-index 99f2abd..e88908a 100644
+index 99f2abd..71347a4 100644
 --- a/runtime/src/system_bridge.cpp
 +++ b/runtime/src/system_bridge.cpp
 @@ -8,6 +8,8 @@
@@ -607,7 +635,7 @@ index 99f2abd..e88908a 100644
  #include "memory.h"
  #include "ppc_runtime.h"
  #include "recomp_mod_loader.h"
-@@ -309,9 +312,69 @@ void DumpGuestCrashHints(std::ostream& os, const CpuContext* cpu) {
+@@ -309,9 +312,71 @@ void DumpGuestCrashHints(std::ostream& os, const CpuContext* cpu) {
  
  } // namespace
  
@@ -615,6 +643,8 @@ index 99f2abd..e88908a 100644
 +// This thread notices when the window has not been updated for a while and prints where the guest is
 +// (the registers and the stack's back chain), every few seconds while it stays that way, so the log
 +// says where to look. Mario Kart Wii does not start it.
++std::string VI_HLE_DescribeState();
++
 +void StartForeignGameHangWatch() {
 +    if (!::GuestRegion::IsForeignGame()) {
 +        return;
@@ -640,8 +670,8 @@ index 99f2abd..e88908a 100644
 +                    const CpuContext* cpu = HangWatch::g_lastGuestCpuContext.load(std::memory_order_relaxed);
 +                    if (cpu != nullptr) {
 +                        std::cerr << "[hang-watch] snapshot after " << seconds << " s ("
-+                                  << updates << " window updates); the last guest context that ran:"
-+                                  << std::endl;
++                                  << updates << " window updates); VI: " << VI_HLE_DescribeState()
++                                  << "; the last guest context that ran:" << std::endl;
 +                        SystemBridge::DumpCpuState(std::cerr, cpu);
 +                        std::cerr.flush();
 +                        ++snapshots;
@@ -677,7 +707,7 @@ index 99f2abd..e88908a 100644
  
      SeedLowMemDefaults(memoryConfig);
  
-@@ -370,6 +433,12 @@ void SystemBridge::Initialize() {
+@@ -370,6 +435,12 @@ void SystemBridge::Initialize() {
      }
      RT_LOG(RT_TAG_RUNTIME) << "Executed " << dolCount << " main DOL static constructors." << std::endl;
  
@@ -690,7 +720,7 @@ index 99f2abd..e88908a 100644
      // StaticR.rel ctors must be run manually since we aren't using OSLink
      RT_LOG(RT_TAG_RUNTIME) << "Running static constructors for StaticR.rel..." << std::endl;
  
-@@ -539,8 +608,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
+@@ -539,8 +610,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
      // Seed OS clock values used by SDK timing helpers (OSBusClock/OSClock).
      entries.push_back({0x800000F8u, kBusClockHz, "__OSBusClock"});
      entries.push_back({0x800000FCu, kCpuClockHz, "__OSClock"});
