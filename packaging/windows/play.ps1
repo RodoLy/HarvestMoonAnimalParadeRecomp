@@ -101,8 +101,10 @@ function Expand-DiscImage([string]$Image) {
     image (path, size, date) it came from, so the same image is not extracted again; a half-finished
     extraction has no record and is redone.
     #>
-    $image = Get-Item -LiteralPath $Image
-    $source = "$($image.FullName)|$($image.Length)|$($image.LastWriteTimeUtc.ToString('o'))"
+    # Not $image: PowerShell names are not case sensitive, so that would be the [string] parameter
+    # $Image, and the file would turn back into a string.
+    $imageFile = Get-Item -LiteralPath $Image
+    $source = "$($imageFile.FullName)|$($imageFile.Length)|$($imageFile.LastWriteTimeUtc.ToString('o'))"
     $record = Join-Path $extracted 'extracted-from.txt'
     $dataRoot = Join-Path $extracted 'DATA'
     if ((Test-Path -LiteralPath $record -PathType Leaf) -and ((Get-Content -LiteralPath $record -Raw).Trim() -eq $source) -and
@@ -114,7 +116,7 @@ function Expand-DiscImage([string]$Image) {
     [IO.Directory]::CreateDirectory($extracted) | Out-Null
     $nodTool = Join-Path $toolkit 'nodtool.exe'
     Assert-File $nodTool 'Disc tool'
-    Invoke-Checked $nodTool @('extract', $image.FullName, $dataRoot, '-q') 'Extracting the disc image'
+    Invoke-Checked $nodTool @('extract', $imageFile.FullName, $dataRoot, '-q') 'Extracting the disc image'
     Set-Content -LiteralPath $record -Value $source -Encoding UTF8
     return $dataRoot
 }
