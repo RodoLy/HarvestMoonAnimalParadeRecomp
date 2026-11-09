@@ -100,6 +100,11 @@ def plain_sdk_name(name: str) -> str:
     match = QUALIFIED_SDK_NAME.match(name)
     if match is None:
         return name
+    # `MTX::PSMTXConcat` and `OS::DCFlushRange`: what follows the colons is already a name of that
+    # library, so it stays as it is.
+    after_colons = name.split("::", 1)[1]
+    if library_of(after_colons) is not None and library_of(after_colons) == library_of(match["library"]):
+        return after_colons
     joint = "_" if match["library"] in LIBRARIES_WITH_AN_UNDERSCORE else ""
     return f"{match['before']}{match['after']}{match['library']}{joint}{match['rest']}"
 
