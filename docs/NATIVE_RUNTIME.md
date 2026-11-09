@@ -45,23 +45,25 @@ que para *Magical Melody* (GameCube) son trabajo nuevo, aquí ya están:
    `27ff3b0`) y se nombraron con su mapa de Mario Kart Wii
    (`projects/mkwii/MAP.txt`).
 4. Se cruzaron las dos listas por nombre. Una función sin nombre no se puede
-   cruzar todavía. GX se nombró casi entera con el mapa de *Mario Kart Wii*
-   (`tools/name_from_reference_map.py`, ver [FUNCTION_MAP.md](FUNCTION_MAP.md)).
+   cruzar todavía. GX, OS, DVD y VI se nombraron con el mapa de *Mario Kart
+   Wii* (`tools/name_from_reference_map.py`) y leyendo el código de lo que el
+   mapa no ubicó (ver [FUNCTION_MAP.md](FUNCTION_MAP.md)).
 
 ### Resultado (2026-11-08)
 
 | Biblioteca | Lo que el juego llama | Con nombre | Ya lo da WiiCompiled | Cómo se cubre |
 |---|---:|---:|---:|---|
 | GX (gráficos) | 129 | 117 | **98 de 117** | Nativa, con aurora. Las otras 19 corren traducidas. |
-| OS (sistema) | 108 | 42 | 17 | Nativa en parte: hilos, alarmas, interrupciones, caché. |
-| DVD (disco) | 24 | 7 | 4 | Nativa: lectura de la carpeta extraída. |
-| VI (video) | 32 | 14 | 6 | Nativa. |
+| OS (sistema) | 108 | 101 | 35 | Nativa en parte: hilos, alarmas, interrupciones, caché. |
+| PPC (registros del procesador) | 23 | 23 | 15 | Nativa en parte; el resto toca registros que no existen fuera de la consola. |
+| DVD (disco) | 24 | 21 | 5 | Nativa: lectura de la carpeta extraída. |
+| VI (video) | 32 | 29 | 10 | Nativa. |
 | PAD (control de GameCube) | 6 | 3 | 2 | Nativa. |
 | AI / DSP / AX (audio) | 15 | 8 | 7 | Debajo de AX, nativo; AX corre traducido. |
 | IPC / IOS | 38 | 16 | 2 | Los dispositivos de IOS son nativos; la biblioteca corre traducida. |
 | NAND, SC, WPAD, KPAD, WUD, BTE | 244 | 108 | 2 | Corren traducidas sobre los dispositivos de IOS. |
 | MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 53 | 1 | Código normal: corre traducido. |
-| **Total** | **683** | **368** | **139** | |
+| **Total** | **706** | **479** | **177** | |
 
 Lo importante es la primera fila: **de las 117 funciones de GX que el juego
 llama y ya tienen nombre, WiiCompiled da 98.** Las otras 19 no son un bloqueo,
@@ -82,6 +84,31 @@ porque corren traducidas:
 
 Quedan 12 sin nombre, funciones pequeñas que el juego solo usa por puntero
 para mandar vértices.
+
+### OS, DVD, VI y PPC: mitad nativas, mitad traducidas
+
+Con nombre ya casi todas (ver [FUNCTION_MAP.md](FUNCTION_MAP.md)), se ve que
+aquí WiiCompiled no da la biblioteca entera sino una parte: **35 de 101 en OS,
+5 de 21 en DVD, 10 de 29 en VI.** Las demás corren traducidas. Para la mayoría
+eso no importa: los *arenas* y montones (`OSInitAlloc`, `OSGetArenaHi`…), las
+colas de mensajes y `DVDOpen` solo trabajan con memoria. Lo que hay que cuidar
+al armar la capa son los lugares donde una versión nativa y una traducida
+comparten estado:
+
+- **Hilos.** Son nativas `OSCreateThread`, `OSResumeThread`, `OSSleepThread`,
+  `OSWakeupThread`, `OSCancelThread` y `OSJoinThread`; corren traducidas
+  `OSSuspendThread`, `OSExitThread`, `OSSetIdleFunction`,
+  `OSDisableScheduler` y `OSEnableScheduler`, que leen y escriben las mismas
+  estructuras `OSThread` y las colas de hilos listos (`0x8060DB90`). O las
+  nativas mantienen esas estructuras como el SDK, o hay que hacer nativas
+  también las demás.
+- **Alarmas.** `OSSetAlarm` es nativa; `OSCreateAlarm` y `OSCancelAlarm`, no,
+  y trabajan sobre la misma cola.
+- **Mutex.** `OSLockMutex` y `OSUnlockMutex` son nativas; `OSInitMutex` y
+  `OSTryLockMutex`, no.
+- **DVD.** Solo la inicialización y las lecturas son nativas; `DVDOpen` busca el archivo en la FST
+  que está en memoria, así que la capa tiene que dejarla donde el juego la
+  espera.
 
 ### El juego escribe en la tubería de GX por su cuenta
 
@@ -166,13 +193,11 @@ con `dotnet`.
 
 ### Qué sigue
 
-1. Nombrar OS, DVD y VI como se hizo con GX (`tools/name_from_reference_map.py OS`),
-   y leyendo el código lo que el mapa no ubique.
-2. Una capa propia con las direcciones de este juego: las piezas de
+1. Una capa propia con las direcciones de este juego: las piezas de
    WiiCompiled que sirven (GX, VI, OS, DVD, audio, IOS), registradas en las
    direcciones de Animal Parade. WiiCompiled es GPL-3.0 como este proyecto; lo
    que se tome de él se marca con su origen.
-3. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
+2. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
 
 ---
 
@@ -216,23 +241,25 @@ that are new work for *Magical Melody* (GameCube) are already there:
    `PPC_NATIVE_OVERRIDE_VOID` macros (552 addresses, commit `27ff3b0`) and
    named with its Mario Kart Wii map (`projects/mkwii/MAP.txt`).
 4. The two lists were matched by name. An unnamed function cannot be matched
-   yet. GX was named almost whole from *Mario Kart Wii*'s map
-   (`tools/name_from_reference_map.py`, see [FUNCTION_MAP.md](FUNCTION_MAP.md)).
+   yet. GX, OS, DVD and VI were named from *Mario Kart Wii*'s map
+   (`tools/name_from_reference_map.py`) and by reading the code of what the
+   map could not place (see [FUNCTION_MAP.md](FUNCTION_MAP.md)).
 
 ### Result (2026-11-08)
 
 | Library | What the game calls | Named | Already in WiiCompiled | How it is covered |
 |---|---:|---:|---:|---|
 | GX (graphics) | 129 | 117 | **98 of 117** | Native, with aurora. The other 19 run translated. |
-| OS (system) | 108 | 42 | 17 | Partly native: threads, alarms, interrupts, cache. |
-| DVD (disc) | 24 | 7 | 4 | Native: reading the extracted folder. |
-| VI (video) | 32 | 14 | 6 | Native. |
+| OS (system) | 108 | 101 | 35 | Partly native: threads, alarms, interrupts, cache. |
+| PPC (processor registers) | 23 | 23 | 15 | Partly native; the rest touch registers that only exist on the console. |
+| DVD (disc) | 24 | 21 | 5 | Native: reading the extracted folder. |
+| VI (video) | 32 | 29 | 10 | Native. |
 | PAD (GameCube controller) | 6 | 3 | 2 | Native. |
 | AI / DSP / AX (audio) | 15 | 8 | 7 | Native below AX; AX runs translated. |
 | IPC / IOS | 38 | 16 | 2 | The IOS devices are native; the library runs translated. |
 | NAND, SC, WPAD, KPAD, WUD, BTE | 244 | 108 | 2 | Run translated on top of the IOS devices. |
 | MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 53 | 1 | Ordinary code: runs translated. |
-| **Total** | **683** | **368** | **139** | |
+| **Total** | **706** | **479** | **177** | |
 
 The first row is what matters: **of the 117 GX functions the game calls that
 have a name, WiiCompiled provides 98.** The other 19 are not a blocker,
@@ -253,6 +280,30 @@ because they run translated:
 
 12 are still unnamed: small functions the game only uses through a pointer, to
 send vertices.
+
+### OS, DVD, VI and PPC: half native, half translated
+
+With almost all of them named now (see [FUNCTION_MAP.md](FUNCTION_MAP.md)), it
+shows that here WiiCompiled does not provide the whole library but a part:
+**35 of 101 in OS, 5 of 21 in DVD, 10 of 29 in VI.** The rest run translated.
+For most of them that does not matter: the arenas and heaps (`OSInitAlloc`,
+`OSGetArenaHi`…), the message queues and `DVDOpen` only work on memory. What
+needs care when the layer is built are the places where a native version and a
+translated one share state:
+
+- **Threads.** `OSCreateThread`, `OSResumeThread`, `OSSleepThread`,
+  `OSWakeupThread`, `OSCancelThread` and `OSJoinThread` are native;
+  `OSSuspendThread`, `OSExitThread`, `OSSetIdleFunction`,
+  `OSDisableScheduler` and `OSEnableScheduler` run translated, and they read
+  and write the same `OSThread` structures and the queues of ready threads
+  (`0x8060DB90`). Either the native ones keep those structures as the SDK
+  does, or the others must be made native too.
+- **Alarms.** `OSSetAlarm` is native; `OSCreateAlarm` and `OSCancelAlarm` are
+  not, and they work on the same queue.
+- **Mutexes.** `OSLockMutex` and `OSUnlockMutex` are native; `OSInitMutex` and
+  `OSTryLockMutex` are not.
+- **DVD.** Only the initialization and the reads are native; `DVDOpen` looks the file up in the FST
+  in memory, so the layer must leave it where the game expects it.
 
 ### The game writes into the GX pipe on its own
 
@@ -336,10 +387,8 @@ through `dotnet`.
 
 ### What comes next
 
-1. Name OS, DVD and VI as was done with GX (`tools/name_from_reference_map.py OS`),
-   and by reading the code whatever the map cannot place.
-2. A layer of our own at this game's addresses: the pieces of WiiCompiled that
+1. A layer of our own at this game's addresses: the pieces of WiiCompiled that
    serve (GX, VI, OS, DVD, audio, IOS), registered at Animal Parade's
    addresses. WiiCompiled is GPL-3.0 like this project; whatever is taken from
    it is marked with where it came from.
-3. Reach the title screen and compare it with the version on ModernGekko.
+2. Reach the title screen and compare it with the version on ModernGekko.
