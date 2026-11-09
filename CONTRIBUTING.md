@@ -52,7 +52,10 @@ entienda qué hace y por qué, sin tener que preguntarle a nadie.
   python3 -m pytest
   ```
 - Las pruebas no deben necesitar datos del juego. Las que sí los necesitan
-  se saltan solas salvo que `HM_AP_DOL` apunte a tu `main.dol`.
+  se saltan solas salvo que `HM_AP_DOL` apunte a tu `main.dol`. Igual con
+  `HM_AP_SIGNATURE_DB` (la base de firmas de Dolphin), `HM_AP_REFERENCE_MAP`
+  (el mapa de *Mario Kart Wii* de WiiCompiled) y `HM_AP_WIICOMPILED` (una
+  copia de WiiCompiled).
 - Un script = una tarea, con un docstring que diga para qué sirve y cómo se
   usa.
 - Las rutas por defecto salen de `tools/project.py` (relativas a la raíz del
@@ -144,7 +147,10 @@ it does and why, without having to ask anyone.
   python3 -m pytest
   ```
 - Tests must not need game data. Those that do skip themselves unless
-  `HM_AP_DOL` points to your `main.dol`.
+  `HM_AP_DOL` points to your `main.dol`. The same goes for
+  `HM_AP_SIGNATURE_DB` (Dolphin's signature database), `HM_AP_REFERENCE_MAP`
+  (WiiCompiled's *Mario Kart Wii* map) and `HM_AP_WIICOMPILED` (a clone of
+  WiiCompiled).
 - One script = one task, with a docstring saying what it is for and how to
   use it.
 - Default paths come from `tools/project.py` (relative to the repository
