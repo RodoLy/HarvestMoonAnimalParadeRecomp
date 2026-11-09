@@ -1,0 +1,55 @@
+# Where this game keeps what WiiCompiled's native GX looks for at Mario Kart Wii's addresses.
+# Dónde guarda este juego lo que el GX nativo de WiiCompiled busca en las direcciones de Mario Kart Wii.
+#
+# The columns are those of RBIEE9-os-addresses.txt; tests/test_wiicompiled_addresses.py checks every row.
+# Las columnas son las de RBIEE9-os-addresses.txt.
+#
+# The big variables of GX sit in .bss in the same order and at the same distances in both games, from
+# the FIFO object GXInit uses to the saved CPU FIFO of the display lists; the small ones (.sbss) too,
+# each 0x332E058 bytes further on than in Mario Kart Wii.
+#
+# covers: runtime/src/hle/gx
+
+# ---------------------------------------------------------------- functions
+0x8016C668  0x802772F0  GXCPInterruptHandler                            name
+0x8016ECCC  0x80279580  GXTokenInterruptHandler                         name
+0x8016ED94  0x80279660  GXFinishInterruptHandler                        name
+0x8016ED50  0x80279610  GXSetDrawDoneCallback (only Mario Kart Wii's EGG code calls it from WiiCompiled)  name
+
+# ---------------------------------------------------------------- GXInit.c, GXFifo.c, GXDisplayList.c (.bss)
+0x80343740  0x80629300  the FIFO object GXInit sets up                  GXInit
+0x803437C0  0x80629380  __GXData, the structure `gx` points at          held at 0x806B91F8
+0x80343DC0  0x80629980  GPFifo, the FIFO object the GPU reads           GXSetGPFifo
+0x80343DE4  0x806299A4  CPUFifo, the FIFO object the CPU writes         GXSetCPUFifo
+0x80344090  0x806299C8  DisplayListFifo: base                           GXBeginDisplayList
+0x80344094  0x806299CC  DisplayListFifo: top                            GXBeginDisplayList
+0x80344098  0x806299D0  DisplayListFifo: size                           GXBeginDisplayList
+0x803440A4  0x806299DC  DisplayListFifo: read pointer                   GXBeginDisplayList
+0x803440A8  0x806299E0  DisplayListFifo: write pointer                  GXBeginDisplayList
+0x803440AC  0x806299E4  DisplayListFifo: count                          GXBeginDisplayList
+0x80344110  0x80629A48  __savedGXdata, the 0x600 bytes of `gx` kept while a list is made  GXBeginDisplayList
+0x80344710  0x8062A048  OldCPUFifo, the CPU FIFO to go back to          GXEndDisplayList
+
+# ---------------------------------------------------------------- the small ones (.sbss, .sdata2)
+0x803867B0  0x806B4808  CPGPLinked (a byte): the CPU and GPU FIFOs are the same  GXSetCPUFifo
+0x803867B1  0x806B4809  GPFifoReady (a byte)                            GXSetGPFifo
+0x803867C0  0x806B4818  the thread queue the CP interrupt wakes         GXCPInterruptHandler
+0x803867C4  0x806B481C  __GXCurrentThread                               GXCPInterruptHandler
+0x803867D0  0x806B4828  FinishQueue, where GXDrawDone waits             GXDrawDone
+0x803867D8  0x806B4830  DrawDone (the next word but one holds GXSetDrawDoneCallback's callback)  GXDrawDone
+0x803886C8  0x806B91F8  `gx`, the pointer to __GXData                   GXInit
+
+# ---------------------------------------------------------------- Mario Kart Wii only (its EGG engine)
+0x8020FF9C  -           EGG::AsyncDisplay::endRender                    -
+0x80219FB4  -           EGG::Display::copyEFBtoXFB                      -
+0x802574A0  -           vertex positions of EGG::DrawGX                  -
+0x802574E0  -           vertex normals of EGG::DrawGX                    -
+0x80257520  -           vertex positions of EGG::DrawGX                  -
+0x80257540  -           vertex positions of EGG::DrawGX                  -
+0x80388B80  -           vertex normals of EGG::DrawGX                    -
+0x80388BA0  -           vertex normals of EGG::DrawGX                    -
+0x80388BC0  -           vertex positions of EGG::DrawGX                  -
+0x80388BE0  -           vertex positions and texture coordinates of EGG::DrawGX  -
+0x80388DD0  -           a fog constant of EGG                           -
+0x80388DE0  -           a fog constant of EGG                           -
+0x80388DF4  -           a fog constant of EGG                           -
