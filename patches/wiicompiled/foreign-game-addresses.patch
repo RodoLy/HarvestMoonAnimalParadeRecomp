@@ -20,7 +20,7 @@ index 4ca4439..cd7d8c4 100644
  // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
  #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
-index 1836717..a572704 100644
+index 1836717..3ed5eb8 100644
 --- a/runtime/include/guest_abi/guest_region.h
 +++ b/runtime/include/guest_abi/guest_region.h
 @@ -9,6 +9,11 @@
@@ -125,7 +125,7 @@ index 1836717..a572704 100644
                                        : throw "PAL address outside guest_abi/guest_versions.inc";
  }
  
-@@ -105,13 +160,19 @@ namespace GuestRegion {
+@@ -105,16 +160,37 @@ namespace GuestRegion {
  
  inline Id Current() noexcept { return static_cast<Id>(kMkwGuestRegion); }
  
@@ -147,7 +147,25 @@ index 1836717..a572704 100644
      }
  }
  
-@@ -123,8 +184,6 @@ inline bool Is(uint32_t target) noexcept {
++// The address in this game, or 0 where a foreign game has no such address: for the few places that
++// can do without it, such as an SDK flag the runtime only clears.
++template <uint32_t Pal>
++inline uint32_t AddressIfPresent() noexcept {
++    constexpr Row row = RowOf(Pal);
++    return row.In(Current());
++}
++
++// Whether value is the address of Pal in this game; never true where a foreign game has no such address.
++template <uint32_t Pal>
++inline bool IsAddress(uint32_t value) noexcept {
++    const uint32_t address = AddressIfPresent<Pal>();
++    return address != 0 && value == address;
++}
++
+ // Folds to false at compile time for a constant target that no region uses for Pal.
+ template <uint32_t Pal>
+ inline bool Is(uint32_t target) noexcept {
+@@ -123,8 +199,6 @@ inline bool Is(uint32_t target) noexcept {
             target == row.In(Current());
  }
  
@@ -156,7 +174,7 @@ index 1836717..a572704 100644
  // For hand-written registrations, which name the PAL address.
  inline uint32_t Translate(uint32_t pal) noexcept {
      const Mapping mapping = Map(pal, Current());
-@@ -134,6 +193,15 @@ inline uint32_t Translate(uint32_t pal) noexcept {
+@@ -134,6 +208,15 @@ inline uint32_t Translate(uint32_t pal) noexcept {
      return mapping.address;
  }
  
@@ -172,7 +190,7 @@ index 1836717..a572704 100644
  struct Facts {
      const char* gameId;
      char letter;
-@@ -152,6 +220,11 @@ inline constexpr Facts kFacts[kCount] = {
+@@ -152,6 +235,11 @@ inline constexpr Facts kFacts[kCount] = {
      {"RMCP01", 'P', 0x524D4350u, 1u, 0x80399180u, "EUR", "RVL-001(EUR)", "LEH", "PAL", "EU"},
      {"RMCE01", 'E', 0x524D4345u, 0u, 0x80394E00u, "USA", "RVL-001(USA)", "LU", "NTSC", "US"},
      {"RMCJ01", 'J', 0x524D434Au, 0u, 0x80398B00u, "JPN", "RVL-001(JPN)", "LJ", "NTSC", "JP"},
@@ -184,10 +202,13 @@ index 1836717..a572704 100644
  };
  
  inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(Current())]; }
-@@ -160,7 +233,35 @@ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(
+@@ -159,8 +247,38 @@ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(
+ } // namespace GuestRegion
  
  #define MKW_GADDR(pal) (::GuestRegion::Address<0x##pal##u>())
- 
++#define MKW_GADDR_IF_PRESENT(pal) (::GuestRegion::AddressIfPresent<0x##pal##u>())
++#define MKW_GADDR_IS(pal, value) (::GuestRegion::IsAddress<0x##pal##u>(value))
++
 +namespace GuestRegion {
 +
 +inline bool IsForeignGame() noexcept { return Current() == Id::ForeignGame; }
@@ -202,7 +223,7 @@ index 1836717..a572704 100644
 +} // namespace GuestRegion
 +
 +#define MKW_GADDR_LAZY(pal) (::GuestRegion::LazyAddress<0x##pal##u>{})
-+
+ 
  #if defined(MKW_TRANSLATED_GUEST_REGION)
 +namespace GuestRegion {
 +
@@ -312,6 +333,61 @@ index 67f94fb..4c9e754 100644
      g_widescreen = widescreen;
      g_forceAspect = forceAspect;
      g_requestedForceAspect.store(forceAspect, std::memory_order_relaxed);
+diff --git a/runtime/src/fiber_manager.cpp b/runtime/src/fiber_manager.cpp
+index 87fb7c5..3e592ea 100644
+--- a/runtime/src/fiber_manager.cpp
++++ b/runtime/src/fiber_manager.cpp
+@@ -584,7 +584,7 @@ void GuestFiberManager::FiberProc(void* param)
+     CpuContextScope scope(cpu);
+     
+     int startDeferAttempts = 0;
+-    while (entryPoint == MKW_GADDR(8024373c)) { // EGG::Thread::start
++    while (MKW_GADDR_IS(8024373c, entryPoint)) { // EGG::Thread::start
+         uint32_t vtable = 0;
+         uint32_t startFn = 0;
+         try {
+diff --git a/runtime/src/hle/os/os_thread.cpp b/runtime/src/hle/os/os_thread.cpp
+index d2423e6..e764565 100644
+--- a/runtime/src/hle/os/os_thread.cpp
++++ b/runtime/src/hle/os/os_thread.cpp
+@@ -73,7 +73,7 @@ int32_t ComputeThreadEffectivePriority(uint32_t threadPtr)
+ 
+ bool IsThpVideoDecoderEntry(uint32_t entryFunc)
+ {
+-    return entryFunc == MKW_GADDR(805529A8) || entryFunc == MKW_GADDR(80552A74);
++    return MKW_GADDR_IS(805529A8, entryFunc) || MKW_GADDR_IS(80552A74, entryFunc);
+ }
+ 
+ void InsertThreadIntoQueueByPriority(uint32_t queuePtr, uint32_t threadPtr, int32_t priority)
+diff --git a/runtime/src/hle/storage/dvd.cpp b/runtime/src/hle/storage/dvd.cpp
+index b76e5e1..95ed9a3 100644
+--- a/runtime/src/hle/storage/dvd.cpp
++++ b/runtime/src/hle/storage/dvd.cpp
+@@ -778,12 +778,18 @@ static void CompleteDvdCancelState()
+ 
+     // These are the SDK DVD globals used by DVDCancelAll/__DVDPrepareReset.
+     // The actual drive work is HLE'd, so complete pending cancel/reset waits.
+-    Memory::Write32(MKW_GADDR(80386664), 0); // Canceling
+-    Memory::Write32(MKW_GADDR(80386668), 0); // ResumeFromHere
+-    Memory::Write32(MKW_GADDR(80386670), 0); // PausingFlag
+-    Memory::Write32(MKW_GADDR(8038667C), 1); // CancelAllSync complete
+-    Memory::Write32(MKW_GADDR(803866A8), 1); // PrepareReset complete
+-    Memory::Write32(MKW_GADDR(803866F0), 0); // executing command block
++    // A foreign game's dvd.c may lay these out differently; one it does not have is left alone.
++    const auto writeIfPresent = [](uint32_t address, uint32_t value) {
++        if (address != 0) {
++            Memory::Write32(address, value);
++        }
++    };
++    writeIfPresent(MKW_GADDR_IF_PRESENT(80386664), 0); // Canceling
++    writeIfPresent(MKW_GADDR_IF_PRESENT(80386668), 0); // ResumeFromHere
++    writeIfPresent(MKW_GADDR_IF_PRESENT(80386670), 0); // PausingFlag
++    writeIfPresent(MKW_GADDR_IF_PRESENT(8038667C), 1); // CancelAllSync complete
++    writeIfPresent(MKW_GADDR_IF_PRESENT(803866A8), 1); // PrepareReset complete
++    writeIfPresent(MKW_GADDR_IF_PRESENT(803866F0), 0); // executing command block
+ }
+ 
+ // 0x8015EA1C -> DVDInit
 diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
 index cd236a9..00d3693 100644
 --- a/runtime/src/hle/vi.cpp
@@ -358,3 +434,20 @@ index ad031c1..18bf15f 100644
      uint32_t soundManager = 0;
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
+diff --git a/runtime/src/system_bridge.cpp b/runtime/src/system_bridge.cpp
+index 99f2abd..cbaefb2 100644
+--- a/runtime/src/system_bridge.cpp
++++ b/runtime/src/system_bridge.cpp
+@@ -370,6 +370,12 @@ void SystemBridge::Initialize() {
+     }
+     RT_LOG(RT_TAG_RUNTIME) << "Executed " << dolCount << " main DOL static constructors." << std::endl;
+ 
++    // A foreign game has no StaticR.rel.
++    if (::GuestRegion::IsForeignGame()) {
++        g_suppressSehReporting = false;
++        return;
++    }
++
+     // StaticR.rel ctors must be run manually since we aren't using OSLink
+     RT_LOG(RT_TAG_RUNTIME) << "Running static constructors for StaticR.rel..." << std::endl;
+ 

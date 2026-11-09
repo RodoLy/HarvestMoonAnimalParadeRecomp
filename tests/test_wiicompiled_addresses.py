@@ -32,7 +32,7 @@ COVERS = "# covers:"
 FUNCTION_EVIDENCE = "name"
 HELD_AT = "held at "
 NOTHING = "-"
-GUEST_ADDRESS = re.compile(r"MKW_GADDR(?:_CT|_LAZY)?\((?P<address>[0-9A-Fa-f]{8})\)")
+GUEST_ADDRESS = re.compile(r"MKW_GADDR(?:_CT|_LAZY|_IF_PRESENT|_IS)?\((?P<address>[0-9A-Fa-f]{8})[,)]")
 
 DOL_PATH = os.environ.get("HM_AP_DOL")
 WIICOMPILED = os.environ.get("HM_AP_WIICOMPILED")
