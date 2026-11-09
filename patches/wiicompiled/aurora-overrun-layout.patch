@@ -1,0 +1,44 @@
+diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
+index 136ffb6..f367955 100644
+--- a/lib/gx/command_processor.cpp
++++ b/lib/gx/command_processor.cpp
+@@ -410,7 +410,7 @@ ProcessResult process(const u8* data, u32 size) noexcept {
+   return {size, false};
+ }
+ 
+-static void handle_draw_overrun(size_t totalVtxBytes, ByteReader& reader) noexcept {
++static void handle_draw_overrun(GXVtxFmt fmt, size_t totalVtxBytes, ByteReader& reader) noexcept {
+   static int sLogged = 0;
+   if (sLogged >= 64) {
+     reader.skip(reader.remaining());
+@@ -434,6 +434,21 @@ static void handle_draw_overrun(size_t totalVtxBytes, ByteReader& reader) noexce
+   Log.warn("draw vertex data overrun: need {} bytes at pos {}, have {}; skipping the rest of the buffer",
+            totalVtxBytes, pos, reader.remaining());
+   Log.warn("  hex dump around draw cmd (pos {}-{}):{}", dumpStart, dumpEnd - 1, hex);
++  // The layout the size came from, to tell a wrong descriptor from a wrong format: each present
++  // attribute as name:type(1 direct, 2 index8, 3 index16)/count/component type.
++  static constexpr const char* kNames[] = {"PNMTX", "T0MTX", "T1MTX", "T2MTX", "T3MTX", "T4MTX", "T5MTX",
++                                           "T6MTX", "T7MTX", "POS",   "NRM",   "CLR0",  "CLR1",  "TEX0",
++                                           "TEX1",  "TEX2",  "TEX3",  "TEX4",  "TEX5",  "TEX6",  "TEX7"};
++  std::string layout;
++  for (int i = GX_VA_PNMTXIDX; i <= GX_VA_TEX7; ++i) {
++    if (g_gxState.vtxDesc[i] == GX_NONE) {
++      continue;
++    }
++    const auto& attrFmt = g_gxState.vtxFmts[fmt].attrs[i];
++    layout += fmt::format(" {}:{}/{}/{}", kNames[i], static_cast<int>(g_gxState.vtxDesc[i]),
++                          static_cast<int>(attrFmt.cnt), static_cast<int>(attrFmt.type));
++  }
++  Log.warn("  format {} layout:{}", static_cast<int>(fmt), layout);
+   reader.skip(reader.remaining());
+ }
+ 
+@@ -660,7 +675,7 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
+   u32 totalVtxBytes = vtxCount * vtxSize;
+   if (totalVtxBytes > reader.remaining())
+     UNLIKELY {
+-      handle_draw_overrun(totalVtxBytes, reader);
++      handle_draw_overrun(fmt, totalVtxBytes, reader);
+       return;
+     }
+ 

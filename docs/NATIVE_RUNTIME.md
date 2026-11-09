@@ -272,6 +272,9 @@ explícita en lugar de tramos:
   que es un submódulo) sube de 8 a 32 MiB el búfer donde aurora pone los
   arreglos de vértices de cada cuadro: justo después del paseo en carreta del
   inicio, este juego pide un poco más de 8 MiB y aurora se detenía.
+- `patches/wiicompiled/aurora-overrun-layout.patch` hace que el aviso de aurora
+  sobre un dibujo con menos datos de los que espera diga también qué formato
+  de vértices usó para calcular su tamaño.
 - `patches/wiicompiled/foreign-game-translator.patch` hace que el traductor
   compile para `ForeignGame` (`MKW_TRANSLATED_GUEST_REGION 3`) todo juego que
   no sea *Mario Kart Wii*. Sin él, un ID desconocido como `RBIEE9` caía en PAL
@@ -323,6 +326,7 @@ git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-storage-buffer.patch
+git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-overrun-layout.patch
 
 # Desde harvest-moon-ap-recomp: el mapa de funciones y la capa.
 python3 tools/export_wiicompiled_map.py          # pone al día wiicompiled/RBIEE9-MAP.txt
@@ -701,6 +705,9 @@ instead of stretches:
   submodule) raises the buffer aurora puts each frame's vertex arrays in from
   8 to 32 MiB: right after the opening cart ride this game asks for a little
   over 8 MiB, and aurora stopped.
+- `patches/wiicompiled/aurora-overrun-layout.patch` makes aurora's warning
+  about a draw with less data than it expects also say which vertex layout it
+  computed the size from.
 - `patches/wiicompiled/foreign-game-translator.patch` makes the translator
   build every game that is not *Mario Kart Wii* for `ForeignGame`
   (`MKW_TRANSLATED_GUEST_REGION 3`). Without it, an unknown ID such as
@@ -753,6 +760,7 @@ git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-storage-buffer.patch
+git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-overrun-layout.patch
 
 # From harvest-moon-ap-recomp: the function map and the layer.
 python3 tools/export_wiicompiled_map.py          # brings wiicompiled/RBIEE9-MAP.txt up to date

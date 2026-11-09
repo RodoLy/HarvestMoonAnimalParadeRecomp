@@ -76,9 +76,11 @@ jobs:
             git -C $env:WIICOMPILED apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\$patch.patch"
             if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
           }
-          # aurora is a submodule, so its patch applies inside it.
-          git -C (Join-Path $env:WIICOMPILED 'aurora-main') apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\aurora-storage-buffer.patch"
-          if ($LASTEXITCODE -ne 0) { throw 'aurora-storage-buffer.patch does not apply.' }
+          # aurora is a submodule, so its patches apply inside it.
+          foreach ($patch in 'aurora-storage-buffer', 'aurora-overrun-layout') {
+            git -C (Join-Path $env:WIICOMPILED 'aurora-main') apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\$patch.patch"
+            if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
+          }
 
       # The layer is written from symbols.txt and WiiCompiled's sources, so it is made here, and it
       # has to be in runtime\include before the precompiled runtime archive is built.
