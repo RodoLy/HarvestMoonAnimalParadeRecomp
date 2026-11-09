@@ -137,6 +137,51 @@ EVIDENCE = [
         stored_offsets={0x4010, 0x4020},
         callees={"OSRegisterShutdownFunction", "__OSSetInterruptHandler"},
     ),
+    # Starts the IPC client: its buffers, IPCInit, its interrupt handler and the first write to the IPC
+    # control register; IPCCltReInit follows it.
+    Evidence(
+        0x8029DF00,
+        "IPCCltInit",
+        0xC0,
+        callees={"IPCInit", "IPCWriteReg", "__OSSetInterruptHandler"},
+        comes_before="IPCCltReInit",
+    ),
+    # Reads the controllers: SI's status and responses, resetting a pad that went away; PADControlMotor
+    # follows it, as in the SDK.
+    Evidence(
+        0x8026DB00,
+        "PADRead",
+        0x4C0,
+        callees={"SIGetStatus", "SIGetResponse", "PADReset"},
+        comes_before="PADControlMotor",
+    ),
+    # Stops the machine with a message on screen: aborts GX, takes the EXI bus and clears the context.
+    Evidence(0x80256040, "OSFatal", 0x1E8, callees={"GXAbortFrame", "OSClearContext", "EXILock"}),
+    # Picks the SI polling lines for the TV format and sets them with SISetXY.
+    Evidence(
+        0x80295210,
+        "SISetSamplingRate",
+        0xD4,
+        callees={"SISetXY", "VIGetTvFormat"},
+        comes_after="SIGetTypeAsync",
+    ),
+    # The disc check OSInit runs for a disc game: it reads with DVDLowUnencryptedRead, looks at the IOS
+    # version and stops with OSFatal when the drive is not right.
+    Evidence(
+        0x80265980,
+        "__DVDCheckDevice",
+        0x27C,
+        callees={"DVDLowUnencryptedRead", "__OSGetIOSRev", "OSFatal"},
+    ),
+    # Each DVDLow function sends one command to /dev/di with IOS_IoctlAsync; the command number is the
+    # drive's: 0x70 read disc ID, 0x8D unencrypted read, 0x12 inquiry, 0x71 read, 0xAB seek, 0x86 clear the
+    # cover interrupt.
+    Evidence(0x80266040, "DVDLowReadDiskID", 0x18C, constants={0x70}, callees={"IOS_IoctlAsync"}),
+    Evidence(0x80266CD0, "DVDLowUnencryptedRead", 0x198, constants={0x8D}, callees={"IOS_IoctlAsync"}),
+    Evidence(0x80267010, "DVDLowInquiry", 0x16C, constants={0x12}, callees={"IOS_IoctlAsync"}),
+    Evidence(0x80267950, "DVDLowRead", 0x1B0, constants={0x71}, callees={"IOS_IoctlAsync"}),
+    Evidence(0x80267B00, "DVDLowSeek", 0x180, constants={0xAB}, callees={"IOS_IoctlAsync"}),
+    Evidence(0x80268130, "DVDLowClearCoverInterrupt", 0x168, constants={0x86}, callees={"IOS_IoctlAsync"}),
 ]
 
 
@@ -208,3 +253,31 @@ def test_the_asynchronous_ios_call_comes_first_and_saves_more_registers(game, pa
         assert synchronous.address < following.address
     thunks = thunk_names(dol)
     assert saved_registers(dol, asynchronous, thunks) > saved_registers(dol, synchronous, thunks)
+
+
+# The Bluetooth items of SYSCONF: BT.DINF (item 0x1C, 0x461 bytes) and BT.CDIF (item 0x1D, 0x205 bytes).
+# Each of these three is two loads and a jump: to SCFindByteArrayItem to read the item, or to
+# SCReplaceByteArrayItem to write it. SCSetBtCmpDevInfoArray, the fourth, already had its name.
+BLUETOOTH_ITEMS = [
+    ("SCGetBtDeviceInfoArray", 0x461, 0x1C, "SCFindByteArrayItem"),
+    ("SCSetBtDeviceInfoArray", 0x461, 0x1C, "SCReplaceByteArrayItem"),
+    ("SCGetBtCmpDevInfoArray", 0x205, 0x1D, "SCFindByteArrayItem"),
+]
+LOAD_IMMEDIATE = 14 << 26
+BRANCH = 18 << 26
+
+
+@needs_game_files
+@pytest.mark.parametrize("item", BLUETOOTH_ITEMS, ids=lambda item: item[0])
+def test_a_bluetooth_item_accessor_loads_the_item_and_jumps_to_the_right_function(game, item):
+    dol, symbols, _, _ = game
+    name, size, item_id, target = item
+    function = symbols.by_name(name)
+    assert function.size == 0xC
+    first, second, jump = (dol.u32(function.address + offset) for offset in (0, 4, 8))
+    assert (first & 0xFC1F0000, first & 0xFFFF) == (LOAD_IMMEDIATE, size)  # li r4, size
+    assert (second & 0xFC1F0000, second & 0xFFFF) == (LOAD_IMMEDIATE, item_id)  # li r5, item
+    assert jump & 0xFC000003 == BRANCH
+    offset = jump & 0x03FFFFFC
+    destination = function.address + 8 + (offset - 0x04000000 if offset & 0x02000000 else offset)
+    assert symbols.by_address[destination].name == target
