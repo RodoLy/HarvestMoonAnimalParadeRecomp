@@ -268,6 +268,14 @@ explícita en lugar de tramos:
   que este juego no tiene no se registra (el registro salta la dirección 0), y
   un `MKW_GADDR` de una dirección así detiene el runtime cuando se llega a él.
   Sin la tabla, las tres regiones de *Mario Kart Wii* compilan como antes.
+- El mismo parche apaga lo que es solo de *Mario Kart Wii* y correría con
+  cualquier juego: su pantalla ancha dinámica (pantallas de EGG), la atenuación
+  de música (su gestor de sonido) y la espera por `EGG::sSystem` antes del
+  callback de después del retrazo (aquí corre como en el SDK). Esas 14
+  constantes estaban a nivel de archivo y se calculaban al arrancar, así que
+  con este juego el runtime se habría detenido antes de empezar; ahora usan
+  `MKW_GADDR_LAZY`, que busca la dirección al leerla. `boot_race.cpp` solo
+  actúa con sus opciones de línea de comandos.
 - `tools/export_wiicompiled_layer.py` escribe esos dos archivos y
   `native/natives.cpp`, que el traductor lee para saber qué funciones son
   nativas aquí. Coloca **271 de las 582 nativas** de WiiCompiled: cada una en
@@ -279,7 +287,10 @@ explícita en lugar de tramos:
 - `tests/test_foreign_game_patch.py` genera la capa, la compila con
   `wiicompiled/checks/foreign_game_addresses.cpp` contra un WiiCompiled
   parchado y la corre: `OSSleepThread` cae en `0x8025B8A0`, una nativa de EGG
-  no se registra y una constante de EGG detiene el programa.
+  no se registra, y una constante de EGG declarada a nivel de archivo no
+  detiene el arranque, solo su lectura. Los tres archivos del runtime que el
+  parche toca dan, al compilarlos aquí, los mismos errores con y sin el
+  parche (vienen de compilar aurora sin su configuración).
 
 Con la capa, el traductor reconoce las 271 nativas y no las mete en línea
 (22 197 llamadas en línea en vez de 24 041). Las llamadas a ellas pasan por el
@@ -327,9 +338,8 @@ con `dotnet`.
 1. Compilar el runtime de WiiCompiled con la capa, con
    `MKW_TRANSLATED_GUEST_REGION=3` (el destino `ForeignGame`), en una PC con
    GPU.
-2. Quitar del runtime lo que es solo de *Mario Kart Wii* y se ejecuta al
-   arrancar (`boot_race.cpp`, `task_thread.cpp`): sin direcciones aquí,
-   detendría el runtime en cuanto se llegue a ello.
+2. Ver qué más se detiene al correr: cada `MKW_GADDR` sin dirección aquí
+   dice cuál es al detener el runtime, y esa es la lista de lo que falta.
 3. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
 
 ---
@@ -597,6 +607,14 @@ instead of stretches:
   game does not have is left unregistered (the registry skips address 0), and
   an `MKW_GADDR` of such an address stops the runtime when reached. Without the
   table, *Mario Kart Wii*'s three regions build as before.
+- The same patch turns off what belongs to *Mario Kart Wii* alone and would
+  run with any game: its dynamic widescreen (EGG's screens), the music
+  attenuation (its sound manager) and the wait for `EGG::sSystem` before the
+  post-retrace callback (here it runs as in the SDK). Those 14 constants sat at
+  file scope and were computed at startup, so with this game the runtime would
+  have stopped before it began; now they use `MKW_GADDR_LAZY`, which looks the
+  address up when it is read. `boot_race.cpp` only acts on its command-line
+  options.
 - `tools/export_wiicompiled_layer.py` writes those two files and
   `native/natives.cpp`, which the translator reads to know which functions are
   native here. It places **271 of WiiCompiled's 582 natives**, each at the
@@ -608,7 +626,10 @@ instead of stretches:
 - `tests/test_foreign_game_patch.py` writes the layer, builds it with
   `wiicompiled/checks/foreign_game_addresses.cpp` against a patched WiiCompiled
   and runs it: `OSSleepThread` lands at `0x8025B8A0`, an EGG native is left
-  unregistered and an EGG constant stops the program.
+  unregistered, and an EGG constant declared at file scope does not stop the
+  startup, only its reading. The three runtime files the patch touches give,
+  when compiled here, the same errors with and without the patch (they come
+  from building aurora without its configuration).
 
 With the layer, the translator recognizes the 271 natives and does not inline
 them (22,197 inlined calls instead of 24,041). Calls to them go through the
@@ -657,7 +678,7 @@ through `dotnet`.
 1. Build WiiCompiled's runtime with the layer, with
    `MKW_TRANSLATED_GUEST_REGION=3` (the `ForeignGame` destination), on a PC
    with a GPU.
-2. Take out of the runtime what belongs to *Mario Kart Wii* alone and runs at
-   boot (`boot_race.cpp`, `task_thread.cpp`): with no addresses here, it would
-   stop the runtime as soon as it is reached.
+2. See what else stops when it runs: every `MKW_GADDR` with no address here
+   names itself when it stops the runtime, and that is the list of what is
+   left.
 3. Reach the title screen and compare it with the version on ModernGekko.
