@@ -72,6 +72,16 @@ def test_two_natives_just_as_sure_of_one_address_get_neither():
     assert clashes == [(0x80278B20, [one, other])]
 
 
+def test_nand_init_stays_the_game_s_own():
+    # Its NAND calls read the current directory, which only the original NANDInit sets.
+    symbols = table(("NANDInit", 0x802A24F0), ("ESP_GetDataDir", 0x802EE040))
+    nand_init = native(0x8019E18C, "NANDInit_HLE", "NANDInit")
+    data_dir = native(0x80167904, "ESP_GetDataDir_stub", "ESP_GetDataDir")
+    placed, missing, _ = place_natives([nand_init, data_dir], symbols)
+    assert [(item.replacement, item.here) for item in placed] == [(data_dir, 0x802EE040)]
+    assert missing == []
+
+
 def test_the_registration_is_copied_with_this_game_s_address():
     override = native(
         0x801AA9B8,

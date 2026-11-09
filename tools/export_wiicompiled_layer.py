@@ -107,6 +107,21 @@ def same_letters(name: str) -> str:
 SDK_STATIC_NATIVES = {"SelectThread"}
 
 
+# SDK functions this game keeps translated although WiiCompiled has a native for them: the native does
+# only what Mario Kart Wii needs, and this game needs what the original does.
+# Funciones del SDK que este juego deja traducidas aunque WiiCompiled tenga nativa: la nativa hace solo lo
+# que necesita Mario Kart Wii, y este juego necesita lo que hace la original.
+KEPT_TRANSLATED = {
+    # Mario Kart Wii's NAND calls are all natives that find the save folder themselves; its NANDInit only
+    # fills the home directory. Here the NAND calls are the game's own and resolve "save/s0000.sv" against
+    # the current directory, which only the original NANDInit sets (to the home directory). It still runs
+    # on natives: ISFS_OpenLib, ESP_GetTitleId and ESP_GetDataDir.
+    # Las llamadas NAND de este juego son suyas y usan el directorio actual, que solo la NANDInit original
+    # pone; ella sigue usando las nativas ISFS_OpenLib, ESP_GetTitleId y ESP_GetDataDir.
+    "NANDInit",
+}
+
+
 def is_sdk_name(name: str) -> bool:
     return bool(library_of(name)) or name in SDK_STATIC_NATIVES
 
@@ -152,6 +167,8 @@ def place_natives(
             missing.append(replacement)
             continue
         ((here, name),) = found.items()
+        if name in KEPT_TRANSLATED:
+            continue
         candidates[here].append((sureness, replacement, name))
 
     placed, clashes = [], []
@@ -287,6 +304,7 @@ def main() -> int:
     sdk_missing = [replacement for replacement in missing if any(library_of(n) for n in replacement.names)]
     print(f"  {len(sdk_missing)} SDK functions this game does not have (or has not named yet)")
     print(f"  {len(missing) - len(sdk_missing)} of Mario Kart Wii's own code")
+    print(f"  {len(KEPT_TRANSLATED)} kept translated on purpose: {', '.join(sorted(KEPT_TRANSLATED))}")
     for here, rivals in clashes:
         functions = ", ".join(replacement.function for replacement in rivals)
         print(f"  0x{here:08X} left out, two natives would take it: {functions}")
