@@ -249,26 +249,67 @@ Sin el mapa, el traductor solo habría visto la cuarta parte del juego.
    están en las direcciones de Mario Kart Wii. Con eso trató 583 direcciones de
    este juego como funciones nativas: no las metía en línea y, en 582, suponía
    los efectos de registros de otra función al llamarlas. Se notó en el código
-   generado (24 041 llamadas en línea con la corrección, 23 953 sin ella). El manifiesto ahora apunta a una
-   carpeta vacía (`native_registration_root`), y la traducción da 0 nativas.
+   generado (24 041 llamadas en línea con la corrección, 23 953 sin ella). El
+   manifiesto ahora apunta a su propia carpeta (`native_registration_root`),
+   que solo tiene las nativas de la capa (abajo).
 
-Lo que sigue es el runtime: registrar en las direcciones de Animal Parade las
-piezas de WiiCompiled que sirven (ver «Qué sigue»).
+### La capa: las nativas de WiiCompiled en las direcciones de este juego (2026-11-08)
+
+WiiCompiled ya traduce direcciones entre regiones: todo registro de una
+nativa y todo `MKW_GADDR` pasan por `GuestRegion::Map`, que convierte una
+dirección PAL en la de la región compilada con un desplazamiento por tramo.
+**La capa agrega este juego como un destino más de ese mapa**, con una tabla
+explícita en lugar de tramos:
+
+- `patches/wiicompiled/foreign-game-addresses.patch` agrega el destino
+  `ForeignGame` a `guest_region.h`. Lee la tabla
+  `guest_abi/foreign_game_addresses.inc` y los datos del juego en
+  `guest_abi/foreign_game_facts.inc`. Una nativa registrada en una dirección
+  que este juego no tiene no se registra (el registro salta la dirección 0), y
+  un `MKW_GADDR` de una dirección así detiene el runtime cuando se llega a él.
+  Sin la tabla, las tres regiones de *Mario Kart Wii* compilan como antes.
+- `tools/export_wiicompiled_layer.py` escribe esos dos archivos y
+  `native/natives.cpp`, que el traductor lee para saber qué funciones son
+  nativas aquí. Coloca **271 de las 582 nativas** de WiiCompiled: cada una en
+  la función del mismo nombre de este juego, primero por el nombre del mapa
+  (así `__VIInit` no se toma por `VIInit`). De las demás, 209 son código del
+  propio *Mario Kart Wii* y 101 son funciones del SDK que este juego no tiene
+  o que aún no tienen nombre aquí. La tabla junta esas 271 con las direcciones
+  de `wiicompiled/RBIEE9-*-addresses.txt`: 374 filas.
+- `tests/test_foreign_game_patch.py` genera la capa, la compila con
+  `wiicompiled/checks/foreign_game_addresses.cpp` contra un WiiCompiled
+  parchado y la corre: `OSSleepThread` cae en `0x8025B8A0`, una nativa de EGG
+  no se registra y una constante de EGG detiene el programa.
+
+Con la capa, el traductor reconoce las 271 nativas y no las mete en línea
+(22 197 llamadas en línea en vez de 24 041). Las llamadas a ellas pasan por el
+registro (`InvokeDirectCpu<0x8025B8A0u>` en `GXDrawDone`), donde el runtime
+parchado pone la nativa.
+
+**Lo que no se probó aquí:** compilar el runtime entero y correrlo. Necesita
+aurora (gráficos sobre Dawn/WebGPU), una GPU y una pantalla; eso toca en la PC.
 
 **Para repetirlo.** Necesitas el SDK de .NET (8.0.200 o más nuevo: el
 generador de código de Tomlyn, una dependencia del traductor, pide el
 compilador de C# 4.9) y una copia de WiiCompiled en el commit `27ff3b0`:
 
 ```sh
-python3 tools/export_wiicompiled_map.py          # escribe build/RBIEE9_wiicompiled_map.txt
-
 git clone https://github.com/patchzyy/wiicompiled
 cd wiicompiled
 git checkout 27ff3b0
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
-mkdir -p projects/animal-parade/native              # vacía a propósito
+git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
+
+# Desde harvest-moon-ap-recomp: el mapa de funciones y la capa.
+python3 tools/export_wiicompiled_map.py          # escribe build/RBIEE9_wiicompiled_map.txt
+python3 tools/export_wiicompiled_layer.py --wiicompiled /ruta/a/wiicompiled --out build/wiicompiled
+
+# De vuelta en wiicompiled:
+mkdir -p projects/animal-parade/native
 cp /ruta/a/harvest-moon-ap-recomp/wiicompiled/RBIEE9.yml projects/animal-parade/recomp.yml
 cp /ruta/a/harvest-moon-ap-recomp/build/RBIEE9_wiicompiled_map.txt projects/animal-parade/MAP.txt
+cp /ruta/a/harvest-moon-ap-recomp/build/wiicompiled/native/natives.cpp projects/animal-parade/native/
+cp /ruta/a/harvest-moon-ap-recomp/build/wiicompiled/guest_abi/*.inc runtime/include/guest_abi/
 
 dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
 export RECOMP_RBIEE9_DOL=/ruta/a/harvest-moon-ap-recomp/orig/RBIEE9/sys/main.dol
@@ -283,11 +324,13 @@ con `dotnet`.
 
 ### Qué sigue
 
-1. Una capa propia con las direcciones de este juego: las piezas de
-   WiiCompiled que sirven (GX, VI, OS, DVD, audio, IOS), registradas en las
-   direcciones de Animal Parade. WiiCompiled es GPL-3.0 como este proyecto; lo
-   que se tome de él se marca con su origen.
-2. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
+1. Compilar el runtime de WiiCompiled con la capa, con
+   `MKW_TRANSLATED_GUEST_REGION=3` (el destino `ForeignGame`), en una PC con
+   GPU.
+2. Quitar del runtime lo que es solo de *Mario Kart Wii* y se ejecuta al
+   arrancar (`boot_race.cpp`, `task_thread.cpp`): sin direcciones aquí,
+   detendría el runtime en cuanto se llegue a ello.
+3. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
 
 ---
 
@@ -535,26 +578,68 @@ Without the map, the translator would have seen a quarter of the game.
    sit at Mario Kart Wii's addresses. With that it treated 583 addresses of
    this game as native functions: it did not inline them and, for 582, assumed
    another function's register effects when calling them. It showed in the
-   generated code (24,041 inlined calls with the fix, 23,953 without it). The manifest now points to an empty
-   folder (`native_registration_root`), and the translation has 0 natives.
+   generated code (24,041 inlined calls with the fix, 23,953 without it). The
+   manifest now points at its own folder (`native_registration_root`), which
+   holds only the layer's natives (below).
 
-What follows is the runtime: registering the pieces of WiiCompiled that serve
-at Animal Parade's addresses (see "What comes next").
+### The layer: WiiCompiled's natives at this game's addresses (2026-11-08)
+
+WiiCompiled already translates addresses between regions: every registration
+of a native and every `MKW_GADDR` goes through `GuestRegion::Map`, which turns
+a PAL address into the compiled region's with a shift per stretch. **The layer
+adds this game as one more destination of that map**, with an explicit table
+instead of stretches:
+
+- `patches/wiicompiled/foreign-game-addresses.patch` adds the `ForeignGame`
+  destination to `guest_region.h`. It reads the table
+  `guest_abi/foreign_game_addresses.inc` and the game's facts in
+  `guest_abi/foreign_game_facts.inc`. A native registered at an address this
+  game does not have is left unregistered (the registry skips address 0), and
+  an `MKW_GADDR` of such an address stops the runtime when reached. Without the
+  table, *Mario Kart Wii*'s three regions build as before.
+- `tools/export_wiicompiled_layer.py` writes those two files and
+  `native/natives.cpp`, which the translator reads to know which functions are
+  native here. It places **271 of WiiCompiled's 582 natives**, each at the
+  function of the same name in this game, the map's name first (so `__VIInit`
+  is not taken for `VIInit`). Of the rest, 209 are *Mario Kart Wii*'s own code
+  and 101 are SDK functions this game does not have or has not named yet. The
+  table joins those 271 with the addresses of
+  `wiicompiled/RBIEE9-*-addresses.txt`: 374 rows.
+- `tests/test_foreign_game_patch.py` writes the layer, builds it with
+  `wiicompiled/checks/foreign_game_addresses.cpp` against a patched WiiCompiled
+  and runs it: `OSSleepThread` lands at `0x8025B8A0`, an EGG native is left
+  unregistered and an EGG constant stops the program.
+
+With the layer, the translator recognizes the 271 natives and does not inline
+them (22,197 inlined calls instead of 24,041). Calls to them go through the
+registry (`InvokeDirectCpu<0x8025B8A0u>` in `GXDrawDone`), where the patched
+runtime puts the native.
+
+**What was not tried here:** building the whole runtime and running it. It
+needs aurora (graphics on Dawn/WebGPU), a GPU and a screen; that is for the
+PC.
 
 **To repeat it.** You need the .NET SDK (8.0.200 or newer: the code generator
 of Tomlyn, one of the translator's dependencies, needs the C# 4.9 compiler) and
 a copy of WiiCompiled at commit `27ff3b0`:
 
 ```sh
-python3 tools/export_wiicompiled_map.py          # writes build/RBIEE9_wiicompiled_map.txt
-
 git clone https://github.com/patchzyy/wiicompiled
 cd wiicompiled
 git checkout 27ff3b0
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
-mkdir -p projects/animal-parade/native              # empty on purpose
+git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
+
+# From harvest-moon-ap-recomp: the function map and the layer.
+python3 tools/export_wiicompiled_map.py          # writes build/RBIEE9_wiicompiled_map.txt
+python3 tools/export_wiicompiled_layer.py --wiicompiled /path/to/wiicompiled --out build/wiicompiled
+
+# Back in wiicompiled:
+mkdir -p projects/animal-parade/native
 cp /path/to/harvest-moon-ap-recomp/wiicompiled/RBIEE9.yml projects/animal-parade/recomp.yml
 cp /path/to/harvest-moon-ap-recomp/build/RBIEE9_wiicompiled_map.txt projects/animal-parade/MAP.txt
+cp /path/to/harvest-moon-ap-recomp/build/wiicompiled/native/natives.cpp projects/animal-parade/native/
+cp /path/to/harvest-moon-ap-recomp/build/wiicompiled/guest_abi/*.inc runtime/include/guest_abi/
 
 dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
 export RECOMP_RBIEE9_DOL=/path/to/harvest-moon-ap-recomp/orig/RBIEE9/sys/main.dol
@@ -569,8 +654,10 @@ through `dotnet`.
 
 ### What comes next
 
-1. A layer of our own at this game's addresses: the pieces of WiiCompiled that
-   serve (GX, VI, OS, DVD, audio, IOS), registered at Animal Parade's
-   addresses. WiiCompiled is GPL-3.0 like this project; whatever is taken from
-   it is marked with where it came from.
-2. Reach the title screen and compare it with the version on ModernGekko.
+1. Build WiiCompiled's runtime with the layer, with
+   `MKW_TRANSLATED_GUEST_REGION=3` (the `ForeignGame` destination), on a PC
+   with a GPU.
+2. Take out of the runtime what belongs to *Mario Kart Wii* alone and runs at
+   boot (`boot_race.cpp`, `task_thread.cpp`): with no addresses here, it would
+   stop the runtime as soon as it is reached.
+3. Reach the title screen and compare it with the version on ModernGekko.
