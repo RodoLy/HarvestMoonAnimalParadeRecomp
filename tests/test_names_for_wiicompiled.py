@@ -1,6 +1,6 @@
-"""Six SDK functions named while finding this game's addresses for WiiCompiled, checked against main.dol.
+"""Eight SDK functions named while finding this game's addresses for WiiCompiled, checked against main.dol.
 
-Seis funciones del SDK nombradas al buscar las direcciones de este juego para WiiCompiled, comprobadas
+Ocho funciones del SDK nombradas al buscar las direcciones de este juego para WiiCompiled, comprobadas
 contra el main.dol real.
 
 WiiCompiled's native code calls them, or reads the variables they own, at Mario Kart Wii's addresses
@@ -71,6 +71,23 @@ EVIDENCE = [
         accessed_addresses={0x806B45BC},
         loaded_offsets={-0x6064},
         callees={"OSDisableInterrupts", "OSRestoreInterrupts"},
+    ),
+    # Select a device on an EXI channel: write the channel's control register (0xCD006800) and, for a
+    # memory card, mask its interrupt while it is selected; EXIDeselect unmasks it again. They sit
+    # between EXIDetach and EXIIntrruptHandler, in the SDK's order and Mario Kart Wii's.
+    Evidence(
+        0x802929D0,
+        "EXISelect",
+        0x12C,
+        stored_offsets={0x6800},
+        callees={"__OSMaskInterrupts", "__EXIProbe", "OSDisableInterrupts"},  # EXIInit does not call the last
+    ),
+    Evidence(
+        0x80292B00,
+        "EXIDeselect",
+        0xFC,
+        stored_offsets={0x6800, 0x1C},  # EXIAttach does not store at 0x1C
+        callees={"__OSUnmaskInterrupts", "__EXIProbe"},
     ),
 ]
 
