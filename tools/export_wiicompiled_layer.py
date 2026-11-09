@@ -100,6 +100,17 @@ def same_letters(name: str) -> str:
     return "_" * underscores_in_front + spelling(name)
 
 
+# Static functions of the SDK that WiiCompiled has as natives. Their names say no library, so they are not
+# matched like the rest (a game function could share the name); each one here was named by hand in
+# symbols.txt and has a test in tests/test_names_for_wiicompiled.py.
+# Funciones estáticas del SDK que WiiCompiled tiene como nativas; cada una se nombró a mano y tiene prueba.
+SDK_STATIC_NATIVES = {"SelectThread"}
+
+
+def is_sdk_name(name: str) -> bool:
+    return bool(library_of(name)) or name in SDK_STATIC_NATIVES
+
+
 def match_here(replacement: Replacement, by_name: dict, by_spelling: dict) -> tuple[int, dict[int, str]]:
     """The functions of this game a native could be, and how sure that is. The map's name comes first,
     because the C++ name can drop leading underscores (`AIClockInit_801A1138` is __AIClockInit), so
@@ -111,7 +122,7 @@ def match_here(replacement: Replacement, by_name: dict, by_spelling: dict) -> tu
     for name in replacement.names:
         tries.append((BY_SPELLING, same_letters(name), by_spelling))
     for sureness, key, index in tries:
-        if not library_of(key) and index is by_name:
+        if not is_sdk_name(key) and index is by_name:
             continue
         found = {symbol.address: symbol.name for symbol in index.get(key, [])}
         if found:
@@ -129,7 +140,7 @@ def place_natives(
     by_name: dict[str, list] = defaultdict(list)
     by_spelling: dict[str, list] = defaultdict(list)
     for symbol in symbols:
-        if symbol.kind == "function" and not symbol.has_generated_name and library_of(symbol.name):
+        if symbol.kind == "function" and not symbol.has_generated_name and is_sdk_name(symbol.name):
             by_name[symbol.name].append(symbol)
             by_spelling[same_letters(symbol.name)].append(symbol)
 
