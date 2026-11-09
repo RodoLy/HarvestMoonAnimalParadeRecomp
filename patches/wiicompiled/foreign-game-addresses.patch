@@ -20,7 +20,7 @@ index 4ca4439..cd7d8c4 100644
  // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
  #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
-index 1836717..3ed5eb8 100644
+index 1836717..728eb0a 100644
 --- a/runtime/include/guest_abi/guest_region.h
 +++ b/runtime/include/guest_abi/guest_region.h
 @@ -9,6 +9,11 @@
@@ -190,7 +190,7 @@ index 1836717..3ed5eb8 100644
  struct Facts {
      const char* gameId;
      char letter;
-@@ -152,6 +235,11 @@ inline constexpr Facts kFacts[kCount] = {
+@@ -152,15 +235,60 @@ inline constexpr Facts kFacts[kCount] = {
      {"RMCP01", 'P', 0x524D4350u, 1u, 0x80399180u, "EUR", "RVL-001(EUR)", "LEH", "PAL", "EU"},
      {"RMCE01", 'E', 0x524D4345u, 0u, 0x80394E00u, "USA", "RVL-001(USA)", "LU", "NTSC", "US"},
      {"RMCJ01", 'J', 0x524D434Au, 0u, 0x80398B00u, "JPN", "RVL-001(JPN)", "LJ", "NTSC", "JP"},
@@ -202,7 +202,17 @@ index 1836717..3ed5eb8 100644
  };
  
  inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(Current())]; }
-@@ -159,8 +247,38 @@ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(
+ 
++// The IOS a foreign game boots under (its number in the high half, its release in the low half), or 0
++// to keep Mario Kart Wii's IOS36.
++inline constexpr uint32_t kForeignGameIosVersion =
++#if __has_include("guest_abi/foreign_game_ios.inc")
++#include "guest_abi/foreign_game_ios.inc"
++#else
++    0u
++#endif
++    ;
++
  } // namespace GuestRegion
  
  #define MKW_GADDR(pal) (::GuestRegion::Address<0x##pal##u>())
@@ -455,7 +465,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/system_bridge.cpp b/runtime/src/system_bridge.cpp
-index 99f2abd..cbaefb2 100644
+index 99f2abd..d2df584 100644
 --- a/runtime/src/system_bridge.cpp
 +++ b/runtime/src/system_bridge.cpp
 @@ -370,6 +370,12 @@ void SystemBridge::Initialize() {
@@ -471,3 +481,21 @@ index 99f2abd..cbaefb2 100644
      // StaticR.rel ctors must be run manually since we aren't using OSLink
      RT_LOG(RT_TAG_RUNTIME) << "Running static constructors for StaticR.rel..." << std::endl;
  
+@@ -539,8 +545,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
+     // Seed OS clock values used by SDK timing helpers (OSBusClock/OSClock).
+     entries.push_back({0x800000F8u, kBusClockHz, "__OSBusClock"});
+     entries.push_back({0x800000FCu, kCpuClockHz, "__OSClock"});
+-    entries.push_back({0x80003140u, kIos36Version, "IOS36 version"});
+-    entries.push_back({0x80003144u, kIos36Date, "IOS36 date"});
++    // A foreign game boots under the IOS its disc asks for. Newer SDKs check in OSInit that the IOS in
++    // 0x80003140 is the one the apploader left in 0x80003188, and stop with ERROR #002 otherwise.
++    const bool foreignIos = ::GuestRegion::IsForeignGame() && ::GuestRegion::kForeignGameIosVersion != 0;
++    const uint32_t iosVersion = foreignIos ? ::GuestRegion::kForeignGameIosVersion : kIos36Version;
++    entries.push_back({0x80003140u, iosVersion, "IOS version"});
++    entries.push_back({0x80003144u, kIos36Date, "IOS date"});
++    if (foreignIos) {
++        entries.push_back({0x80003188u, iosVersion, "IOS the game asks for"});
++    }
+ 
+     if (mem1Size != 0) {
+         const uint32_t mem1End = Memory::kMem1CachedBase + mem1Size;
