@@ -1399,7 +1399,7 @@ index 3dbdc8d..be45c92 100644
      EnsureAuroraFrameActive();
      GX_SYNC_INLINE();
 diff --git a/runtime/src/hle/gx/gx_dl.cpp b/runtime/src/hle/gx/gx_dl.cpp
-index daceeb7..cb4d324 100644
+index daceeb7..f184d3b 100644
 --- a/runtime/src/hle/gx/gx_dl.cpp
 +++ b/runtime/src/hle/gx/gx_dl.cpp
 @@ -1,8 +1,13 @@
@@ -1416,7 +1416,7 @@ index daceeb7..cb4d324 100644
  #include <cstdlib>
  #include <unordered_map>
  
-@@ -1293,14 +1298,111 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1293,14 +1298,160 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
      GxGuestWrite::NotifyWrite(addr, size);
  }
  
@@ -1472,10 +1472,58 @@ index daceeb7..cb4d324 100644
 +    }
 +}
 +
++// For the frame trace: reads the draw commands at the start of a display list whose attributes are all
++// indices (the way the game draws its CPU-skinned parts) and counts how many of the positions it points
++// at are still zero in the array. A part whose skinning did not write some of its vertices would show up
++// here as references to zero positions, which is what a vertex pulled to the origin looks like.
++static void TraceDisplayListIndices(uint32_t listAddr, uint32_t nbytes, uint32_t posBase, uint32_t posStride) {
++    uint32_t vertexBytes = 0;
++    uint32_t posOffset = 0;
++    for (int attr = GX_VA_PNMTXIDX; attr <= GX_VA_TEX7; ++attr) {
++        const GXAttrType type = g_hleGxState.vtxDesc[attr];
++        if (type == GX_NONE) continue;
++        if (attr == GX_VA_POS) posOffset = vertexBytes;
++        if (type == GX_INDEX16) {
++            vertexBytes += 2;
++        } else if (type == GX_INDEX8 || attr <= GX_VA_TEX7MTXIDX) {
++            vertexBytes += 1;
++        } else {
++            return;
++        }
++    }
++    if (g_hleGxState.vtxDesc[GX_VA_POS] != GX_INDEX16 || posBase == 0 || posStride < 12) return;
++    uint32_t refs = 0, zeros = 0, lowest = 0xFFFFFFFFu, highest = 0, draws = 0;
++    char zeroList[160] = {};
++    size_t used = 0;
++    uint32_t at = 0;
++    while (at < nbytes) {
++        const uint8_t op = Memory::Read8(listAddr + at);
++        if (op == 0) { ++at; continue; }
++        if (op < 0x80 || op > 0xB8) break;
++        const uint32_t count = Memory::Read16(listAddr + at + 1);
++        at += 3;
++        ++draws;
++        for (uint32_t v = 0; v < count && at + vertexBytes <= nbytes; ++v, at += vertexBytes) {
++            const uint32_t index = Memory::Read16(listAddr + at + posOffset);
++            ++refs;
++            if (index < lowest) lowest = index;
++            if (index > highest) highest = index;
++            uint32_t bits[3];
++            for (uint32_t c = 0; c < 3; ++c) bits[c] = Memory::Read32(posBase + index * posStride + c * 4);
++            if ((((bits[0] | bits[1] | bits[2]) << 1)) == 0) {
++                ++zeros;
++                if (used < sizeof(zeroList) - 8) used += std::snprintf(zeroList + used, sizeof(zeroList) - used, " %u", index);
++            }
++        }
++    }
++    GxFrameTrace::Note("  list 0x%08X: %u draws, %u vertex references (positions #%u..#%u), %u of them point at a zero position:%s",
++                       listAddr, draws, refs, lowest, highest, zeros, zeroList);
++}
++
 +// For the frame trace: the vertex layout a display list is drawn with, as the worker applies it (each
 +// present attribute as name:type, 1 direct, 2 index8, 3 index16, with n3/n9 for the normal), and the
 +// format of its first draw when the list starts with one.
-+static void TraceDisplayListLayout(uint32_t listAddr) {
++static void TraceDisplayListLayout(uint32_t listAddr, uint32_t nbytes) {
 +    static const char* const kNames[] = {"PNMTX", "T0MTX", "T1MTX", "T2MTX", "T3MTX", "T4MTX", "T5MTX",
 +                                         "T6MTX", "T7MTX", "POS", "NRM", "CLR0", "CLR1", "TEX0",
 +                                         "TEX1", "TEX2", "TEX3", "TEX4", "TEX5", "TEX6", "TEX7"};
@@ -1501,6 +1549,7 @@ index daceeb7..cb4d324 100644
 +                       nrm.base, nrm.stride);
 +    TraceArrayValues("positions", pos.base, pos.stride);
 +    TraceArrayDump(pos.base, pos.stride);
++    TraceDisplayListIndices(listAddr, nbytes, pos.base, pos.stride);
 +    TraceArrayValues("normals", nrm.base, nrm.stride);
 +}
 +
@@ -1524,7 +1573,7 @@ index daceeb7..cb4d324 100644
          GxWorker::Submit([=] { GX__CallDisplayList_80172f64(listAddr, nbytes); });
          return;
      }
-+    if (GxFrameTrace::Active()) TraceDisplayListLayout(listAddr);
++    if (GxFrameTrace::Active()) TraceDisplayListLayout(listAddr, nbytes);
      try {
          const uint8_t* list = static_cast<const uint8_t*>(GuestToHostPtr(listAddr, nbytes));
          if (!list) return;
