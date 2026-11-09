@@ -1399,7 +1399,7 @@ index 3dbdc8d..be45c92 100644
      EnsureAuroraFrameActive();
      GX_SYNC_INLINE();
 diff --git a/runtime/src/hle/gx/gx_dl.cpp b/runtime/src/hle/gx/gx_dl.cpp
-index daceeb7..f184d3b 100644
+index daceeb7..ff5bc7c 100644
 --- a/runtime/src/hle/gx/gx_dl.cpp
 +++ b/runtime/src/hle/gx/gx_dl.cpp
 @@ -1,8 +1,13 @@
@@ -1416,7 +1416,7 @@ index daceeb7..f184d3b 100644
  #include <cstdlib>
  #include <unordered_map>
  
-@@ -1293,14 +1298,160 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1293,14 +1298,162 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
      GxGuestWrite::NotifyWrite(addr, size);
  }
  
@@ -1564,8 +1564,10 @@ index daceeb7..f184d3b 100644
 +        for (uint32_t i = 0; i < shown; ++i) {
 +            std::snprintf(head + i * 3, 4, " %02x", Memory::Read8(listAddr + i));
 +        }
-+        GxFrameTrace::Note("CallDisplayList 0x%08X (%u bytes) lr=0x%08X:%s", listAddr, nbytes, cpu ? cpu->lr : 0u,
-+                           head);
++        GxFrameTrace::Note("CallDisplayList 0x%08X (%u bytes) lr=0x%08X gqr=%08X %08X %08X %08X %08X %08X %08X %08X:%s",
++                           listAddr, nbytes, cpu ? cpu->lr : 0u, cpu ? cpu->gqr[0] : 0u, cpu ? cpu->gqr[1] : 0u,
++                           cpu ? cpu->gqr[2] : 0u, cpu ? cpu->gqr[3] : 0u, cpu ? cpu->gqr[4] : 0u,
++                           cpu ? cpu->gqr[5] : 0u, cpu ? cpu->gqr[6] : 0u, cpu ? cpu->gqr[7] : 0u, head);
 +    }
      // List bytes and the arrays it indexes are GPU-side reads, so they are read when the worker runs.
      if (GxWorker::ShouldDefer()) {
