@@ -1629,7 +1629,7 @@ index 108e4fd..3c79edf 100644
  
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
-index 0000000..130191a
+index 0000000..4e3e352
 --- /dev/null
 +++ b/runtime/src/hle/gx/gx_frame_trace.cpp
 @@ -0,0 +1,67 @@
@@ -1649,7 +1649,7 @@ index 0000000..130191a
 +std::atomic<int> g_session{0};
 +// A frame of a busy scene can bind thousands of textures; past this many lines the rest of the
 +// frame is only counted, so the log stays readable.
-+constexpr int kLinesPerFrame = 12000;
++constexpr int kLinesPerFrame = 40000;
 +} // namespace
 +
 +void Request(int frames) {
@@ -1782,6 +1782,74 @@ index 68182a5..5dd834a 100644
      GX_DEFER_CALL(GX__SetBlendMode_8017277c, t, s, d, op);
      GXSetBlendMode(static_cast<GXBlendMode>(t), static_cast<GXBlendFactor>(s),
                     static_cast<GXBlendFactor>(d), static_cast<GXLogicOp>(op));
+diff --git a/runtime/src/hle/gx/gx_tev.cpp b/runtime/src/hle/gx/gx_tev.cpp
+index 57ab64b..2f0250e 100644
+--- a/runtime/src/hle/gx/gx_tev.cpp
++++ b/runtime/src/hle/gx/gx_tev.cpp
+@@ -1,6 +1,7 @@
+ // gx_tev.cpp - TEV Stage Configuration
+ #include "gx_internal.h"
+ #include "runtime_log.h"
++#include "gx_frame_trace.h"
+ 
+ // Aurora's CHECK() on these tev array indices compiles to nothing under NDEBUG, so this
+ // guest->native boundary must reject out-of-range IDs itself; a bad ID here is a malformed
+@@ -25,6 +26,7 @@ inline bool TevSwapOk(uint32_t id) { return GxTevIdOk(id, GX_MAX_TEVSWAP, "TEV s
+ // ============================================================================
+ 
+ extern "C" void GX__SetNumTevStages_801722a8(uint32_t n) {
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevStages %u", n);
+     GX_DEFER_CALL(GX__SetNumTevStages_801722a8, n);
+     // GXSetNumTevStages takes a count, not an index, so the inclusive bound is
+     // GX_MAX_TEVSTAGE itself.
+@@ -37,6 +39,7 @@ extern "C" void GX__SetNumTevStages_801722a8(uint32_t n) {
+ PPC_NATIVE_OVERRIDE_VOID(801722a8, GX__SetNumTevStages_801722a8, (uint32_t n), (n));
+ 
+ extern "C" void GX__SetTevOp_80171c4c(uint32_t s, uint32_t m) {
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevOp stage %u mode %u", s, m);
+     GX_DEFER_CALL(GX__SetTevOp_80171c4c, s, m);
+     if (!TevStageOk(s)) return;
+     GXSetTevOp((GXTevStageID)s, (GXTevMode)m);
+@@ -44,6 +47,7 @@ extern "C" void GX__SetTevOp_80171c4c(uint32_t s, uint32_t m) {
+ PPC_NATIVE_OVERRIDE_VOID(80171c4c, GX__SetTevOp_80171c4c, (uint32_t s, uint32_t m), (s, m));
+ 
+ extern "C" void GX__SetTevOrder_8017214c(uint32_t s, uint32_t c, uint32_t m, uint32_t col) {
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevOrder stage %u coord %u map %u chan %u", s, c, m, col);
+     GX_DEFER_CALL(GX__SetTevOrder_8017214c, s, c, m, col);
+     if (!TevStageOk(s)) return;
+     GXSetTevOrder((GXTevStageID)s, (GXTexCoordID)c, (GXTexMapID)m, (GXChannelID)col);
+@@ -55,6 +59,7 @@ PPC_NATIVE_OVERRIDE_VOID(8017214c, GX__SetTevOrder_8017214c, (uint32_t s, uint32
+ // ============================================================================
+ 
+ extern "C" void GX__SetTevColorIn_80171ce0(uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevColorIn stage %u a=%u b=%u c=%u d=%u", s, a, b, c, d);
+     GX_DEFER_CALL(GX__SetTevColorIn_80171ce0, s, a, b, c, d);
+     if (!TevStageOk(s)) return;
+     GXSetTevColorIn((GXTevStageID)s, (GXTevColorArg)a, (GXTevColorArg)b, (GXTevColorArg)c, (GXTevColorArg)d);
+@@ -62,6 +67,7 @@ extern "C" void GX__SetTevColorIn_80171ce0(uint32_t s, uint32_t a, uint32_t b, u
+ PPC_NATIVE_OVERRIDE_VOID(80171ce0, GX__SetTevColorIn_80171ce0, (uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d), (s, a, b, c, d));
+ 
+ extern "C" void GX__SetTevAlphaIn_80171d20(uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevAlphaIn stage %u a=%u b=%u c=%u d=%u", s, a, b, c, d);
+     GX_DEFER_CALL(GX__SetTevAlphaIn_80171d20, s, a, b, c, d);
+     if (!TevStageOk(s)) return;
+     GXSetTevAlphaIn((GXTevStageID)s, (GXTevAlphaArg)a, (GXTevAlphaArg)b, (GXTevAlphaArg)c, (GXTevAlphaArg)d);
+@@ -93,6 +99,7 @@ PPC_NATIVE_OVERRIDE_VOID(80171db8, GX__SetTevAlphaOp_80171db8, (uint32_t s, uint
+ extern "C" void GX__SetTevColor_80171e10(uint32_t id, uint32_t cp) {
+     if (!TevRegOk(id)) return;
+     const uint8_t* p=Memory::GetPointer(cp, 4); GXColor c; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevColor reg %u = %u %u %u %u", id, c.r, c.g, c.b, c.a);
+     GxWorker::Run([id, c] { GXSetTevColor((GXTevRegID)id, c); });
+ }
+ PPC_NATIVE_OVERRIDE_VOID(80171e10, GX__SetTevColor_80171e10, (uint32_t id, uint32_t cp), (id, cp));
+@@ -108,6 +115,7 @@ PPC_NATIVE_OVERRIDE_VOID(80171e70, GX__SetTevColorS10_80171e70, (uint32_t id, ui
+ extern "C" void GX__SetTevKColor_80171ed4(uint32_t id, uint32_t cp) {
+     if (!TevKColorOk(id)) return;
+     const uint8_t* p=Memory::GetPointer(cp, 4); GXColor c; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
++    if (GxFrameTrace::Active()) GxFrameTrace::Note("TevKColor %u = %u %u %u %u", id, c.r, c.g, c.b, c.a);
+     GxWorker::Run([id, c] { GXSetTevKColor((GXTevKColorID)id, c); });
+ }
+ PPC_NATIVE_OVERRIDE_VOID(80171ed4, GX__SetTevKColor_80171ed4, (uint32_t id, uint32_t cp), (id, cp));
 diff --git a/runtime/src/hle/gx/gx_texture.cpp b/runtime/src/hle/gx/gx_texture.cpp
 index 0f79533..a848636 100644
 --- a/runtime/src/hle/gx/gx_texture.cpp
