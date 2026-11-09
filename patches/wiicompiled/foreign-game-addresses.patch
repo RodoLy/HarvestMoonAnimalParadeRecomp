@@ -1431,7 +1431,7 @@ index 0baaa0f..42e9b83 100644
 +PPC_NATIVE_OVERRIDE_VOID(80173df8, GX__ClearGPMetric_80173df8, (CpuContext* ctx), (ctx));
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
-index 0000000..320eace
+index 0000000..5c183fc
 --- /dev/null
 +++ b/runtime/src/hle/gx/gx_frame_trace.cpp
 @@ -0,0 +1,61 @@
@@ -1450,7 +1450,7 @@ index 0000000..320eace
 +std::atomic<int> g_line{0};
 +// A frame of a busy scene can bind thousands of textures; past this many lines the rest of the
 +// frame is only counted, so the log stays readable.
-+constexpr int kLinesPerFrame = 400;
++constexpr int kLinesPerFrame = 4000;
 +} // namespace
 +
 +void Request(int frames) {
