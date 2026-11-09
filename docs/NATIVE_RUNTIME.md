@@ -332,9 +332,38 @@ cp /ruta/a/harvest-moon-ap-recomp/build/wiicompiled/guest_abi/*.inc runtime/incl
 
 dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
 export RECOMP_RBIEE9_DOL=/ruta/a/harvest-moon-ap-recomp/orig/RBIEE9/sys/main.dol
-dotnet translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll \
-    translate-recursive 0x80004050 --project projects/animal-parade/recomp.yml
+translator="dotnet translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll"
+project=projects/animal-parade/recomp.yml
+$translator translate-recursive 0x80004050 --project $project \
+    --outdir generated/functions --output-metadata generated/base_translation_metadata.json \
+    --production-source-bundle generated/base_translation_sources.bin --no-function-files
+$translator generate-data-init --project $project
+$translator emit-build-shards --project $project \
+    --base-metadata generated/base_translation_metadata.json --base-functions-dir generated/functions \
+    --native-source-dir projects/animal-parade/native --out generated/build_shards
+
+cmake -S runtime -B native-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DAURORA_DAWN_PROVIDER=package -DAURORA_SDL3_PROVIDER=vendor
+cmake --build native-build --target WiiCompiled
 ```
+
+`generated/build_shards/shards.cmake` debe decir
+`set(MKW_TRANSLATED_GUEST_REGION 3)`: es el parche del traductor el que lo
+pone. Las tres órdenes del traductor tardan menos de un minuto; `generated/`
+ocupa unos 240 MB y lleva datos del juego, así que no se sube a ningún lado.
+`emit-base-manifest`, que usa el script de WiiCompiled, solo sirve para los mods
+de *Mario Kart Wii* (pide su `StaticR.rel`), y aquí no hace falta.
+
+El script `Launcher/LocalBuild.ps1` de WiiCompiled no sirve tal cual: pide los
+archivos de *Mario Kart Wii*. Pero sus pasos son estos mismos, y en Windows su
+compilador es llvm-mingw (`x86_64-w64-mingw32-clang`); para `cmake` en Windows
+pon ese compilador en `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER` y `windres` en
+`CMAKE_RC_COMPILER`. La configuración baja Dawn, abseil y lo demás de internet
+la primera vez.
+
+Para correrlo, en el `Config.toml` del runtime pon `[paths] dvd_root` en la
+carpeta del disco extraído (la que tiene `files/` y `sys/fst.bin`).
 
 En Windows, `set RECOMP_RBIEE9_DOL=...` en lugar de `export`. Con el SDK de
 .NET que trae Ubuntu, agrega `-p:UseAppHost=false` a `dotnet build`: no trae el
@@ -343,9 +372,9 @@ con `dotnet`.
 
 ### Qué sigue
 
-1. Compilar el runtime de WiiCompiled con la capa, con
-   `MKW_TRANSLATED_GUEST_REGION=3` (el destino `ForeignGame`), en una PC con
-   GPU.
+1. Compilar el runtime de WiiCompiled con la capa (los pasos de arriba) en
+   una PC con GPU. Aquí se probó hasta `emit-build-shards`; la configuración de
+   CMake no puede bajar sus dependencias desde aquí.
 2. Ver qué más se detiene al correr: cada `MKW_GADDR` sin dirección aquí
    dice cuál es al detener el runtime, y esa es la lista de lo que falta.
 3. Llegar a la pantalla de título y compararla con la versión sobre ModernGekko.
@@ -680,9 +709,37 @@ cp /path/to/harvest-moon-ap-recomp/build/wiicompiled/guest_abi/*.inc runtime/inc
 
 dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
 export RECOMP_RBIEE9_DOL=/path/to/harvest-moon-ap-recomp/orig/RBIEE9/sys/main.dol
-dotnet translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll \
-    translate-recursive 0x80004050 --project projects/animal-parade/recomp.yml
+translator="dotnet translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll"
+project=projects/animal-parade/recomp.yml
+$translator translate-recursive 0x80004050 --project $project \
+    --outdir generated/functions --output-metadata generated/base_translation_metadata.json \
+    --production-source-bundle generated/base_translation_sources.bin --no-function-files
+$translator generate-data-init --project $project
+$translator emit-build-shards --project $project \
+    --base-metadata generated/base_translation_metadata.json --base-functions-dir generated/functions \
+    --native-source-dir projects/animal-parade/native --out generated/build_shards
+
+cmake -S runtime -B native-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DAURORA_DAWN_PROVIDER=package -DAURORA_SDL3_PROVIDER=vendor
+cmake --build native-build --target WiiCompiled
 ```
+
+`generated/build_shards/shards.cmake` must say
+`set(MKW_TRANSLATED_GUEST_REGION 3)`: the translator patch is what sets it. The
+three translator commands take under a minute; `generated/` takes about 240 MB
+and holds game data, so it is never uploaded anywhere. `emit-base-manifest`,
+which WiiCompiled's script runs, is only for *Mario Kart Wii*'s mods (it asks
+for its `StaticR.rel`) and is not needed here.
+
+WiiCompiled's `Launcher/LocalBuild.ps1` does not work as it is: it asks for
+*Mario Kart Wii*'s files. Its steps are these same ones, though, and on Windows
+its compiler is llvm-mingw (`x86_64-w64-mingw32-clang`); for `cmake` on Windows
+put that compiler in `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER` and `windres` in
+`CMAKE_RC_COMPILER`. The first configure downloads Dawn, abseil and the rest.
+
+To run it, set `[paths] dvd_root` in the runtime's `Config.toml` to the
+extracted disc folder (the one with `files/` and `sys/fst.bin`).
 
 On Windows, `set RECOMP_RBIEE9_DOL=...` instead of `export`. With the .NET SDK
 that Ubuntu ships, add `-p:UseAppHost=false` to `dotnet build`: it has no native
@@ -691,9 +748,9 @@ through `dotnet`.
 
 ### What comes next
 
-1. Build WiiCompiled's runtime with the layer, with
-   `MKW_TRANSLATED_GUEST_REGION=3` (the `ForeignGame` destination), on a PC
-   with a GPU.
+1. Build WiiCompiled's runtime with the layer (the steps above) on a PC with a
+   GPU. It was tried here up to `emit-build-shards`; CMake's configure cannot
+   download its dependencies from here.
 2. See what else stops when it runs: every `MKW_GADDR` with no address here
    names itself when it stops the runtime, and that is the list of what is
    left.
