@@ -6,6 +6,7 @@ código de WiiCompiled.
 - Every function row: symbols.txt gives this game's address the function's name.
 - Every variable row: the function named as evidence loads, stores or builds the address; or, for
   "held at 0x...", main.dol holds the address in that word.
+- An "entry point" row: main.dol's header starts the game there.
 - With a WiiCompiled clone (HM_AP_WIICOMPILED), each table holds exactly the addresses that the
   WiiCompiled sources on its `# covers:` line name with MKW_GADDR(), no more and no fewer.
 """
@@ -31,6 +32,7 @@ COLUMNS = re.compile(r"\s{2,}")
 COVERS = "# covers:"
 FUNCTION_EVIDENCE = "name"
 HELD_AT = "held at "
+ENTRY_POINT = "entry point"
 NOTHING = "-"
 GUEST_ADDRESS = re.compile(r"MKW_GADDR(?:_CT|_LAZY|_IF_PRESENT|_IS)?\((?P<address>[0-9A-Fa-f]{8})[,)]")
 
@@ -113,12 +115,19 @@ def test_a_variable_row_is_held_where_it_says(game, row):
 
 
 @needs_game_files
+@pytest.mark.parametrize("row", [row for row in ALL_ROWS if row.evidence == ENTRY_POINT], ids=row_id)
+def test_an_entry_point_row_is_where_main_dol_starts(game, row):
+    dol, _, _ = game
+    assert dol.entry == row.address
+
+
+@needs_game_files
 @pytest.mark.parametrize(
     "row",
     [
         row
         for row in ALL_ROWS
-        if row.evidence not in (FUNCTION_EVIDENCE, NOTHING) and not row.evidence.startswith(HELD_AT)
+        if row.evidence not in (FUNCTION_EVIDENCE, NOTHING, ENTRY_POINT) and not row.evidence.startswith(HELD_AT)
     ],
     ids=row_id,
 )

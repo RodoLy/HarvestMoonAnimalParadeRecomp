@@ -9,8 +9,9 @@
 # El runtime ejecuta él mismo los constructores estáticos del DOL, del inicio de .ctors a su final. El
 # final es donde empieza .dtors, y el código que recorre cada tabla nombra su inicio.
 #
-# covers: runtime/src/system_bridge.cpp
+# covers: runtime/src/system_bridge.cpp runtime/src/main.cpp
 
+0x800060A4  0x80004050  __start, where the game begins: the DOL's entry point  entry point
 0x80244DE0  0x803A6220  .ctors, the table of static constructors  0x8025E420
 0x80244EA0  0x803A6480  the end of .ctors, which is where .dtors starts  0x8025E470
 0x8088F400  -           .ctors of StaticR.rel: this game has no REL  -
