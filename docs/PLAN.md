@@ -60,8 +60,11 @@ que *Magical Melody* tiene que escribir aparte: ver
 - [x] Decidir qué partes de OS se hacen nativas: las de WiiCompiled tal como
       están, porque guardan el estado donde lo guarda el SDK y *Mario Kart Wii*
       ya corre la misma mezcla ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
-- [x] Las 25 direcciones que usa el OS nativo de WiiCompiled, con las de este
-      juego (`wiicompiled/RBIEE9-os-addresses.txt`).
+- [x] Las direcciones que usa el código nativo de WiiCompiled, con las de este
+      juego: 130 entre OS, GX, VI, audio, DVD/NAND y SC; 108 ubicadas, 17 solo
+      de *Mario Kart Wii* (`wiicompiled/RBIEE9-*-addresses.txt`).
+- [ ] Las 5 que faltan: cuatro variables de `dvd.c` y el búfer de
+      `SCGetProductCode`.
 - [ ] Un reemplazo nativo de `GXReadGPMetric` que devuelva ceros, y comprobar
       que el planificador nativo le da turno al hilo ocioso del juego.
 - [ ] Capa propia: las piezas de WiiCompiled registradas en las direcciones de
@@ -144,8 +147,11 @@ Dolphin core). For a Wii game, WiiCompiled already brings almost everything
 - [x] Decide which parts of OS go native: WiiCompiled's as they are, because
       they keep the state where the SDK keeps it and *Mario Kart Wii* already
       runs the same mix ([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)).
-- [x] The 25 addresses WiiCompiled's native OS uses, with this game's
-      (`wiicompiled/RBIEE9-os-addresses.txt`).
+- [x] The addresses WiiCompiled's native code uses, with this game's: 130
+      across OS, GX, VI, audio, DVD/NAND and SC; 108 found, 17 *Mario Kart Wii*
+      only (`wiicompiled/RBIEE9-*-addresses.txt`).
+- [ ] The 5 still missing: four variables of `dvd.c` and the buffer of
+      `SCGetProductCode`.
 - [ ] A native replacement of `GXReadGPMetric` that returns zeros, and check
       that the native scheduler gives the game's idle thread a turn.
 - [ ] Our own layer: the pieces of WiiCompiled registered at this game's
