@@ -411,6 +411,26 @@ index cd236a9..00d3693 100644
              if (sSystemPtr != 0) {
                  InvokeIndirectCpu(postCb, ctx);
              }
+diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
+index 56bec9f..9bb0fb7 100644
+--- a/runtime/src/main.cpp
++++ b/runtime/src/main.cpp
+@@ -868,10 +868,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
+ }
+ 
+ const TranslatedFunctionInfo* ResolveEntry() {
+-    const auto* entry = TranslatedFunctionRegistry::FindByAddressPtr(kDefaultEntryAddress);
++    // kDefaultEntryAddress is Mario Kart Wii's __start; a foreign game starts at its own.
++    const uint32_t entryAddress = MKW_GADDR(800060A4);
++    static_assert(kDefaultEntryAddress == 0x800060A4u);
++    const auto* entry = TranslatedFunctionRegistry::FindByAddressPtr(entryAddress);
+     if (!entry) {
+         std::ostringstream oss;
+-        oss << "No translated function registered at address 0x" << std::hex << kDefaultEntryAddress;
++        oss << "No translated function registered at address 0x" << std::hex << entryAddress;
+         throw std::runtime_error(oss.str());
+     }
+     return entry;
 diff --git a/runtime/src/music_attenuation.cpp b/runtime/src/music_attenuation.cpp
 index ad031c1..18bf15f 100644
 --- a/runtime/src/music_attenuation.cpp
