@@ -21,7 +21,7 @@ configuración en UserData\Config.toml. La siguiente vez solo se compila lo que 
 
 .PARAMETER Disc
 The folder of your extracted disc: the one with sys\main.dol, sys\fst.bin and files\. Dolphin
-writes it with right click > Extract Entire Disc. Asked for if left out, and remembered after that.
+writes it with Properties > Filesystem > right click the data partition > Extract Entire Partition. Asked for if left out, and remembered after that.
 La carpeta de tu disco extraído, la que tiene sys\main.dol, sys\fst.bin y files\.
 
 .PARAMETER Rebuild
@@ -99,9 +99,9 @@ if (-not $Disc -and (Test-Path -LiteralPath $rememberedDisc -PathType Leaf)) {
 if (-not $Disc) { $Disc = Select-DiscFolder }
 $discRoot = Find-DiscRoot $Disc
 if (-not $discRoot) {
-    throw "$Disc has no sys\main.dol, sys\fst.bin and files\. Extract the whole disc with Dolphin " +
-        "(right click > Extract Entire Disc) and choose that folder. / Esa carpeta no tiene sys\main.dol, " +
-        "sys\fst.bin y files\. Extrae el disco entero con Dolphin y elige esa carpeta."
+    throw "$Disc has no sys\main.dol, sys\fst.bin and files\. Extract the data partition with Dolphin " +
+        "(Properties > Filesystem > Extract Entire Partition) and choose that folder. / Esa carpeta no tiene " +
+        "sys\main.dol, sys\fst.bin y files\. Extrae la partición de datos con Dolphin y elige esa carpeta."
 }
 $discId = Read-DiscId $discRoot
 if ($discId -and $discId -ne $gameId) {

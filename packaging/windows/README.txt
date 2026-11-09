@@ -9,8 +9,8 @@ This package has no game in it. It builds the game on your computer from your ow
 What you need
 -------------
 - Your disc, extracted with Dolphin: right click the game > Properties > Filesystem >
-  right click the disc > Extract Entire Disc. The folder must have sys\main.dol,
-  sys\fst.bin and files\.
+  right click the data partition > Extract Entire Partition. The folder must have
+  sys\main.dol, sys\fst.bin and files\.
 - About 4 GB free for the build.
 - A short folder for this package, like C:\HMAP: the build makes long file names.
 
@@ -43,8 +43,8 @@ Este paquete no trae el juego. Lo compila en tu computadora desde tu propio disc
 Qué necesitas
 -------------
 - Tu disco, extraído con Dolphin: clic derecho en el juego > Propiedades > Sistema de
-  archivos > clic derecho en el disco > Extraer disco entero. La carpeta debe tener
-  sys\main.dol, sys\fst.bin y files\.
+  archivos > clic derecho en la partición de datos > Extraer partición completa. La
+  carpeta debe tener sys\main.dol, sys\fst.bin y files\.
 - Unos 4 GB libres para la compilación.
 - Una carpeta corta para este paquete, como C:\HMAP: la compilación crea nombres de
   archivo largos.
