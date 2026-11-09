@@ -1528,6 +1528,34 @@ index 0000000..17f1b00
 +void EndFrame();
 +
 +} // namespace GxFrameTrace
+diff --git a/runtime/src/hle/gx/gx_init.cpp b/runtime/src/hle/gx/gx_init.cpp
+index edf6f9c..f6a7045 100644
+--- a/runtime/src/hle/gx/gx_init.cpp
++++ b/runtime/src/hle/gx/gx_init.cpp
+@@ -31,6 +31,23 @@ extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
+ 
+     GXInit(GuestToHostPtr(fifoBase, fifoSize), fifoSize);
+ 
++    // The SDK's GXInit gives every vertex format its defaults (GXSetVtxAttrFmtv with the default
++    // list), and Aurora's GXInit just did the same for its own copy. The HLE copy published to Aurora
++    // at each GXBegin needs them too: left as constructed, a normal reads GX_POS_XYZ, which for a
++    // normal means normal + binormal + tangent (9 values instead of 3), and a color reads GX_F32,
++    // which for a color means RGBA6. A game that relies on these defaults (Mario Kart Wii always sets
++    // its formats) then had its draws read at the wrong size.
++    for (auto& format : g_hleGxState.vtxAttrFmt) {
++        format[GX_VA_POS] = {GX_POS_XYZ, GX_F32, 0};
++        format[GX_VA_NRM] = {GX_NRM_XYZ, GX_F32, 0};
++        format[GX_VA_CLR0] = {GX_CLR_RGBA, GX_RGBA8, 0};
++        format[GX_VA_CLR1] = {GX_CLR_RGBA, GX_RGBA8, 0};
++        for (int tex = GX_VA_TEX0; tex <= GX_VA_TEX7; ++tex) {
++            format[tex] = {GX_TEX_ST, GX_F32, 0};
++        }
++    }
++    g_hleGxState.InvalidateVtxLayoutHash();
++
+     // Initialize GXData structure in guest memory
+     try {
+         for (uint32_t offset = 0; offset < kGXDataSize; offset += 4) {
 diff --git a/runtime/src/hle/gx/gx_pixel.cpp b/runtime/src/hle/gx/gx_pixel.cpp
 index 68182a5..5dd834a 100644
 --- a/runtime/src/hle/gx/gx_pixel.cpp
