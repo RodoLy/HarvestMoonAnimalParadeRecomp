@@ -37,7 +37,7 @@ organiza el ejecutable son los mismos que en GameCube.
 | …destino de algún `bl` | 10 560 | 3 637 |
 | Tablas de `switch` | 220 (1 sin comprobación de límite) | 274 |
 | Datos dentro de código | 3 | 3 |
-| Funciones con nombre | 1 237, todas del SDK (19 por versión, 785 por firma, 334 por el mapa de Mario Kart Wii, 99 leyendo su código) | 682 |
+| Funciones con nombre | 1 241, todas del SDK (19 por versión, 785 por firma, 334 por el mapa de Mario Kart Wii, 103 leyendo su código) | 682 |
 
 Bibliotecas del SDK identificadas: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI,
 NAND, SC, ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -101,6 +101,7 @@ ARC, WENC, WPAD, KPAD, WUD y la pila Bluetooth (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | WUD | `0x802B76C0`–`0x802BA53C` | 8 |
 | BTE | `0x802BB210`–`0x802E49D0` | 147 |
 | KPAD | `0x802ECE30`–`0x802ED284` | 2 |
+| ES | `0x802EDC30`–`0x802EE178` | 4 |
 
 Muchas bibliotecas son más anchas que su rango: la mayoría de sus funciones
 todavía no tienen nombre por firma (GX tenía 44 nombres entre 190 funciones).
@@ -277,7 +278,7 @@ executable are the same as on GameCube.
 | …called with `bl` | 10,560 | 3,637 |
 | `switch` tables | 220 (1 without a bounds check) | 274 |
 | Data inside code | 3 | 3 |
-| Named functions | 1,237, all from the SDK (19 by version, 785 by signature, 334 from Mario Kart Wii's map, 99 by reading their code) | 682 |
+| Named functions | 1,241, all from the SDK (19 by version, 785 by signature, 334 from Mario Kart Wii's map, 103 by reading their code) | 682 |
 
 SDK libraries identified: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI, NAND, SC,
 ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -340,6 +341,7 @@ KPAD, WUD and the Bluetooth stack (BTE: `BTA_`, `BTM_`, `GKI_`…).
 | WUD | `0x802B76C0`–`0x802BA53C` | 8 |
 | BTE | `0x802BB210`–`0x802E49D0` | 147 |
 | KPAD | `0x802ECE30`–`0x802ED284` | 2 |
+| ES | `0x802EDC30`–`0x802EE178` | 4 |
 
 Many libraries are wider than their range: most of their functions have no
 name from a signature (GX had 44 names among 190 functions). What is left to

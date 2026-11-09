@@ -75,9 +75,11 @@ LIBRARY_BY_PREFIX = {
     # flash memory (saves), SC the console's settings, MEM the heap manager, ARC the archive reader, WENC the
     # audio encoder for the Wii Remote's speaker, WPAD and KPAD the Wii Remote, WUD its pairing. BTA, BTM,
     # GKI, L2CA, RFCOMM, SDP, PORT, HID and UUSB are parts of the Bluetooth stack (BTE) that WPAD sits on.
+    # ESP_ is the client of IOS's title manager (ES), which tells NANDInit where the game's saves live.
     "ARC": "ARC",
     "BTA": "BTE",
     "BTM": "BTE",
+    "ESP": "ES",
     "GKI": "BTE",
     "HID": "BTE",
     "IOS": "IPC",

@@ -337,3 +337,36 @@ def test_bluetooth_start_up_waits_with_gki_delay_until_the_device_is_up(game):
     assert dol.u32(0x802BE130) == 0x386007D0
     assert calls(0x802BE134, delay.address)
     assert calls(0x802BE138, device_up.address)
+
+
+# ESP, the title manager's client: ESP_InitLib opens /dev/es and ESP_CloseLib closes it; ESP_GetDataDir and
+# ESP_GetTitleId each send one request with IOS_Ioctlv, 0x1D (the title's directory) and 0x20 (its ID).
+# NANDInit calls them to find the game's home directory, where the saves go.
+ES_REQUESTS = [("ESP_GetDataDir", 0x1D), ("ESP_GetTitleId", 0x20)]
+LOAD_R4 = 0x38800000  # li r4, 0
+
+
+@needs_game_files
+def test_the_es_library_opens_and_closes_its_device(game):
+    dol, symbols, bases, _ = game
+    assert "IOS_Open" in read_code_facts(dol, symbols.by_name("ESP_InitLib"), symbols, bases).callees
+    assert "IOS_Close" in read_code_facts(dol, symbols.by_name("ESP_CloseLib"), symbols, bases).callees
+
+
+@needs_game_files
+@pytest.mark.parametrize("request_", ES_REQUESTS, ids=lambda request_: request_[0])
+def test_each_es_function_sends_its_own_request(game, request_):
+    dol, symbols, _, _ = game
+    name, number = request_
+    function = symbols.by_name(name)
+    ioctlv = symbols.by_name("IOS_Ioctlv").address
+    words = [(address, dol.u32(address)) for address in range(function.address, function.address + function.size, 4)]
+    numbers = [word & 0xFFFF for _, word in words if word & 0xFFFF0000 == LOAD_R4]
+    calls = [
+        address
+        for address, word in words
+        if word & 0xFC000003 == 0x48000001
+        and address + ((word & 0x03FFFFFC) - (0x04000000 if word & 0x02000000 else 0)) == ioctlv
+    ]
+    assert numbers == [number]
+    assert len(calls) == 1
