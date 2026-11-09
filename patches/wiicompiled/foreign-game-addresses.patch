@@ -564,7 +564,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/system_bridge.cpp b/runtime/src/system_bridge.cpp
-index 99f2abd..9407dcb 100644
+index 99f2abd..e88908a 100644
 --- a/runtime/src/system_bridge.cpp
 +++ b/runtime/src/system_bridge.cpp
 @@ -8,6 +8,8 @@
@@ -584,7 +584,7 @@ index 99f2abd..9407dcb 100644
  #include "memory.h"
  #include "ppc_runtime.h"
  #include "recomp_mod_loader.h"
-@@ -309,9 +312,48 @@ void DumpGuestCrashHints(std::ostream& os, const CpuContext* cpu) {
+@@ -309,9 +312,69 @@ void DumpGuestCrashHints(std::ostream& os, const CpuContext* cpu) {
  
  } // namespace
  
@@ -599,15 +599,36 @@ index 99f2abd..9407dcb 100644
 +    std::thread([] {
 +        constexpr int kQuietSecondsBeforeReport = 5;
 +        constexpr int kReports = 6;
++        // While the window keeps updating, a snapshot every so often still says where the game
++        // spends its time, for a game that runs but never shows anything.
++        constexpr int kSecondsBetweenSnapshots = 15;
++        constexpr int kSnapshots = 8;
 +        uint64_t lastUpdates = HangWatch::g_windowUpdates.load(std::memory_order_relaxed);
 +        int quietSeconds = 0;
 +        int reports = 0;
-+        while (reports < kReports) {
++        int seconds = 0;
++        int snapshots = 0;
++        while (reports < kReports || snapshots < kSnapshots) {
 +            std::this_thread::sleep_for(std::chrono::seconds(1));
++            ++seconds;
 +            const uint64_t updates = HangWatch::g_windowUpdates.load(std::memory_order_relaxed);
 +            if (updates != lastUpdates) {
++                if (snapshots < kSnapshots && seconds % kSecondsBetweenSnapshots == 0) {
++                    const CpuContext* cpu = HangWatch::g_lastGuestCpuContext.load(std::memory_order_relaxed);
++                    if (cpu != nullptr) {
++                        std::cerr << "[hang-watch] snapshot after " << seconds << " s ("
++                                  << updates << " window updates); the last guest context that ran:"
++                                  << std::endl;
++                        SystemBridge::DumpCpuState(std::cerr, cpu);
++                        std::cerr.flush();
++                        ++snapshots;
++                    }
++                }
 +                lastUpdates = updates;
 +                quietSeconds = 0;
++                continue;
++            }
++            if (reports >= kReports) {
 +                continue;
 +            }
 +            if (++quietSeconds % kQuietSecondsBeforeReport != 0) {
@@ -633,7 +654,7 @@ index 99f2abd..9407dcb 100644
  
      SeedLowMemDefaults(memoryConfig);
  
-@@ -370,6 +412,12 @@ void SystemBridge::Initialize() {
+@@ -370,6 +433,12 @@ void SystemBridge::Initialize() {
      }
      RT_LOG(RT_TAG_RUNTIME) << "Executed " << dolCount << " main DOL static constructors." << std::endl;
  
@@ -646,7 +667,7 @@ index 99f2abd..9407dcb 100644
      // StaticR.rel ctors must be run manually since we aren't using OSLink
      RT_LOG(RT_TAG_RUNTIME) << "Running static constructors for StaticR.rel..." << std::endl;
  
-@@ -539,8 +587,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
+@@ -539,8 +608,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
      // Seed OS clock values used by SDK timing helpers (OSBusClock/OSClock).
      entries.push_back({0x800000F8u, kBusClockHz, "__OSBusClock"});
      entries.push_back({0x800000FCu, kCpuClockHz, "__OSClock"});
