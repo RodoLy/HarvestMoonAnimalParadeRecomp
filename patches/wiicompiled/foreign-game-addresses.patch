@@ -39,7 +39,7 @@ index f44f861..94bfbfb 100644
      ProcessAuroraEvents(aurora_update());
  }
 diff --git a/runtime/include/guest_abi/cpu_context.h b/runtime/include/guest_abi/cpu_context.h
-index 70e2f2b..9ab66ca 100644
+index 70e2f2b..e00b23c 100644
 --- a/runtime/include/guest_abi/cpu_context.h
 +++ b/runtime/include/guest_abi/cpu_context.h
 @@ -1,6 +1,7 @@
@@ -60,6 +60,16 @@ index 70e2f2b..9ab66ca 100644
  
          savedMxcsr_ = MkwGetHostFpControl();
          if (ctx != nullptr)
+@@ -63,6 +67,9 @@ public:
+ 
+     ~CpuContextScope()
+     {
++        // The hang watch must not keep a context that may be gone once this scope ends.
++        CpuContext* leaving = g_currentCpuContext;
++        HangWatch::g_lastGuestCpuContext.compare_exchange_strong(leaving, previous_, std::memory_order_relaxed);
+         g_currentCpuContext = previous_;
+         if (previous_ != nullptr)
+             MkwApplyHostNiMode(previous_->fpscr);
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
 index 1836717..728eb0a 100644
 --- a/runtime/include/guest_abi/guest_region.h
@@ -421,6 +431,30 @@ index 87fb7c5..3e592ea 100644
          uint32_t vtable = 0;
          uint32_t startFn = 0;
          try {
+diff --git a/runtime/src/hle/gx/gx_fatal_stubs.cpp b/runtime/src/hle/gx/gx_fatal_stubs.cpp
+index 0baaa0f..42e9b83 100644
+--- a/runtime/src/hle/gx/gx_fatal_stubs.cpp
++++ b/runtime/src/hle/gx/gx_fatal_stubs.cpp
+@@ -176,7 +176,11 @@ GX_FATAL_STUB(801724f8, "GX__InitFogAdjTable_801724f8") PPC_NATIVE_OVERRIDE_VOID
+ GX_FATAL_STUB(80172fd8, "__GX__SetProjection_80172fd8") PPC_NATIVE_OVERRIDE_VOID(80172fd8, gx_stub_80172fd8, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(801732e8, "__GX__SetViewport_801732e8") PPC_NATIVE_OVERRIDE_VOID(801732e8, gx_stub_801732e8, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(80173544, "__GX__SetMatrixIndex_80173544") PPC_NATIVE_OVERRIDE_VOID(80173544, gx_stub_80173544, (CpuContext* ctx), (ctx));
+-GX_FATAL_STUB(801735cc, "GX__SetGPMetric_801735cc") PPC_NATIVE_OVERRIDE_VOID(801735cc, gx_stub_801735cc, (CpuContext* ctx), (ctx));
++// The GPU's performance counters. A PC has none behind them: choosing what they count and clearing them
++// does nothing, and the game's own GXReadGPMetric reads zeros. Harvest Moon: Animal Parade sets and
++// clears them every frame for its debug meter.
++extern "C" void GX__SetGPMetric_801735cc(CpuContext* ctx) { (void)ctx; }
++PPC_NATIVE_OVERRIDE_VOID(801735cc, GX__SetGPMetric_801735cc, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(801736f4, "GX__SetGPMetric_switch_801736f4") PPC_NATIVE_OVERRIDE_VOID(801736f4, gx_stub_801736f4, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(801736f8, "GX__SetGPMetric_caseD_0_801736f8") PPC_NATIVE_OVERRIDE_VOID(801736f8, gx_stub_801736f8, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(80173718, "GX__SetGPMetric_caseD_1_80173718") PPC_NATIVE_OVERRIDE_VOID(80173718, gx_stub_80173718, (CpuContext* ctx), (ctx));
+@@ -238,4 +242,5 @@ GX_FATAL_STUB(80173dc0, "GX__SetGPMetric_caseD_12_80173dc0") PPC_NATIVE_OVERRIDE
+ GX_FATAL_STUB(80173dd0, "GX__SetGPMetric_caseD_13_80173dd0") PPC_NATIVE_OVERRIDE_VOID(80173dd0, gx_stub_80173dd0, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(80173de0, "GX__SetGPMetric_caseD_14_80173de0") PPC_NATIVE_OVERRIDE_VOID(80173de0, gx_stub_80173de0, (CpuContext* ctx), (ctx));
+ GX_FATAL_STUB(80173dec, "GX__SetGPMetric_caseD_16_80173dec") PPC_NATIVE_OVERRIDE_VOID(80173dec, gx_stub_80173dec, (CpuContext* ctx), (ctx));
+-GX_FATAL_STUB(80173df8, "GX__ClearGPMetric_80173df8") PPC_NATIVE_OVERRIDE_VOID(80173df8, gx_stub_80173df8, (CpuContext* ctx), (ctx));
++extern "C" void GX__ClearGPMetric_80173df8(CpuContext* ctx) { (void)ctx; }
++PPC_NATIVE_OVERRIDE_VOID(80173df8, GX__ClearGPMetric_80173df8, (CpuContext* ctx), (ctx));
 diff --git a/runtime/src/hle/os/os_thread.cpp b/runtime/src/hle/os/os_thread.cpp
 index d2423e6..e764565 100644
 --- a/runtime/src/hle/os/os_thread.cpp
