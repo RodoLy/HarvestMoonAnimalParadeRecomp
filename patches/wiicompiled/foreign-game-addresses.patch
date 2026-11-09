@@ -1399,7 +1399,7 @@ index 3dbdc8d..be45c92 100644
      EnsureAuroraFrameActive();
      GX_SYNC_INLINE();
 diff --git a/runtime/src/hle/gx/gx_dl.cpp b/runtime/src/hle/gx/gx_dl.cpp
-index daceeb7..2a2da37 100644
+index daceeb7..af50e54 100644
 --- a/runtime/src/hle/gx/gx_dl.cpp
 +++ b/runtime/src/hle/gx/gx_dl.cpp
 @@ -1,8 +1,10 @@
@@ -1413,8 +1413,39 @@ index daceeb7..2a2da37 100644
  #include <cstdlib>
  #include <unordered_map>
  
-@@ -1295,6 +1297,18 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1293,14 +1295,56 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+     GxGuestWrite::NotifyWrite(addr, size);
+ }
  
++// For the frame trace: the vertex layout a display list is drawn with, as the worker applies it (each
++// present attribute as name:type, 1 direct, 2 index8, 3 index16, with n3/n9 for the normal), and the
++// format of its first draw when the list starts with one.
++static void TraceDisplayListLayout(uint32_t listAddr) {
++    static const char* const kNames[] = {"PNMTX", "T0MTX", "T1MTX", "T2MTX", "T3MTX", "T4MTX", "T5MTX",
++                                         "T6MTX", "T7MTX", "POS", "NRM", "CLR0", "CLR1", "TEX0",
++                                         "TEX1", "TEX2", "TEX3", "TEX4", "TEX5", "TEX6", "TEX7"};
++    const uint8_t first = Memory::Read8(listAddr);
++    const uint32_t vf = first & GX_VAT_MASK_CMD;
++    char layout[192] = {};
++    size_t used = 0;
++    for (int attr = GX_VA_PNMTXIDX; attr <= GX_VA_TEX7 && used < sizeof(layout) - 16; ++attr) {
++        const GXAttrType type = g_hleGxState.vtxDesc[attr];
++        if (type == GX_NONE) continue;
++        used += std::snprintf(layout + used, sizeof(layout) - used, " %s:%d", kNames[attr], static_cast<int>(type));
++        if (attr == GX_VA_NRM) {
++            const bool nbt = g_hleGxState.vtxAttrFmt[vf][attr].cnt != GX_NRM_XYZ;
++            used += std::snprintf(layout + used, sizeof(layout) - used, "/n%d", nbt ? 9 : 3);
++        }
++    }
++    const auto& pos = g_hleGxState.vtxArray[GX_VA_POS];
++    const auto& nrm = g_hleGxState.vtxArray[GX_VA_NRM];
++    const auto& posFmt = g_hleGxState.vtxAttrFmt[vf][GX_VA_POS];
++    GxFrameTrace::Note("  list 0x%08X drawn with format %u layout%s; positions at 0x%08X stride %u type %d "
++                       "frac %u, normals at 0x%08X stride %u",
++                       listAddr, vf, layout, pos.base, pos.stride, static_cast<int>(posFmt.type), posFmt.frac,
++                       nrm.base, nrm.stride);
++}
++
  extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes) {
      if (nbytes == 0 || listAddr == 0) return;
 +    if (GxFrameTrace::Active() && !GxWorker::OnWorker()) {
@@ -1432,6 +1463,13 @@ index daceeb7..2a2da37 100644
      // List bytes and the arrays it indexes are GPU-side reads, so they are read when the worker runs.
      if (GxWorker::ShouldDefer()) {
          EnsureAuroraFrameActive();
+         GxWorker::Submit([=] { GX__CallDisplayList_80172f64(listAddr, nbytes); });
+         return;
+     }
++    if (GxFrameTrace::Active()) TraceDisplayListLayout(listAddr);
+     try {
+         const uint8_t* list = static_cast<const uint8_t*>(GuestToHostPtr(listAddr, nbytes));
+         if (!list) return;
 diff --git a/runtime/src/hle/gx/gx_fatal_stubs.cpp b/runtime/src/hle/gx/gx_fatal_stubs.cpp
 index 0baaa0f..42e9b83 100644
 --- a/runtime/src/hle/gx/gx_fatal_stubs.cpp
