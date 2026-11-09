@@ -1305,6 +1305,40 @@ index 0000000..a228188
 +}
 +
 +} // namespace Bluetooth
+diff --git a/runtime/src/hle/esp.cpp b/runtime/src/hle/esp.cpp
+index f8c4caa..f10c87e 100644
+--- a/runtime/src/hle/esp.cpp
++++ b/runtime/src/hle/esp.cpp
+@@ -2,6 +2,7 @@
+ // ESP functions communicate with /dev/es to get title information.
+ // We stub these to return Mario Kart Wii's title ID directly.
+ 
++#include "guest_abi/guest_region.h"
+ #include "hle_stubs.h"
+ #include "memory.h"
+ #include "runtime_log.h"
+@@ -12,6 +13,12 @@
+ #include <cctype>
+ 
+ static constexpr uint32_t MKW_TITLE_ID_HI = 0x00010004;
++// An ordinary disc game: Mario Kart Wii is 00010004 only because it installs a channel.
++static constexpr uint32_t DISC_TITLE_ID_HI = 0x00010000;
++
++static uint32_t CurrentTitleIdHi() {
++    return GuestRegion::IsForeignGame() ? DISC_TITLE_ID_HI : MKW_TITLE_ID_HI;
++}
+ 
+ static bool IsValidEspTitleCode(uint32_t code) {
+     for (int shift = 24; shift >= 0; shift -= 8) {
+@@ -75,7 +82,7 @@ extern "C" int32_t ESP_GetTitleId_stub(uint32_t outPtr)
+     }
+ 
+     // Write title ID (big-endian)
+-    Memory::Write32(outPtr, MKW_TITLE_ID_HI);
++    Memory::Write32(outPtr, CurrentTitleIdHi());
+     Memory::Write32(outPtr + 4, CurrentTitleIdLo());
+     return 0;
+ }
 diff --git a/runtime/src/hle/gx/gx_fatal_stubs.cpp b/runtime/src/hle/gx/gx_fatal_stubs.cpp
 index 0baaa0f..42e9b83 100644
 --- a/runtime/src/hle/gx/gx_fatal_stubs.cpp
@@ -1371,10 +1405,58 @@ index b76e5e1..95ed9a3 100644
  }
  
  // 0x8015EA1C -> DVDInit
+diff --git a/runtime/src/hle/storage/nand_fs.cpp b/runtime/src/hle/storage/nand_fs.cpp
+index 28c0cbd..6613e53 100644
+--- a/runtime/src/hle/storage/nand_fs.cpp
++++ b/runtime/src/hle/storage/nand_fs.cpp
+@@ -84,7 +84,7 @@ uint32_t CurrentMkwTitleIdLo() {
+ std::string CurrentNandDataDir() {
+     char path[64];
+     std::snprintf(path, sizeof(path), "/title/%08x/%08x/data",
+-                  kNandTitleIdHi, CurrentMkwTitleIdLo());
++                  NandTitleIdHi(), CurrentMkwTitleIdLo());
+     return path;
+ }
+ 
+diff --git a/runtime/src/hle/storage/nand_internal.h b/runtime/src/hle/storage/nand_internal.h
+index ef9caac..740df94 100644
+--- a/runtime/src/hle/storage/nand_internal.h
++++ b/runtime/src/hle/storage/nand_internal.h
+@@ -42,9 +42,10 @@
+ #include <unistd.h>
+ #endif
+ 
+-// Mario Kart Wii Title ID
++// The title ID's high half: Mario Kart Wii is 00010004 because it installs a channel; any other disc
++// game (a foreign one) is an ordinary disc title, 00010000, the folder its saves live in on a Wii.
+ namespace {
+-constexpr uint32_t kNandTitleIdHi = 0x00010004;
++inline uint32_t NandTitleIdHi() { return ::GuestRegion::IsForeignGame() ? 0x00010000u : 0x00010004u; }
+ inline uint32_t NandTitleIdLo() { return ::GuestRegion::CurrentFacts().gameCode; }
+ } // anonymous namespace
+ 
 diff --git a/runtime/src/hle/storage/nand_isfs.cpp b/runtime/src/hle/storage/nand_isfs.cpp
-index 6111b20..c21340e 100644
+index 6111b20..ade64f0 100644
 --- a/runtime/src/hle/storage/nand_isfs.cpp
 +++ b/runtime/src/hle/storage/nand_isfs.cpp
+@@ -110,7 +110,7 @@ static IosVector ReadIosVector(uint32_t vectorPtr, uint32_t index) {
+ 
+ static uint64_t CurrentMkwTitleId() {
+     uint32_t low = CurrentMkwTitleIdLo();
+-    return (static_cast<uint64_t>(kNandTitleIdHi) << 32) | low;
++    return (static_cast<uint64_t>(NandTitleIdHi()) << 32) | low;
+ }
+ 
+ static bool WriteGuestBytes(uint32_t address, uint32_t size, const uint8_t* data, size_t dataSize) {
+@@ -871,7 +871,7 @@ int32_t ISFS_OpenLib_Initialize(CpuContext* ctx) {
+     
+     // Create the title data directory if it doesn't exist
+     char titleId[32];
+-    std::snprintf(titleId, sizeof(titleId), "%08x", kNandTitleIdHi);
++    std::snprintf(titleId, sizeof(titleId), "%08x", NandTitleIdHi());
+     char gameId[32];
+     std::snprintf(gameId, sizeof(gameId), "%08x", CurrentMkwTitleIdLo());
+     CreateDirectoryPath(GetNandBasePath() / "title" / titleId / gameId / "data");
 @@ -1017,6 +1017,46 @@ static int32_t HandleIsfsReadDir(uint32_t numIn, uint32_t numOut, uint32_t vecto
      return ISFS_OK;
  }
