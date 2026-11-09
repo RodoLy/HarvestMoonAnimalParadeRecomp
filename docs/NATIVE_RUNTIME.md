@@ -149,6 +149,56 @@ no nombra `0x801AA6A8`. Mi primera cuenta usaba solo los nombres del mapa y
 por eso daba `OSSuspendThread` como traducida; la herramienta ahora lee
 también el nombre de la función de C++ y avisa de estos casos.
 
+### Las direcciones de este juego para el código nativo (2026-11-08)
+
+El código nativo de WiiCompiled no solo reemplaza funciones: también lee y
+escribe variables del SDK y llama a funciones del juego, siempre en
+direcciones de *Mario Kart Wii* (`MKW_GADDR`). Para usarlo aquí, cada una
+necesita la dirección de este juego. Están en `wiicompiled/RBIEE9-*-addresses.txt`,
+una tabla por parte, y `tests/test_wiicompiled_addresses.py` comprueba cada
+fila contra `main.dol` (la función del juego que toca la dirección) y que cada
+tabla tenga justo las direcciones del código de WiiCompiled que cubre.
+
+| Tabla | Direcciones | Ubicadas | Solo de *Mario Kart Wii* | Por encontrar |
+|---|---:|---:|---:|---:|
+| OS | 25 | 22 | 3 | 0 |
+| GX | 36 | 23 | 13 | 0 |
+| VI | 14 | 13 | 1 | 0 |
+| Audio (AI, DSP, la tarea de AX) | 25 | 25 | 0 | 0 |
+| DVD y NAND | 27 | 23 | 0 | 4 |
+| SC | 3 | 2 | 0 | 1 |
+| **Total** | **130** | **108** | **17** | **5** |
+
+**Cómo se encontraron.** Las variables de un mismo archivo del SDK quedan en
+el mismo orden en los dos juegos, así que casi siempre basta con una variable
+segura para ubicar las vecinas, que quedan a la misma distancia: por ejemplo,
+las del `.sbss` de GX están 0x332E058 bytes más adelante que en *Mario Kart
+Wii*, y la siguiente después de `DrawDone` es justo el callback de
+`GXSetDrawDoneCallback`. Cada candidata se confirma con una función de este
+juego que la toca (`tools/code_facts.py` ahora lee también las direcciones de
+datos que carga y guarda una función). Donde la distancia no sirve, la
+variable se identifica por lo que hace el código: el `dvd.c` de este juego es
+más nuevo y tiene más variables, así que `DVDInitialized` y `PausingFlag` se
+encontraron leyendo `DVDInit` y `DVDResume`.
+
+**Lo que es solo de *Mario Kart Wii*:** su motor EGG (los vértices de
+`EGG::DrawGX`, las constantes de niebla, `EGG::AsyncDisplay`), su gestor de
+RFL y los hilos de su reproductor THP. Tampoco se cubren `task_thread.cpp` ni
+`boot_race.cpp`, que son de ese juego.
+
+**Lo que falta:** cuatro variables de `dvd.c` (`Canceling`, `ResumeFromHere`,
+lo que espera `DVDCancelAll` y `executing`) y el búfer de
+`SCGetProductCode`, que este juego no parece usar.
+
+**Para hacerlo posible** se nombraron AX (59 funciones), AXFX (13), AI (4),
+IPC (18), SC (13), DSP (4), SI (5) y PAD (6) con el mapa de *Mario Kart Wii*.
+`tools/name_from_reference_map.py` ganó `--range` para una biblioteca con muy
+pocos nombres propios. También dejó de usar dos tipos de nombres: los que el
+mapa repite y los que el mapa inventa para funciones `static`
+(`AXFXReverbStdExp__AllocDelayLine`). Y conserva el guion bajo de `IOS_` e
+`ISFS_`. Seis funciones más se nombraron leyendo su código
+(`tests/test_names_for_wiicompiled.py`).
+
 ### El juego escribe en la tubería de GX por su cuenta
 
 En *Magical Melody* solo la biblioteca GX y ocho funciones pequeñas escriben
@@ -384,6 +434,56 @@ its *Mario Kart Wii* map puts `OS::SuspendThread` at `0x801AA824` and does not
 name `0x801AA6A8`. My first count used the map's names alone and so listed
 `OSSuspendThread` as translated; the tool now also reads the name of the C++
 function and reports such cases.
+
+### This game's addresses for the native code (2026-11-08)
+
+WiiCompiled's native code does not only replace functions: it also reads and
+writes the SDK's variables and calls functions of the game, always at *Mario
+Kart Wii*'s addresses (`MKW_GADDR`). To use it here, each needs this game's
+address. They are in `wiicompiled/RBIEE9-*-addresses.txt`, one table per
+part, and `tests/test_wiicompiled_addresses.py` checks every row against
+`main.dol` (the function of the game that touches the address) and that every
+table holds exactly the addresses of the WiiCompiled code it covers.
+
+| Table | Addresses | Found | *Mario Kart Wii* only | Still to find |
+|---|---:|---:|---:|---:|
+| OS | 25 | 22 | 3 | 0 |
+| GX | 36 | 23 | 13 | 0 |
+| VI | 14 | 13 | 1 | 0 |
+| Audio (AI, DSP, AX's task) | 25 | 25 | 0 | 0 |
+| DVD and NAND | 27 | 23 | 0 | 4 |
+| SC | 3 | 2 | 0 | 1 |
+| **Total** | **130** | **108** | **17** | **5** |
+
+**How they were found.** The variables of one source file of the SDK sit in
+the same order in both games, so one sure variable is almost always enough to
+place its neighbours, which sit at the same distance: the `.sbss` of GX, for
+one, is 0x332E058 bytes further on than in *Mario Kart Wii*, and the variable
+after `DrawDone` is just the callback of `GXSetDrawDoneCallback`. Each
+candidate is confirmed by a function of this game that touches it
+(`tools/code_facts.py` now also reads the data addresses a function loads and
+stores). Where the distance does not hold, the variable is identified by what
+the code does: this game's `dvd.c` is newer and has more variables, so
+`DVDInitialized` and `PausingFlag` were found by reading `DVDInit` and
+`DVDResume`.
+
+**What belongs to *Mario Kart Wii* alone:** its EGG engine (the vertices of
+`EGG::DrawGX`, the fog constants, `EGG::AsyncDisplay`), its RFL manager and the
+threads of its THP player. `task_thread.cpp` and `boot_race.cpp`, which are
+that game's, are not covered either.
+
+**What is missing:** four variables of `dvd.c` (`Canceling`,
+`ResumeFromHere`, what `DVDCancelAll` waits on, and `executing`) and the buffer
+of `SCGetProductCode`, which this game does not seem to use.
+
+**To make it possible**, AX (59 functions), AXFX (13), AI (4), IPC (18), SC
+(13), DSP (4), SI (5) and PAD (6) were named from *Mario Kart Wii*'s map.
+`tools/name_from_reference_map.py` gained `--range`, for a library with too
+few names of its own. It also stopped using two kinds of names: the ones the
+map gives twice and the ones the map makes up for `static` functions
+(`AXFXReverbStdExp__AllocDelayLine`). And it keeps the underscore of `IOS_`
+and `ISFS_`. Six more functions were named by reading their code
+(`tests/test_names_for_wiicompiled.py`).
 
 ### The game writes into the GX pipe on its own
 
