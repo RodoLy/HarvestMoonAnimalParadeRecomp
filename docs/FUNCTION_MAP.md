@@ -37,7 +37,7 @@ organiza el ejecutable son los mismos que en GameCube.
 | …destino de algún `bl` | 10 560 | 3 637 |
 | Tablas de `switch` | 220 (1 sin comprobación de límite) | 274 |
 | Datos dentro de código | 3 | 3 |
-| Funciones con nombre | 923, todas del SDK (19 por versión, 785 por firma, 119 de GX por el mapa de Mario Kart Wii o leyendo su código) | 682 |
+| Funciones con nombre | 1 067, todas del SDK (19 por versión, 785 por firma, 196 por el mapa de Mario Kart Wii, 67 leyendo su código) | 682 |
 
 Bibliotecas del SDK identificadas: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI,
 NAND, SC, ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -83,13 +83,14 @@ ARC, WENC, WPAD, KPAD, WUD y la pila Bluetooth (BTE: `BTA_`, `BTM_`, `GKI_`…).
 
 | Biblioteca | Rango (por los nombres) | Con nombre |
 |---|---|---:|
-| OS | `0x802508C0`–`0x8025D258` (y `0x802938C0`) | 64 |
+| PPC | `0x802505A0`–`0x802507C0` | 0 (24 con las secciones siguientes) |
+| OS | `0x802508C0`–`0x8025D258` (y `0x802938C0`) | 64 (152) |
 | MTX | `0x8025E4C0`–`0x8025F27C` | 18 |
-| DVD | `0x8025F740`–`0x80266034` | 12 |
-| VI | `0x80269020`–`0x8026C858` | 14 |
+| DVD | `0x8025F740`–`0x80266034` | 12 (29) |
+| VI | `0x80269020`–`0x8026C858` | 14 (29) |
 | PAD | `0x8026CE40`–`0x8026E078` | 4 |
 | AI, AX, DSP | `0x8026E8B0`–`0x8027602C` | 12 |
-| GX | `0x80276250`–`0x8027DFC0` | 44 (163 con la sección siguiente) |
+| GX | `0x80276250`–`0x8027DFC0` | 44 (163) |
 | EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 34 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
 | IPC | `0x8029CA70`–`0x8029F0C4` | 19 |
@@ -158,6 +159,49 @@ descarta un nombre que recibirían dos funciones, así que no nombró ninguna.
 mapa de *Mario Kart Wii*) y funciones internas que el resto del juego no llama,
 como `0x80279750`, que por lo que hace parece `__GXSetDirtyState`.
 
+### OS, DVD, VI y PPC
+
+La misma herramienta, con dos arreglos que GX no necesitaba: el mapa escribe
+algunas funciones internas como `OS::__CacheInit` (ahora se leen
+`__OSCacheInit`) y algunas con el espacio de nombres del SDK delante
+(`RVL::OS::ExitThread`). Y un tramo del mapa entre dos anclas que tiene otra
+biblioteca o código C++ del juego se salta: ahí las anclas no son vecinas en
+*Mario Kart Wii*. Con eso ningún nombre del mapa contradice uno por firma
+(antes eran 18, todos por la forma `OS::__X`).
+
+| Biblioteca | Por el mapa | Leyendo su código | Con nombre de lo que el juego llama |
+|---|---:|---:|---:|
+| OS | 72 | 16 | 101 de 108 |
+| DVD | 13 | 4 | 21 de 24 |
+| VI | 11 | 4 | 29 de 32 |
+| PPC | 0 | 24 | 23 de 23 |
+
+**PPC** (PPCArch, la primera biblioteca del SDK) no tenía ningún nombre, así
+que el mapa no tenía ancla. No hizo falta: cada función es la instrucción que
+lee o escribe un registro especial del procesador (`mfspr r3, HID0` es
+`PPCMfhid0`), y su orden es el del mapa. `tests/test_ppc_names.py` las compara
+instrucción por instrucción.
+
+**Leyendo el código** se nombraron, entre otras, las funciones de hilos que
+miden distinto que en *Mario Kart Wii* (`OSSleepThread`, `OSWakeupThread`,
+`OSResumeThread`, `OSSuspendThread`, `OSCancelThread`, `OSJoinThread`, por el
+campo `state` de `OSThread` y sus valores), `OSReport`, `DVDOpen` (por su
+advertencia "DVDOpen(): file '%s' was not found") y `VIConfigure`. Dos no están
+en el mapa porque *Mario Kart Wii* no las usa: `OSSetIdleFunction`, que crea un
+hilo de prioridad 31, y `OSGetIdleFunction`. `tests/test_os_dvd_vi_names.py`
+comprueba las 24 y, además, las doce funciones de `OSArena.c` que el mapa
+nombró solo por su orden (todas miden 8 bytes): cada getter lee la variable que
+escribe su setter, y las de `OSGetArenaHi`/`Lo` son las de MEM1.
+
+**Lo que queda sin nombre** (13 de lo que el juego llama): cuatro funciones
+`static` del SDK que la herramienta no escribe a propósito, porque un nombre
+sin la biblioteca delante puede chocar con otro (`WaitMicroTime`,
+`OnShutdown`, `DefaultSwitchThreadCallback`, `defaultOptionalCommandChecker`);
+cuatro de `OSFont.c` y `0x80256040`, que tienen otro tamaño y piden leerlas con
+más cuidado; y `0x80258630`, `0x802646F0`, `0x80265980` (avisa con
+`SCGetLanguage` y `OSSetFontEncode`, así que parece el mensaje de error del
+disco), `0x8026C560` y `0x8026C6C0`.
+
 ### Otras cosas que se encontraron con las herramientas nuevas
 
 - **El bucle ocioso** del sistema está en `0x8025ACE0`
@@ -210,7 +254,7 @@ executable are the same as on GameCube.
 | …called with `bl` | 10,560 | 3,637 |
 | `switch` tables | 220 (1 without a bounds check) | 274 |
 | Data inside code | 3 | 3 |
-| Named functions | 923, all from the SDK (19 by version, 785 by signature, 119 of GX from Mario Kart Wii's map or by reading their code) | 682 |
+| Named functions | 1,067, all from the SDK (19 by version, 785 by signature, 196 from Mario Kart Wii's map, 67 by reading their code) | 682 |
 
 SDK libraries identified: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI, NAND, SC,
 ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -255,13 +299,14 @@ KPAD, WUD and the Bluetooth stack (BTE: `BTA_`, `BTM_`, `GKI_`…).
 
 | Library | Range (from the names) | Named |
 |---|---|---:|
-| OS | `0x802508C0`–`0x8025D258` (and `0x802938C0`) | 64 |
+| PPC | `0x802505A0`–`0x802507C0` | 0 (24 with the next sections) |
+| OS | `0x802508C0`–`0x8025D258` (and `0x802938C0`) | 64 (152) |
 | MTX | `0x8025E4C0`–`0x8025F27C` | 18 |
-| DVD | `0x8025F740`–`0x80266034` | 12 |
-| VI | `0x80269020`–`0x8026C858` | 14 |
+| DVD | `0x8025F740`–`0x80266034` | 12 (29) |
+| VI | `0x80269020`–`0x8026C858` | 14 (29) |
 | PAD | `0x8026CE40`–`0x8026E078` | 4 |
 | AI, AX, DSP | `0x8026E8B0`–`0x8027602C` | 12 |
-| GX | `0x80276250`–`0x8027DFC0` | 44 (163 with the next section) |
+| GX | `0x80276250`–`0x8027DFC0` | 44 (163) |
 | EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 34 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
 | IPC | `0x8029CA70`–`0x8029F0C4` | 19 |
@@ -330,6 +375,50 @@ drops a name two functions would get, so it named neither.
 Kart Wii*'s map either) and internal functions the rest of the game does not
 call, such as `0x80279750`, which by what it does looks like
 `__GXSetDirtyState`.
+
+### OS, DVD, VI and PPC
+
+The same tool, with two fixes GX did not need: the map writes some internal
+functions as `OS::__CacheInit` (now read as `__OSCacheInit`) and some with the
+SDK's namespace in front (`RVL::OS::ExitThread`). And a stretch of the map
+between two anchors that holds another library or the game's C++ code is
+skipped: there the anchors are not neighbours in *Mario Kart Wii*. With that,
+no name from the map contradicts one from a signature (there were 18 before,
+all because of the `OS::__X` form).
+
+| Library | From the map | By reading their code | Named, of what the game calls |
+|---|---:|---:|---:|
+| OS | 72 | 16 | 101 of 108 |
+| DVD | 13 | 4 | 21 of 24 |
+| VI | 11 | 4 | 29 of 32 |
+| PPC | 0 | 24 | 23 of 23 |
+
+**PPC** (PPCArch, the first library of the SDK) had no name at all, so the map
+had no anchor. It was not needed: each function is the instruction that reads
+or writes one special register of the processor (`mfspr r3, HID0` is
+`PPCMfhid0`), and their order is the map's. `tests/test_ppc_names.py` compares
+them instruction by instruction.
+
+**By reading the code** came, among others, the thread functions whose size
+differs from *Mario Kart Wii*'s (`OSSleepThread`, `OSWakeupThread`,
+`OSResumeThread`, `OSSuspendThread`, `OSCancelThread`, `OSJoinThread`, by the
+`state` field of `OSThread` and its values), `OSReport`, `DVDOpen` (by its
+warning "DVDOpen(): file '%s' was not found") and `VIConfigure`. Two are not in
+the map because *Mario Kart Wii* does not use them: `OSSetIdleFunction`, which
+creates a thread of priority 31, and `OSGetIdleFunction`.
+`tests/test_os_dvd_vi_names.py` checks the 24, and also the twelve functions of
+`OSArena.c` that the map named by order alone (all of them 8 bytes long): each
+getter reads the variable its setter writes, and those of `OSGetArenaHi`/`Lo`
+are MEM1's.
+
+**What is still unnamed** (13 of what the game calls): four `static`
+functions of the SDK that the tool leaves alone on purpose, because a name
+without the library in front can clash with another (`WaitMicroTime`,
+`OnShutdown`, `DefaultSwitchThreadCallback`, `defaultOptionalCommandChecker`);
+four of `OSFont.c` and `0x80256040`, whose size differs and which need a more
+careful reading; and `0x80258630`, `0x802646F0`, `0x80265980` (it warns through
+`SCGetLanguage` and `OSSetFontEncode`, so it looks like the disc's error
+message), `0x8026C560` and `0x8026C6C0`.
 
 ### Other findings from the new tools
 
