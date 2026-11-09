@@ -1,12 +1,13 @@
-"""wiicompiled/RBIEE9-os-addresses.txt, checked against the real main.dol and WiiCompiled's sources.
+"""The tables wiicompiled/RBIEE9-*-addresses.txt, checked against the real main.dol and WiiCompiled's sources.
 
-La tabla de direcciones del OS nativo de WiiCompiled, comprobada contra el main.dol real y el código de
-WiiCompiled.
+Las tablas de direcciones para el código nativo de WiiCompiled, comprobadas contra el main.dol real y el
+código de WiiCompiled.
 
 - Every function row: symbols.txt gives this game's address the function's name.
-- Every variable row: the function named as evidence loads, stores or builds the address.
-- With a WiiCompiled clone (HM_AP_WIICOMPILED), the table holds exactly the addresses its native OS names
-  with MKW_GADDR(), no more and no fewer.
+- Every variable row: the function named as evidence loads, stores or builds the address; or, for
+  "held at 0x...", main.dol holds the address in that word.
+- With a WiiCompiled clone (HM_AP_WIICOMPILED), each table holds exactly the addresses that the
+  WiiCompiled sources on its `# covers:` line name with MKW_GADDR(), no more and no fewer.
 """
 
 import os
@@ -25,11 +26,13 @@ from function_finder import find_small_data_bases  # noqa: E402
 from project import SYMBOLS_PATH  # noqa: E402
 from symbols import SymbolTable  # noqa: E402
 
-TABLE = Path(__file__).resolve().parent.parent / "wiicompiled" / "RBIEE9-os-addresses.txt"
+TABLES = sorted((Path(__file__).resolve().parent.parent / "wiicompiled").glob("RBIEE9-*-addresses.txt"))
 COLUMNS = re.compile(r"\s{2,}")
+COVERS = "# covers:"
 FUNCTION_EVIDENCE = "name"
+HELD_AT = "held at "
 NOTHING = "-"
-GUEST_ADDRESS = re.compile(r"MKW_GADDR\((?P<address>[0-9A-Fa-f]{8})\)")
+GUEST_ADDRESS = re.compile(r"MKW_GADDR(?:_CT)?\((?P<address>[0-9A-Fa-f]{8})\)")
 
 DOL_PATH = os.environ.get("HM_AP_DOL")
 WIICOMPILED = os.environ.get("HM_AP_WIICOMPILED")
@@ -38,36 +41,54 @@ needs_game_files = pytest.mark.skipif(
     reason="set HM_AP_DOL to your extracted main.dol",
 )
 needs_wiicompiled = pytest.mark.skipif(
-    not WIICOMPILED or not (Path(WIICOMPILED) / "runtime/src/hle/os").is_dir(),
+    not WIICOMPILED or not (Path(WIICOMPILED) / "runtime/src/hle").is_dir(),
     reason="set HM_AP_WIICOMPILED to a clone of WiiCompiled",
 )
 
 
 @dataclass(frozen=True)
 class Row:
+    table: str
     reference_address: int
     address: int | None
     what: str
     evidence: str
 
 
-def read_table() -> list[Row]:
-    rows = []
-    for line in TABLE.read_text(encoding="utf-8").splitlines():
+@dataclass(frozen=True)
+class Table:
+    name: str
+    covers: list[str]
+    rows: list[Row]
+
+
+def read_table(path: Path) -> Table:
+    covers, rows = [], []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(COVERS):
+            covers += line[len(COVERS) :].split()
         if not line.strip() or line.startswith("#"):
             continue
         reference, address, what, evidence = COLUMNS.split(line.strip())
-        rows.append(Row(int(reference, 16), None if address == NOTHING else int(address, 16), what, evidence))
-    return rows
+        address_or_none = None if address == NOTHING else int(address, 16)
+        rows.append(Row(path.name, int(reference, 16), address_or_none, what, evidence))
+    return Table(path.name, covers, rows)
 
 
-ROWS = read_table()
+ALL_TABLES = [read_table(path) for path in TABLES]
+ALL_ROWS = [row for table in ALL_TABLES for row in table.rows]
 
 
-def test_the_table_has_one_row_per_address_and_each_row_says_how_it_was_found():
-    references = [row.reference_address for row in ROWS]
+def row_id(row: Row) -> str:
+    return f"{row.table.split('-')[1]}-0x{row.reference_address:08X}"
+
+
+@pytest.mark.parametrize("table", ALL_TABLES, ids=lambda table: table.name)
+def test_a_table_says_what_it_covers_and_each_row_says_how_it_was_found(table):
+    assert table.covers, "a table needs a '# covers:' line"
+    references = [row.reference_address for row in table.rows]
     assert len(references) == len(set(references))
-    for row in ROWS:
+    for row in table.rows:
         assert (row.address is None) == (row.evidence == NOTHING), row.what
 
 
@@ -78,19 +99,28 @@ def game():
 
 
 @needs_game_files
-@pytest.mark.parametrize(
-    "row", [row for row in ROWS if row.evidence == FUNCTION_EVIDENCE], ids=lambda row: row.what.split()[0]
-)
+@pytest.mark.parametrize("row", [row for row in ALL_ROWS if row.evidence == FUNCTION_EVIDENCE], ids=row_id)
 def test_a_function_row_is_the_function_of_that_name(game, row):
     _, symbols, _ = game
     assert symbols.by_address[row.address].name == row.what.split()[0]
 
 
 @needs_game_files
+@pytest.mark.parametrize("row", [row for row in ALL_ROWS if row.evidence.startswith(HELD_AT)], ids=row_id)
+def test_a_variable_row_is_held_where_it_says(game, row):
+    dol, _, _ = game
+    assert dol.u32(int(row.evidence[len(HELD_AT) :], 16)) == row.address
+
+
+@needs_game_files
 @pytest.mark.parametrize(
     "row",
-    [row for row in ROWS if row.evidence not in (FUNCTION_EVIDENCE, NOTHING)],
-    ids=lambda row: f"0x{row.address:08X}",
+    [
+        row
+        for row in ALL_ROWS
+        if row.evidence not in (FUNCTION_EVIDENCE, NOTHING) and not row.evidence.startswith(HELD_AT)
+    ],
+    ids=row_id,
 )
 def test_a_variable_row_is_touched_by_its_evidence_function(game, row):
     dol, symbols, bases = game
@@ -103,9 +133,15 @@ def test_a_variable_row_is_touched_by_its_evidence_function(game, row):
 
 
 @needs_wiicompiled
-def test_the_table_holds_every_address_wiicompiled_s_native_os_names():
+@pytest.mark.parametrize("table", ALL_TABLES, ids=lambda table: table.name)
+def test_the_table_holds_every_address_the_sources_it_covers_name(table):
     named = set()
-    for source in (Path(WIICOMPILED) / "runtime/src/hle/os").iterdir():
-        for match in GUEST_ADDRESS.finditer(source.read_text(encoding="utf-8", errors="replace")):
-            named.add(int(match["address"], 16))
-    assert {row.reference_address for row in ROWS} == named
+    for covered in table.covers:
+        path = Path(WIICOMPILED) / covered
+        sources = [path] if path.is_file() else sorted(path.rglob("*"))
+        for source in sources:
+            if source.suffix not in (".cpp", ".h", ".inc"):
+                continue
+            for match in GUEST_ADDRESS.finditer(source.read_text(encoding="utf-8", errors="replace")):
+                named.add(int(match["address"], 16))
+    assert {row.reference_address for row in table.rows} == named
