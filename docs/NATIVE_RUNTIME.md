@@ -392,6 +392,32 @@ runtime no llama, o desde las funciones de la fuente del sistema
 (`OSGetFontTexel`...), que solo leen el registro de video si nadie fijó la
 codificación de la fuente.
 
+### Un Wii Remote emulado (2026-11-09)
+
+*Animal Parade* solo se juega con Wii Remote y Nunchuk, y WiiCompiled solo
+convierte el teclado y los gamepads en un control de GameCube; los Wii Remotes
+que pasa al juego son los reales, por el Bluetooth de la PC. El parche agrega un
+Wii Remote con Nunchuk emulado (`runtime/src/hle/bluetooth/emulated_remote*.cpp`)
+que habla el protocolo HID del control con la pila Bluetooth del juego, igual
+que uno real: modos de reporte 0x30–0x37 y 0x3D, estado, lectura y escritura de
+memoria (calibración, ID del Nunchuk, cifrado), la cámara IR y los LEDs. Ocupa
+el primer lugar solo en un juego ajeno y solo mientras no haya un Wii Remote real
+ahí.
+
+| GameCube (mapeo de F10) | Wii Remote + Nunchuk |
+|---|---|
+| stick | stick del Nunchuk |
+| A, B | A, B |
+| X, Y | 1, 2 |
+| L, R | Z, C |
+| Start, Z | +, − (los dos juntos: Home) |
+| cruceta y C-stick | cruceta |
+| mouse | puntero; clic izquierdo A, derecho B |
+
+El acelerómetro queda quieto, apuntando a la pantalla, así que todavía no hay
+forma de agitar el control. `runtime/tests/emulated_remote_tests.cpp` prueba el
+protocolo sin juego.
+
 ### Qué sigue
 
 1. Compilar el runtime de WiiCompiled con la capa (los pasos de arriba) en
@@ -787,6 +813,32 @@ reached when leaving the game (`OSReturnToMenu`, `OSShutdownSystem`,
 `OSRestart`), from interrupt handlers the runtime does not call, or from the
 system font functions (`OSGetFontTexel`...), which read the video register only
 if nobody set the font encoding.
+
+### An emulated Wii Remote (2026-11-09)
+
+*Animal Parade* is only played with a Wii Remote and Nunchuk, and WiiCompiled
+only turns the keyboard and gamepads into a GameCube controller; the Wii Remotes
+it hands the game are real ones, through the PC's Bluetooth. The patch adds an
+emulated Wii Remote with a Nunchuk (`runtime/src/hle/bluetooth/emulated_remote*.cpp`)
+that speaks the controller's HID protocol to the game's Bluetooth stack the way
+a real one does: reporting modes 0x30–0x37 and 0x3D, status, memory reads and
+writes (calibration, the Nunchuk's ID, encryption), the IR camera and the LEDs.
+It takes the first slot only in a foreign game and only while no real Wii Remote
+is there.
+
+| GameCube (F10 mapping) | Wii Remote + Nunchuk |
+|---|---|
+| stick | Nunchuk stick |
+| A, B | A, B |
+| X, Y | 1, 2 |
+| L, R | Z, C |
+| Start, Z | +, − (both together: Home) |
+| D-pad and C-stick | D-pad |
+| mouse | pointer; left click A, right B |
+
+The accelerometer stays still, pointing at the screen, so there is no way to
+shake the remote yet. `runtime/tests/emulated_remote_tests.cpp` tests the
+protocol without a game.
 
 ### What comes next
 

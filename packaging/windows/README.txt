@@ -31,6 +31,12 @@ This is early work. If the game stops, the window says why (often an address the
 code does not know yet in this game). Please report that message and the newest file in
 UserData\Logs.
 
+Controls: with no real Wii Remote, the game gets an emulated Wii Remote with a
+Nunchuk. Your gamepad or keyboard works as the GameCube controller mapped in F10:
+stick = Nunchuk stick, A/B = A/B, X/Y = 1/2, L/R = Z/C, Start/Z = +/-, both
+together = Home, D-pad and C-stick = D-pad. The mouse is the pointer, left click
+A, right click B. A real Wii Remote can be paired in F10 instead.
+
 For PowerShell: .\play.ps1 -Disc D:\Games\AnimalParade.rvz, -Rebuild to start the build over,
 -NoStart to only build.
 
@@ -67,6 +73,12 @@ se recuerda en UserData\disc.txt.
 Esto va empezando. Si el juego se detiene, la ventana dice por qué (muchas veces una
 dirección que el código nativo todavía no conoce en este juego). Reporta ese mensaje y el
 archivo más nuevo de UserData\Logs.
+
+Controles: sin un Wii Remote real, el juego recibe un Wii Remote con Nunchuk
+emulado. Tu gamepad o teclado funciona como el control de GameCube que mapeas en
+F10: stick = stick del Nunchuk, A/B = A/B, X/Y = 1/2, L/R = Z/C, Start/Z = +/-,
+los dos juntos = Home, cruceta y C-stick = cruceta. El mouse es el puntero, clic
+izquierdo A, clic derecho B. En F10 también puedes emparejar un Wii Remote real.
 
 Desde PowerShell: .\play.ps1 -Disc D:\Juegos\AnimalParade.rvz, -Rebuild para compilar desde cero,
 -NoStart para solo compilar.
