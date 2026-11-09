@@ -67,8 +67,11 @@ que *Magical Melody* tiene que escribir aparte: ver
       `SCGetProductCode`.
 - [ ] Un reemplazo nativo de `GXReadGPMetric` que devuelva ceros, y comprobar
       que el planificador nativo le da turno al hilo ocioso del juego.
-- [ ] Capa propia: las piezas de WiiCompiled registradas en las direcciones de
-      este juego.
+- [x] Capa propia: las nativas de WiiCompiled en las direcciones de este
+      juego (271 de 582), con un parche que agrega este juego como destino de
+      `GuestRegion` y apaga lo que es solo de *Mario Kart Wii*. El traductor ya
+      las reconoce.
+- [ ] Compilar el runtime con la capa en una PC con GPU y correrlo.
 - [ ] Pantalla de título sin Dolphin, comparada con la de ModernGekko.
 - [ ] Hito 1.0: jugable de principio a fin sin código de Dolphin.
 
@@ -154,8 +157,11 @@ Dolphin core). For a Wii game, WiiCompiled already brings almost everything
       `SCGetProductCode`.
 - [ ] A native replacement of `GXReadGPMetric` that returns zeros, and check
       that the native scheduler gives the game's idle thread a turn.
-- [ ] Our own layer: the pieces of WiiCompiled registered at this game's
-      addresses.
+- [x] Our own layer: WiiCompiled's natives at this game's addresses (271 of
+      582), with a patch that adds this game as a destination of `GuestRegion`
+      and turns off what belongs to *Mario Kart Wii* alone. The translator
+      already recognizes them.
+- [ ] Build the runtime with the layer on a PC with a GPU and run it.
 - [ ] Title screen without Dolphin, compared with ModernGekko's.
 - [ ] Milestone 1.0: playable from start to end with no Dolphin code.
 
