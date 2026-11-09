@@ -244,16 +244,19 @@ try {
     }
 
     if ($Rebuild -and (Test-Path -LiteralPath $build)) { Remove-Item -LiteralPath $build -Recurse -Force }
-    # The precompiled runtime is only used while the runtime's sources are the ones it was built from,
-    # and CMake decides that when it configures. A runtime file newer than the last configuration (a
-    # fix copied into BuildWorkspace\runtime) therefore configures again; what was compiled is kept.
+    # The precompiled runtime and aurora are only used while their sources are the ones they were built
+    # from, and CMake decides that when it configures. A runtime or aurora file newer than the last
+    # configuration (a fix copied into BuildWorkspace) therefore configures again; what was compiled is
+    # kept. A changed aurora is compiled from source, which takes a while once.
     $cache = Join-Path $build 'CMakeCache.txt'
     if (Test-Path -LiteralPath $cache -PathType Leaf) {
         $configured = (Get-Item -LiteralPath $cache).LastWriteTimeUtc
-        $changed = Get-ChildItem -LiteralPath (Join-Path $workspace 'runtime') -Recurse -File |
+        $sources = (Join-Path $workspace 'runtime'), (Join-Path $workspace 'aurora-main\lib'),
+            (Join-Path $workspace 'aurora-main\include')
+        $changed = Get-ChildItem -LiteralPath $sources -Recurse -File |
             Where-Object { $_.LastWriteTimeUtc -gt $configured } | Select-Object -First 1
         if ($changed) {
-            Write-Host "Runtime changed ($($changed.Name)); configuring again / El runtime cambió; se configura otra vez"
+            Write-Host "Sources changed ($($changed.Name)); configuring again / Cambió el código; se configura otra vez"
             Remove-Item -LiteralPath $cache -Force
         }
     }
