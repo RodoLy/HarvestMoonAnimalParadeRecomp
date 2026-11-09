@@ -1399,13 +1399,14 @@ index 3dbdc8d..be45c92 100644
      EnsureAuroraFrameActive();
      GX_SYNC_INLINE();
 diff --git a/runtime/src/hle/gx/gx_dl.cpp b/runtime/src/hle/gx/gx_dl.cpp
-index daceeb7..9c2534c 100644
+index daceeb7..cb4d324 100644
 --- a/runtime/src/hle/gx/gx_dl.cpp
 +++ b/runtime/src/hle/gx/gx_dl.cpp
-@@ -1,8 +1,12 @@
+@@ -1,8 +1,13 @@
  #include "gx_internal.h"
 +
 +#include <cstring>
++#include <vector>
 +#include "gx_frame_trace.h"
  #include "gx_stream_common.h"
  #include "gx_cp_decode.h"
@@ -1415,7 +1416,7 @@ index daceeb7..9c2534c 100644
  #include <cstdlib>
  #include <unordered_map>
  
-@@ -1293,14 +1297,86 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1293,14 +1298,111 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
      GxGuestWrite::NotifyWrite(addr, size);
  }
  
@@ -1447,6 +1448,30 @@ index daceeb7..9c2534c 100644
 +                       first[8], lo, hi, nan);
 +}
 +
++// For the frame trace: every entry of a position array, once per array in the first traced frame, so a
++// model can be redrawn from the log and a vertex that came out wrong can be told from one that did not.
++static void TraceArrayDump(uint32_t base, uint32_t stride) {
++    static int dumpedSession = -1;
++    static std::vector<uint32_t> dumpedBases;
++    if (GxFrameTrace::Frame() != 0 || base == 0 || stride < 12) return;
++    if (dumpedSession != GxFrameTrace::Session()) {
++        dumpedSession = GxFrameTrace::Session();
++        dumpedBases.clear();
++    }
++    for (const uint32_t seen : dumpedBases) {
++        if (seen == base) return;
++    }
++    dumpedBases.push_back(base);
++    for (uint32_t i = 0; i < 256; ++i) {
++        float v[3];
++        for (uint32_t c = 0; c < 3; ++c) {
++            const uint32_t bits = Memory::Read32(base + i * stride + c * 4);
++            std::memcpy(&v[c], &bits, sizeof(float));
++        }
++        GxFrameTrace::Note("  pos 0x%08X #%u %g %g %g", base, i, v[0], v[1], v[2]);
++    }
++}
++
 +// For the frame trace: the vertex layout a display list is drawn with, as the worker applies it (each
 +// present attribute as name:type, 1 direct, 2 index8, 3 index16, with n3/n9 for the normal), and the
 +// format of its first draw when the list starts with one.
@@ -1475,6 +1500,7 @@ index daceeb7..9c2534c 100644
 +                       listAddr, vf, layout, pos.base, pos.stride, static_cast<int>(posFmt.type), posFmt.frac,
 +                       nrm.base, nrm.stride);
 +    TraceArrayValues("positions", pos.base, pos.stride);
++    TraceArrayDump(pos.base, pos.stride);
 +    TraceArrayValues("normals", nrm.base, nrm.stride);
 +}
 +
@@ -1552,10 +1578,10 @@ index 108e4fd..3c79edf 100644
  
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
-index 0000000..65bdeb6
+index 0000000..130191a
 --- /dev/null
 +++ b/runtime/src/hle/gx/gx_frame_trace.cpp
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,67 @@
 +#include "gx_frame_trace.h"
 +
 +#include "runtime_log.h"
@@ -1569,12 +1595,14 @@ index 0000000..65bdeb6
 +std::atomic<int> g_framesLeft{0};
 +std::atomic<int> g_frame{0};
 +std::atomic<int> g_line{0};
++std::atomic<int> g_session{0};
 +// A frame of a busy scene can bind thousands of textures; past this many lines the rest of the
 +// frame is only counted, so the log stays readable.
-+constexpr int kLinesPerFrame = 4000;
++constexpr int kLinesPerFrame = 12000;
 +} // namespace
 +
 +void Request(int frames) {
++    g_session.fetch_add(1);
 +    g_frame.store(0);
 +    g_line.store(0);
 +    g_framesLeft.store(frames);
@@ -1582,6 +1610,10 @@ index 0000000..65bdeb6
 +}
 +
 +bool Active() { return g_framesLeft.load(std::memory_order_relaxed) > 0; }
++
++int Frame() { return g_frame.load(); }
++
++int Session() { return g_session.load(); }
 +
 +void Note(const char* format, ...) {
 +    if (!Active()) {
@@ -1619,10 +1651,10 @@ index 0000000..65bdeb6
 +} // namespace GxFrameTrace
 diff --git a/runtime/src/hle/gx/gx_frame_trace.h b/runtime/src/hle/gx/gx_frame_trace.h
 new file mode 100644
-index 0000000..17f1b00
+index 0000000..0e6166a
 --- /dev/null
 +++ b/runtime/src/hle/gx/gx_frame_trace.h
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,30 @@
 +#pragma once
 +
 +// A short record of how the game builds a few frames: every EFB copy (to a texture or to the screen),
@@ -1645,6 +1677,10 @@ index 0000000..17f1b00
 +    __attribute__((format(printf, 1, 2)))
 +#endif
 +    ;
++// Which traced frame is being drawn (0 for the first one).
++int Frame();
++// Counts the F9 presses, so something done once per trace can tell a new trace from the one before.
++int Session();
 +// GXCopyDisp ends a frame.
 +void EndFrame();
 +
