@@ -62,6 +62,7 @@ def test_the_patched_runtime_finds_this_game_s_addresses(tmp_path):
     assert run.returncode == 3  # it stopped at the address the game does not have
     assert run.stdout.splitlines() == [
         "game RBIEE9",
+        "foreign 1",
         "arena 806CC680",
         f"addresses {rows}",
         "sleep 8025B8A0",

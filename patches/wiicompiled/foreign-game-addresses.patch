@@ -20,7 +20,7 @@ index 4ca4439..cd7d8c4 100644
  // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
  #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
-index 1836717..ee1f65f 100644
+index 1836717..7c7627e 100644
 --- a/runtime/include/guest_abi/guest_region.h
 +++ b/runtime/include/guest_abi/guest_region.h
 @@ -9,6 +9,11 @@
@@ -184,6 +184,28 @@ index 1836717..ee1f65f 100644
  };
  
  inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(Current())]; }
+@@ -160,6 +233,21 @@ inline const Facts& CurrentFacts() noexcept { return kFacts[static_cast<size_t>(
+ 
+ #define MKW_GADDR(pal) (::GuestRegion::Address<0x##pal##u>())
+ 
++namespace GuestRegion {
++
++inline bool IsForeignGame() noexcept { return Current() == Id::ForeignGame; }
++
++// An address looked up when it is read, not when the program starts: for constants at file scope
++// that only Mario Kart Wii's own features use, which a foreign game never reaches.
++template <uint32_t Pal>
++struct LazyAddress {
++    operator uint32_t() const noexcept { return Address<Pal>(); }
++};
++
++} // namespace GuestRegion
++
++#define MKW_GADDR_LAZY(pal) (::GuestRegion::LazyAddress<0x##pal##u>{})
++
+ #if defined(MKW_TRANSLATED_GUEST_REGION)
+ #define MKW_GADDR_CT(pal) \
+     (::GuestRegion::RowOf(0x##pal##u).In(static_cast<::GuestRegion::Id>(MKW_TRANSLATED_GUEST_REGION)))
 diff --git a/runtime/src/abi_bridge.cpp b/runtime/src/abi_bridge.cpp
 index 55fe416..99fc9ef 100644
 --- a/runtime/src/abi_bridge.cpp
@@ -199,3 +221,125 @@ index 55fe416..99fc9ef 100644
      std::lock_guard<std::mutex> lock(RegistryMutex());
      if (RegistryFrozen().load(std::memory_order_acquire)) {
          RT_LOG(RT_TAG_RUNTIME) << "ERROR: Attempted to register function after registry was finalized: 0x"
+diff --git a/runtime/src/dynamic_aspect.cpp b/runtime/src/dynamic_aspect.cpp
+index 67f94fb..4c9e754 100644
+--- a/runtime/src/dynamic_aspect.cpp
++++ b/runtime/src/dynamic_aspect.cpp
+@@ -23,29 +23,29 @@ uint32_t g_lastEggWidth169 = 0;
+ 
+ // EGG::Screen's static canvas records (PAL). See gx_dynamic_aspect.h for the
+ // record layout and the anamorphic presentation model.
+-const uint32_t kEggScreenRecord43 = MKW_GADDR(802A3EE8);
+-const uint32_t kEggScreenRecord169 = MKW_GADDR(802A3EF4);
+-const uint32_t kEggActiveScreenPtr = MKW_GADDR(80386F14);
++const auto kEggScreenRecord43 = MKW_GADDR_LAZY(802A3EE8);
++const auto kEggScreenRecord169 = MKW_GADDR_LAZY(802A3EF4);
++const auto kEggActiveScreenPtr = MKW_GADDR_LAZY(80386F14);
+ 
+-const uint32_t kEggScreenProjScaleX = MKW_GADDR(80386F20);
+-const uint32_t kEggScreenProjScaleY = MKW_GADDR(80386F24);
++const auto kEggScreenProjScaleX = MKW_GADDR_LAZY(80386F20);
++const auto kEggScreenProjScaleY = MKW_GADDR_LAZY(80386F24);
+ 
+-const uint32_t kEggScreenAspectHandler = MKW_GADDR(8023E53C);
++const auto kEggScreenAspectHandler = MKW_GADDR_LAZY(8023E53C);
+ 
+-const uint32_t kMkwUpdateAllScreens = MKW_GADDR(805653D0);
+-const uint32_t kMkwGfxDrawList = MKW_GADDR(809C1830);
+-const uint32_t kSystemManagerInstance = MKW_GADDR(80386000);
++const auto kMkwUpdateAllScreens = MKW_GADDR_LAZY(805653D0);
++const auto kMkwGfxDrawList = MKW_GADDR_LAZY(809C1830);
++const auto kSystemManagerInstance = MKW_GADDR_LAZY(80386000);
+ 
+ // The draw list is an nw4r::ut::List: +0x00 head, +0x04 tail, +0x08 u16 count,
+ // +0x0A u16 link offset, with next = *(node + linkOffset + 4) (List_GetNext,
+ // 0x800AF180).
+ constexpr uint32_t kMkwGfxDrawListLinkOffset = 0x0Au;
+ 
+-const uint32_t kMkwGfxOffscreenList = MKW_GADDR(809C183C);
++const auto kMkwGfxOffscreenList = MKW_GADDR_LAZY(809C183C);
+ constexpr uint32_t kMkwGfxOffscreenNodeScreenSlot = 0x10u;
+ constexpr uint32_t kEggScreenVTableOffset = 0x38u;
+-const uint32_t kEggScreenVTable = MKW_GADDR(802A3F0C);
+-const uint32_t kMkwScreenVTable = MKW_GADDR(808B4C20);
++const auto kEggScreenVTable = MKW_GADDR_LAZY(802A3F0C);
++const auto kMkwScreenVTable = MKW_GADDR_LAZY(808B4C20);
+ constexpr uint32_t kEggScreenFlagsOffset = 0x34u;
+ constexpr uint16_t kEggScreenFlagFramebufferCanvas = 0x0008u;
+ constexpr uint16_t kEggScreenFlagKeepFrustumScale = 0x0040u;
+@@ -163,6 +163,9 @@ void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
+ 
+ 
+ void AssertMkwOffscreenScreenBypass() {
++    if (GuestRegion::IsForeignGame()) {
++        return;
++    }
+     static int lastSweptFrame = -1;
+     if (lastSweptFrame == g_gxFrameCount) {
+         return;
+@@ -172,6 +175,9 @@ void AssertMkwOffscreenScreenBypass() {
+ }
+ 
+ void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight) {
++    if (GuestRegion::IsForeignGame()) {
++        return;  // Mario Kart Wii's EGG screens: another game has none
++    }
+     const bool requestedForceAspect = g_requestedForceAspect.load(std::memory_order_acquire);
+     if (g_forceAspect != requestedForceAspect) {
+         g_forceAspect = requestedForceAspect;
+@@ -198,6 +204,9 @@ void SetMkwForceAspect(bool enabled) {
+ }
+ 
+ void ConfigureMkwDynamicAspect(bool widescreen, bool forceAspect, uint32_t surfaceWidth, uint32_t surfaceHeight) {
++    if (GuestRegion::IsForeignGame()) {
++        return;
++    }
+     g_widescreen = widescreen;
+     g_forceAspect = forceAspect;
+     g_requestedForceAspect.store(forceAspect, std::memory_order_relaxed);
+diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
+index cd236a9..00d3693 100644
+--- a/runtime/src/hle/vi.cpp
++++ b/runtime/src/hle/vi.cpp
+@@ -149,7 +149,7 @@ const uint32_t kViNextFrameBufferHwAddr = MKW_GADDR(80350890);
+ const uint32_t kViRetraceQueueAddr      = MKW_GADDR(80386bc0); // Thread queue for VIWaitForRetrace
+ 
+ // EGG::BaseSystem::sSystem pointer - must be non-null before post-retrace callback is valid
+-const uint32_t kEggSSystemAddr = MKW_GADDR(80386F60);
++const auto kEggSSystemAddr = MKW_GADDR_LAZY(80386F60);
+ 
+ std::chrono::microseconds IntervalForFormat(uint32_t tvFormat) {
+     // NTSC-ish defaults to 60 Hz; PAL uses 50 Hz.
+@@ -343,7 +343,8 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
+         if (postCb) {
+             // Guard: only invoke callback if sSystem is initialized
+             // The callback dereferences sSystem which must be non-null
+-            uint32_t sSystemPtr = Memory::Read32(kEggSSystemAddr);
++            // A foreign game has no EGG: its callback runs as the SDK runs it.
++            uint32_t sSystemPtr = GuestRegion::IsForeignGame() ? 1u : Memory::Read32(kEggSSystemAddr);
+             if (sSystemPtr != 0) {
+                 InvokeIndirectCpu(postCb, ctx);
+             }
+diff --git a/runtime/src/music_attenuation.cpp b/runtime/src/music_attenuation.cpp
+index ad031c1..18bf15f 100644
+--- a/runtime/src/music_attenuation.cpp
++++ b/runtime/src/music_attenuation.cpp
+@@ -29,7 +29,7 @@
+ namespace MusicAttenuation {
+ namespace {
+ 
+-const uint32_t kSoundManagerPointer = MKW_GADDR(809C2898);
++const auto kSoundManagerPointer = MKW_GADDR_LAZY(809C2898);
+ constexpr uint32_t kArchivePlayerOffset = 0x5BCu;
+ constexpr uint32_t kSoundPlayersOffset = 0x34u;
+ constexpr uint32_t kSoundPlayerVolumeOffset = 0x2Cu;
+@@ -97,6 +97,9 @@ bool ReadGuestFloat(uint32_t address, float& value) noexcept {
+ }
+ 
+ uint32_t ResolveSoundPlayerArray() noexcept {
++    if (GuestRegion::IsForeignGame()) {
++        return 0;  // Mario Kart Wii's sound manager: another game has none
++    }
+     uint32_t soundManager = 0;
+     uint32_t archivePlayer = 0;
+     uint32_t soundPlayers = 0;

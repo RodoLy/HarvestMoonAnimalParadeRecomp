@@ -22,6 +22,10 @@ void FatalUnknownAddress(uint32_t pal) noexcept {
 using GuestRegion::Id;
 using GuestRegion::RowOf;
 
+// A constant at file scope, as Mario Kart Wii's own features keep them, with an address this game does
+// not have: being lazy, it must not stop the program when it starts, only when it is read.
+const auto kEggFogConstant = MKW_GADDR_LAZY(80388DD0);
+
 // Known at compile time: a native (OSSleepThread), a variable (DefaultThread), and a constant of
 // Mario Kart Wii's EGG engine that this game does not have.
 static_assert(RowOf(0x801AA9B8u).In(Id::ForeignGame) == 0x8025B8A0u, "OSSleepThread");
@@ -33,11 +37,12 @@ static_assert(RowOf(0x801AA9B8u).In(Id::Pal) == 0x801AA9B8u, "PAL");
 int main() {
     const GuestRegion::Facts& facts = GuestRegion::CurrentFacts();
     std::printf("game %s\n", facts.gameId);
+    std::printf("foreign %d\n", GuestRegion::IsForeignGame() ? 1 : 0);
     std::printf("arena %08X\n", facts.mem1ArenaLo);
     std::printf("addresses %zu\n", GuestRegion::kForeignAddressCount);
     std::printf("sleep %08X\n", MKW_GADDR(801AA9B8));
     std::printf("egg registration %08X\n", GuestRegion::TranslateRegistration(0x8020FF9Cu));
-    (void)MKW_GADDR(80388DD0);  // stops here: the game has no such constant
-    std::printf("not reached\n");
+    const uint32_t fog = kEggFogConstant + 4;  // stops here: the game has no such constant
+    std::printf("not reached %08X\n", fog);
     return 0;
 }
