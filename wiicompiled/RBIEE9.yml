@@ -57,8 +57,11 @@ runtime:
   native_registration_root: projects/animal-parade/native
   native_abi_directories: []
 
+# The runtime's CMake reads the translation from generated/ at the clone's root, as for Mario Kart Wii
+# (generated/build_shards/shards.cmake, generated/data_sections_init.cpp, generated/RuntimeConfig.h).
+# El CMake del runtime lee la traducción de generated/ en la raíz de la copia, igual que con Mario Kart Wii.
 output:
-  root: build/animal-parade
+  root: generated
   functions: functions
   runtime_config: RuntimeConfig.h
   data_initializer: data_sections_init.cpp
