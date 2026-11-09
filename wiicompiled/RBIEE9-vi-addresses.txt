@@ -1,0 +1,30 @@
+# Where this game keeps what WiiCompiled's native VI looks for at Mario Kart Wii's addresses.
+# Dónde guarda este juego lo que el VI nativo de WiiCompiled busca en las direcciones de Mario Kart Wii.
+#
+# The columns are those of RBIEE9-os-addresses.txt; tests/test_wiicompiled_addresses.py checks every row.
+# Las columnas son las de RBIEE9-os-addresses.txt.
+#
+# vi.c's small variables sit 0x332DA08 bytes further on than in Mario Kart Wii, in the same order; its
+# HorVer structure (the timing and size of the picture) 0x2C3030 bytes further on.
+#
+# covers: runtime/src/hle/vi.cpp
+
+# ---------------------------------------------------------------- vi.c (.sbss)
+0x80386B38  0x806B4540  IsInitialized                                   VIInit
+0x80386B44  0x806B454C  the guard VIInit sets before the retrace interrupt runs  VIInit
+0x80386BA0  0x806B45A8  the next frame buffer the retrace interrupt hands to the hardware  0x80268450
+0x80386BA8  0x806B45B0  the TV format                                   VIGetTvFormat
+0x80386BB4  0x806B45BC  PostCB, the callback after each retrace         VISetPostRetraceCallback
+0x80386BB8  0x806B45C0  PreCB, the callback before each retrace         VISetPreRetraceCallback
+0x80386BC0  0x806B45C8  the thread queue VIWaitForRetrace sleeps on     VIWaitForRetrace
+0x80386BE4  0x806B45EC  the retrace count                               VIGetRetraceCount
+
+# ---------------------------------------------------------------- HorVer (.bss)
+0x80350864  0x80613894  HorVer: the width of the picture                VIConfigure
+0x80350866  0x80613896  HorVer: the height of the picture               VIConfigure
+0x80350872  0x806138A2  HorVer: the width of the frame buffer           VIConfigure
+0x8035087C  0x806138AC  HorVer: the height of the frame buffer          VIConfigure
+0x80350890  0x806138C0  HorVer: the frame buffer VISetNextFrameBuffer was given  VISetNextFrameBuffer
+
+# ---------------------------------------------------------------- Mario Kart Wii only
+0x80386F60  -           EGG::BaseSystem::sSystem, Mario Kart Wii's engine  -
