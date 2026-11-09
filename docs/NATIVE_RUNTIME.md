@@ -268,7 +268,14 @@ explícita en lugar de tramos:
   que este juego no tiene no se registra (el registro salta la dirección 0), y
   un `MKW_GADDR` de una dirección así detiene el runtime cuando se llega a él.
   Sin la tabla, las tres regiones de *Mario Kart Wii* compilan como antes.
-- El mismo parche apaga lo que es solo de *Mario Kart Wii* y correría con
+- `patches/wiicompiled/foreign-game-translator.patch` hace que el traductor
+  compile para `ForeignGame` (`MKW_TRANSLATED_GUEST_REGION 3`) todo juego que
+  no sea *Mario Kart Wii*. Sin él, un ID desconocido como `RBIEE9` caía en PAL
+  y el runtime se habría compilado para las direcciones de *Mario Kart Wii*.
+  Tampoco traduce las direcciones de las nativas de ese juego, que en su
+  carpeta ya son las suyas. Para `emit-build-shards` hay que pasar
+  `--native-source-dir projects/animal-parade/native`.
+- El primer parche también apaga lo que es solo de *Mario Kart Wii* y correría con
   cualquier juego: su pantalla ancha dinámica (pantallas de EGG), la atenuación
   de música (su gestor de sonido) y la espera por `EGG::sSystem` antes del
   callback de después del retrazo (aquí corre como en el SDK). Esas 14
@@ -310,6 +317,7 @@ cd wiicompiled
 git checkout 27ff3b0
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
+git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 
 # Desde harvest-moon-ap-recomp: el mapa de funciones y la capa.
 python3 tools/export_wiicompiled_map.py          # escribe build/RBIEE9_wiicompiled_map.txt
@@ -607,7 +615,14 @@ instead of stretches:
   game does not have is left unregistered (the registry skips address 0), and
   an `MKW_GADDR` of such an address stops the runtime when reached. Without the
   table, *Mario Kart Wii*'s three regions build as before.
-- The same patch turns off what belongs to *Mario Kart Wii* alone and would
+- `patches/wiicompiled/foreign-game-translator.patch` makes the translator
+  build every game that is not *Mario Kart Wii* for `ForeignGame`
+  (`MKW_TRANSLATED_GUEST_REGION 3`). Without it, an unknown ID such as
+  `RBIEE9` fell to PAL, and the runtime would have been built for *Mario Kart
+  Wii*'s addresses. It also leaves that game's native addresses alone: in its
+  folder they are already its own. `emit-build-shards` needs
+  `--native-source-dir projects/animal-parade/native`.
+- The first patch also turns off what belongs to *Mario Kart Wii* alone and would
   run with any game: its dynamic widescreen (EGG's screens), the music
   attenuation (its sound manager) and the wait for `EGG::sSystem` before the
   post-retrace callback (here it runs as in the SDK). Those 14 constants sat at
@@ -650,6 +665,7 @@ cd wiicompiled
 git checkout 27ff3b0
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
+git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 
 # From harvest-moon-ap-recomp: the function map and the layer.
 python3 tools/export_wiicompiled_map.py          # writes build/RBIEE9_wiicompiled_map.txt
