@@ -197,7 +197,7 @@ escribe su setter, y las de `OSGetArenaHi`/`Lo` son las de MEM1.
 `static` del SDK que la herramienta no escribe a propósito, porque un nombre
 sin la biblioteca delante puede chocar con otro (`WaitMicroTime`,
 `OnShutdown`, `DefaultSwitchThreadCallback`, `defaultOptionalCommandChecker`);
-cuatro de `OSFont.c` y `0x80256040`, que tienen otro tamaño y piden leerlas con
+tres de `OSFont.c` y `0x80256040`, que tienen otro tamaño y piden leerlas con
 más cuidado; y `0x80258630`, `0x802646F0`, `0x80265980` (avisa con
 `SCGetLanguage` y `OSSetFontEncode`, así que parece el mensaje de error del
 disco), `0x8026C560` y `0x8026C6C0`.
@@ -415,7 +415,7 @@ are MEM1's.
 functions of the SDK that the tool leaves alone on purpose, because a name
 without the library in front can clash with another (`WaitMicroTime`,
 `OnShutdown`, `DefaultSwitchThreadCallback`, `defaultOptionalCommandChecker`);
-four of `OSFont.c` and `0x80256040`, whose size differs and which need a more
+three of `OSFont.c` and `0x80256040`, whose size differs and which need a more
 careful reading; and `0x80258630`, `0x802646F0`, `0x80265980` (it warns through
 `SCGetLanguage` and `OSSetFontEncode`, so it looks like the disc's error
 message), `0x8026C560` and `0x8026C6C0`.
