@@ -60,10 +60,10 @@ index f44f861..94bfbfb 100644
  }
 diff --git a/runtime/include/bluetooth/emulated_remote.h b/runtime/include/bluetooth/emulated_remote.h
 new file mode 100644
-index 0000000..353b7fe
+index 0000000..92e58ff
 --- /dev/null
 +++ b/runtime/include/bluetooth/emulated_remote.h
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,113 @@
 +#pragma once
 +
 +// A Wii Remote with a Nunchuk, made from the PC's own controls, for a game that needs one and has no
@@ -144,6 +144,7 @@ index 0000000..353b7fe
 +
 +    uint8_t Leds() const { return m_leds; }
 +    uint8_t ReportingMode() const { return m_mode; }
++    bool IrCameraOn() const { return m_irCamera; }
 +
 +private:
 +    void QueueAcknowledge(uint8_t reportId, uint8_t error);
@@ -1119,10 +1120,10 @@ index 0000000..1d2a9f9
 +} // namespace Bluetooth
 diff --git a/runtime/src/hle/bluetooth/emulated_remote_host.cpp b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
 new file mode 100644
-index 0000000..a228188
+index 0000000..0230f3a
 --- /dev/null
 +++ b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,191 @@
 +// Routes the first remote slot to the emulated Wii Remote (emulated_remote.h) for a foreign game while
 +// no real remote is attached there, and feeds it the PC's controls: the GameCube pad as the runtime's
 +// input bindings map it (F10), and the mouse as the pointer, its buttons as A and B.
@@ -1238,7 +1239,16 @@ index 0000000..a228188
 +            m_real.SendOutputReport(slot, report, size);
 +            return;
 +        }
++        const uint8_t mode = m_remote.ReportingMode();
++        const bool camera = m_remote.IrCameraOn();
 +        m_remote.HandleOutputReport(report, size);
++        // What the game asks of the remote says whether it reads the pointer at all: only the modes with
++        // IR bytes (0x33, 0x36, 0x37, 0x3E/0x3F) carry it, and only with the camera on.
++        if (m_remote.ReportingMode() != mode || m_remote.IrCameraOn() != camera) {
++            RT_LOG(RT_TAG_HLE) << "Emulated Wii Remote: the game asks for report 0x" << std::hex
++                               << static_cast<int>(m_remote.ReportingMode()) << std::dec << ", IR camera "
++                               << (m_remote.IrCameraOn() ? "on" : "off") << std::endl;
++        }
 +    }
 +
 +    void OnLinkStateChanged(size_t slot, LinkState state) override {
