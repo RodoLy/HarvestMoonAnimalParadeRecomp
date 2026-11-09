@@ -1456,6 +1456,30 @@ index 0baaa0f..42e9b83 100644
 -GX_FATAL_STUB(80173df8, "GX__ClearGPMetric_80173df8") PPC_NATIVE_OVERRIDE_VOID(80173df8, gx_stub_80173df8, (CpuContext* ctx), (ctx));
 +extern "C" void GX__ClearGPMetric_80173df8(CpuContext* ctx) { (void)ctx; }
 +PPC_NATIVE_OVERRIDE_VOID(80173df8, GX__ClearGPMetric_80173df8, (CpuContext* ctx), (ctx));
+diff --git a/runtime/src/hle/gx/gx_fifo.cpp b/runtime/src/hle/gx/gx_fifo.cpp
+index 108e4fd..3c79edf 100644
+--- a/runtime/src/hle/gx/gx_fifo.cpp
++++ b/runtime/src/hle/gx/gx_fifo.cpp
+@@ -431,8 +431,18 @@ void HleFifoWrite(u32 val, uint32_t sizeBytes) {
+         const uint8_t opcode = cmd & GX_OPCODE_MASK_CMD;
+         u32 sink = 0;
+ 
+-        if (cmd == GX_NOP_CMD || opcode == GX_CMD_INVL_VC_CMD) {
++        if (cmd == GX_NOP_CMD) {
++            if (!consumeBytes(1, sink)) break;
++            continue;
++        }
++
++        // GXInvalidateVtxCache, as the game's own code writes it: the arrays the next draws read have
++        // changed since the last ones (a game that skins its models on the CPU rewrites one buffer
++        // per model). Aurora uploads each array once and reuses the upload until this command, so
++        // dropping it here drew every model after the first with the first one's vertices.
++        if (opcode == GX_CMD_INVL_VC_CMD) {
+             if (!consumeBytes(1, sink)) break;
++            GXInvalidateVtxCache();
+             continue;
+         }
+ 
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
 index 0000000..65bdeb6
