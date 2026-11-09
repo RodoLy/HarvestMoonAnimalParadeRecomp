@@ -268,6 +268,10 @@ explícita en lugar de tramos:
   que este juego no tiene no se registra (el registro salta la dirección 0), y
   un `MKW_GADDR` de una dirección así detiene el runtime cuando se llega a él.
   Sin la tabla, las tres regiones de *Mario Kart Wii* compilan como antes.
+- `patches/wiicompiled/aurora-storage-buffer.patch` (dentro de `aurora-main`,
+  que es un submódulo) sube de 8 a 32 MiB el búfer donde aurora pone los
+  arreglos de vértices de cada cuadro: justo después del paseo en carreta del
+  inicio, este juego pide un poco más de 8 MiB y aurora se detenía.
 - `patches/wiicompiled/foreign-game-translator.patch` hace que el traductor
   compile para `ForeignGame` (`MKW_TRANSLATED_GUEST_REGION 3`) todo juego que
   no sea *Mario Kart Wii*. Sin él, un ID desconocido como `RBIEE9` caía en PAL
@@ -318,6 +322,7 @@ git checkout 27ff3b0
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
+git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-storage-buffer.patch
 
 # Desde harvest-moon-ap-recomp: el mapa de funciones y la capa.
 python3 tools/export_wiicompiled_map.py          # pone al día wiicompiled/RBIEE9-MAP.txt
@@ -692,6 +697,10 @@ instead of stretches:
   game does not have is left unregistered (the registry skips address 0), and
   an `MKW_GADDR` of such an address stops the runtime when reached. Without the
   table, *Mario Kart Wii*'s three regions build as before.
+- `patches/wiicompiled/aurora-storage-buffer.patch` (inside `aurora-main`, a
+  submodule) raises the buffer aurora puts each frame's vertex arrays in from
+  8 to 32 MiB: right after the opening cart ride this game asks for a little
+  over 8 MiB, and aurora stopped.
 - `patches/wiicompiled/foreign-game-translator.patch` makes the translator
   build every game that is not *Mario Kart Wii* for `ForeignGame`
   (`MKW_TRANSLATED_GUEST_REGION 3`). Without it, an unknown ID such as
@@ -743,6 +752,7 @@ git checkout 27ff3b0
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/skip-calls-outside-ram.patch
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addresses.patch
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
+git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-storage-buffer.patch
 
 # From harvest-moon-ap-recomp: the function map and the layer.
 python3 tools/export_wiicompiled_map.py          # brings wiicompiled/RBIEE9-MAP.txt up to date

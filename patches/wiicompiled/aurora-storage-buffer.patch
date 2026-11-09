@@ -1,0 +1,15 @@
+diff --git a/lib/gfx/resources.hpp b/lib/gfx/resources.hpp
+index 3fdc0ee..3a02eb1 100644
+--- a/lib/gfx/resources.hpp
++++ b/lib/gfx/resources.hpp
+@@ -7,7 +7,9 @@ inline constexpr bool UseTextureBuffer = true;
+ inline constexpr uint64_t UniformBufferSize = 25165824; // 24 MiB
+ inline constexpr uint64_t VertexBufferSize = 5242880;   // 5 MiB
+ inline constexpr uint64_t IndexBufferSize = 2097152;    // 2 MiB
+-inline constexpr uint64_t StorageBufferSize = 8388608;  // 8 MiB
++// Vertex arrays go here once per frame each; Harvest Moon: Animal Parade needs a little over
++// 8 MiB right after its opening cart ride, so it gets four times that.
++inline constexpr uint64_t StorageBufferSize = 33554432; // 32 MiB
+ inline constexpr uint64_t TextureUploadSize = 25165824; // 24 MiB
+ 
+ namespace detail {
