@@ -39,7 +39,8 @@ FUNCTION_KIND = "function"
 # CARDOpen), and the library's private ones with underscores before that (__GXSetDirtyState). The math
 # library has several families of names. DC, IC and LC are the cache functions of the OS library
 # (DCFlushRange, ICInvalidateRange, LCEnable). TRK is MetroTRK, the debugger kernel the SDK links in. MIX is
-# the mixer that sits on AX (MIXInit, MIXUpdateSettings).
+# the mixer that sits on AX (MIXInit, MIXUpdateSettings). PPC is PPCArch, the small functions that read and
+# write the processor's special registers (PPCMfmsr, PPCMthid0); it is the first library of the SDK.
 LIBRARY_BY_PREFIX = {
     "AI": "AI",
     "AR": "AR",
@@ -60,6 +61,7 @@ LIBRARY_BY_PREFIX = {
     "MTX": "MTX",
     "OS": "OS",
     "PAD": "PAD",
+    "PPC": "PPC",
     "PSMTX": "MTX",
     "PSQUAT": "MTX",
     "PSVEC": "MTX",

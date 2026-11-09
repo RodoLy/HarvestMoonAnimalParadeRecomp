@@ -41,6 +41,7 @@ from symbols import Symbol, SymbolTable  # noqa: E402
         ("C_MTXLookAt", "MTX"),
         ("PSMTXMultVec", "MTX"),
         ("DCFlushRange", "OS"),  # the cache functions are part of the OS library
+        ("PPCMthid0", "PPC"),
         ("TRKNubMainLoop", "TRK"),
         ("SIGetType", "SI"),
         ("Airplane", None),  # a word that merely starts with the letters AI
