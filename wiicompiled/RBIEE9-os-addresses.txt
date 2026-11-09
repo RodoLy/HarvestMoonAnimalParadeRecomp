@@ -25,6 +25,10 @@
 
 # ---------------------------------------------------------------- functions
 0x801A20BC  0x80253AC0  OSInitContext                                   name
+0x801A0620  0x80251E70  InsertAlarm (the runtime calls it to queue an alarm)  name
+0x801A1ED8  0x802538C0  OSSaveContext (the scheduler calls it before switching threads)  name
+0x801A961C  0x8025A5B0  __OSThreadInit (a native runs it after its own start-up)  name
+0x801AADE0  0x8025BBF0  __OSTimeToSystemTime (for the fire times of alarms)  name
 0x801A8088  0x80258FC0  __OSUnlockAllMutex                              name
 0x801AA0F0  0x8025B050  OSExitThread (the return address of every new thread)  name
 0x801ABC0C  0x8025C7B0  __OSDefaultPowerCallback                        name
@@ -57,4 +61,5 @@
 0x80386298  -           Mario Kart Wii's RFL manager, for its own RFLiIsWorking: not an OS variable  -
 0x805529A8  -           THP::VideoDecoder, a thread of Mario Kart Wii's movie player that OSCreateThread treats apart  -
 0x80552A74  -           THP::VideoDecoderOnMemory, the same                -
+0x8055531C  -           StaticR.rel's prolog, which a native wraps: this game has no REL  -
 0x8024373C  -           EGG::Thread::start, which the fibers wait on: Mario Kart Wii's own thread library, not in this game  -

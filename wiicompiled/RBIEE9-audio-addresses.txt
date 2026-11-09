@@ -12,6 +12,7 @@
 # covers: runtime/src/hle/audio
 
 # ---------------------------------------------------------------- AXOut.c: the callbacks of AX's DSP task
+0x8012B830  0x80274110  AXFXReverbStdExpCallback (the native reverb calls through it)  name
 0x80126948  0x80270A20  __AXDSPInitCallback (the task's init_cb, at 0x28)  name
 0x80126954  0x80270A30  __AXDSPResumeCallback (res_cb, at 0x2C)         name
 0x801269A8  0x80270A90  __AXDSPRequestCallback (done_cb, at 0x30)       name

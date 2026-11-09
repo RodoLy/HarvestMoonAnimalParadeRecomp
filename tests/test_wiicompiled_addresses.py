@@ -34,7 +34,10 @@ FUNCTION_EVIDENCE = "name"
 HELD_AT = "held at "
 ENTRY_POINT = "entry point"
 NOTHING = "-"
-GUEST_ADDRESS = re.compile(r"MKW_GADDR(?:_CT|_LAZY|_IF_PRESENT|_IS)?\((?P<address>[0-9A-Fa-f]{8})[,)]")
+# MKW_GUEST_FUNC and MKW_GUEST_NEXT call a translated function at its PAL address, so they need it too.
+GUEST_ADDRESS = re.compile(
+    r"MKW_(?:GADDR(?:_CT|_LAZY|_IF_PRESENT|_IS)?|GUEST_FUNC|GUEST_NEXT)\((?P<address>[0-9A-Fa-f]{8})[,)]"
+)
 
 DOL_PATH = os.environ.get("HM_AP_DOL")
 WIICOMPILED = os.environ.get("HM_AP_WIICOMPILED")

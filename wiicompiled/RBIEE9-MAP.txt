@@ -11695,7 +11695,7 @@
 80251de0 OSGetAppType
 80251e00 __OSInitAlarm
 80251e60 OSCreateAlarm
-80251e70 0x80251e70
+80251e70 InsertAlarm
 802520c0 OSSetAlarm
 80252130 OSSetPeriodicAlarm
 802521c0 OSCancelAlarm
