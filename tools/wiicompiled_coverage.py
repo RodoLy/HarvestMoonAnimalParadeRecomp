@@ -6,15 +6,17 @@ Mide cuáles de las funciones del SDK que llama este juego ya da WiiCompiled com
 Why this exists / Para qué sirve
 --------------------------------
 WiiCompiled replaces SDK functions of Mario Kart Wii with native C++: each replacement is a
-`PPC_NATIVE_OVERRIDE(address, function, ...)` or `PPC_NATIVE_OVERRIDE_VOID(...)` in its runtime/src, at
-Mario Kart Wii's address. To reuse them here, each has to be matched with the same SDK function in this
-game. The match is by name: the entry points of a library (tools/find_library_entry_points.py) against
-the names of WiiCompiled's replacements. What is left over is what runs translated.
+`PPC_NATIVE_OVERRIDE(address, function, ...)` or a hand-written
+`REGISTER_NATIVE_FUNCTION(0xaddress, ...)` in its runtime/src, at Mario Kart Wii's address. To reuse
+them here, each has to be matched with the same SDK function in this game. The match is by name: the
+entry points of a library (tools/find_library_entry_points.py) against the names of WiiCompiled's
+replacements. What is left over is what runs translated.
 
 WiiCompiled reemplaza funciones del SDK de Mario Kart Wii con C++ nativo, cada una con un
-`PPC_NATIVE_OVERRIDE` en la dirección de Mario Kart Wii. Para reusarlas aquí hay que emparejar cada una con
-la misma función del SDK en este juego. El emparejamiento es por nombre: los puntos de entrada de una
-biblioteca contra los nombres de los reemplazos de WiiCompiled. Lo que sobra es lo que corre traducido.
+`PPC_NATIVE_OVERRIDE` o un `REGISTER_NATIVE_FUNCTION` en la dirección de Mario Kart Wii. Para
+reusarlas aquí hay que emparejar cada una con la misma función del SDK en este juego. El emparejamiento
+es por nombre: los puntos de entrada de una biblioteca contra los nombres de los reemplazos de
+WiiCompiled. Lo que sobra es lo que corre traducido.
 
 Where a replacement's name comes from / De dónde sale el nombre de un reemplazo
 --------------------------------------------------------------------------------
@@ -58,10 +60,18 @@ from project import MAIN_DOL_PATH, SYMBOLS_PATH  # noqa: E402
 from sdk_libraries import library_of  # noqa: E402
 from symbols import SymbolTable  # noqa: E402
 
+# The two ways WiiCompiled registers a native function, as its translator reads them
+# (translator/src/Translator.Core/GeneratedMarkers.cs). The statement runs to the first `);`.
 OVERRIDE = re.compile(
-    r"PPC_NATIVE_OVERRIDE(?:_VOID)?\(\s*(?P<address>[0-9A-Fa-f]{8})\s*,\s*(?P<function>\w+)"
+    r"PPC_NATIVE_OVERRIDE(?:_VOID)?\(\s*(?P<address>[0-9A-Fa-f]{8})\s*,\s*(?P<function>\w+).*?\);",
+    re.DOTALL,
 )
-ADDRESS_SUFFIX = re.compile(r"_(?:HLE_)?[0-9A-Fa-f]{8}(?:_Cpu)?$")
+REGISTRATION = re.compile(
+    r"REGISTER_NATIVE_(?:FUNCTION(?:_AS)?|WRAPPER_AS|REPLACEMENT_AS)\s*\(\s*0x(?P<address>[0-9A-Fa-f]{8})"
+    r"\s*,\s*(?P<function>\w+).*?\);",
+    re.DOTALL,
+)
+ADDRESS_SUFFIX = re.compile(r"_(?:HLE_)?[0-9A-Fa-f]{8}(?:_Cpu|_hle)?$")
 WORD_SUFFIX = re.compile(r"_(?:HLE|Skip|stub)$")
 # `OS____GetSystemTime` (`OS::__GetSystemTime`), `__GX__SaveFifo` (`__GX::SaveFifo`) and `GX__Begin`.
 LIBRARY_THEN_COLONS = re.compile(r"^(?P<before>_*)(?P<library>[A-Z][A-Z0-9]+)__(?P<rest>\w+)$")
@@ -75,6 +85,7 @@ class Replacement:
     address: int  # in Mario Kart Wii
     function: str  # the C++ function
     source: Path
+    statement: str  # the whole registration, from the macro's name to its `);`
     name_in_map: str | None
     name_from_function: str
 
@@ -125,13 +136,16 @@ def read_replacements(wiicompiled: Path) -> list[Replacement]:
     }
     replacements = []
     for source in sorted((wiicompiled / RUNTIME_SOURCES).rglob("*.cpp")):
-        for match in OVERRIDE.finditer(source.read_text(encoding="utf-8", errors="replace")):
+        text = source.read_text(encoding="utf-8", errors="replace")
+        matches = sorted([*OVERRIDE.finditer(text), *REGISTRATION.finditer(text)], key=lambda m: m.start())
+        for match in matches:
             address = int(match["address"], 16)
             replacements.append(
                 Replacement(
                     address,
                     match["function"],
                     source.relative_to(wiicompiled),
+                    match.group(0),
                     names_in_map.get(address),
                     name_from_function(match["function"]),
                 )
