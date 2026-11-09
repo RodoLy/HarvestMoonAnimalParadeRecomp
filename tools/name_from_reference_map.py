@@ -66,6 +66,9 @@ from symbols import Symbol, SymbolTable  # noqa: E402
 # `OS::__CacheInit`; this game's table, like the SDK's headers, writes them `GXSetViewport`, `__GXInitGX`
 # and `__OSCacheInit`. A few carry the SDK's namespace in front (`RVL::EXIImm`, `RVL::OS::ExitThread`).
 SDK_NAMESPACE = "RVL::"
+# The libraries that talk to IOS put an underscore after their letters: IOS_Open, ISFS_OpenLib. The map
+# writes them IOS::Open like the others.
+LIBRARIES_WITH_AN_UNDERSCORE = frozenset({"IOS", "ISFS"})
 QUALIFIED_SDK_NAME = re.compile(
     r"^(?P<before>_*)(?P<library>[A-Z][A-Z0-9]+)::(?P<after>_*)(?P<rest>[A-Za-z0-9]\w*)$"
 )
@@ -92,7 +95,8 @@ def plain_sdk_name(name: str) -> str:
     match = QUALIFIED_SDK_NAME.match(name)
     if match is None:
         return name
-    return f"{match['before']}{match['after']}{match['library']}{match['rest']}"
+    joint = "_" if match["library"] in LIBRARIES_WITH_AN_UNDERSCORE else ""
+    return f"{match['before']}{match['after']}{match['library']}{joint}{match['rest']}"
 
 
 def read_reference_map(path: Path) -> list[Function]:
