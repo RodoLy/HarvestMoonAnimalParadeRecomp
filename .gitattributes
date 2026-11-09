@@ -8,6 +8,15 @@
 # línea (core.autocrlf).
 * text=auto eol=lf
 
+# The Windows package's scripts get CRLF, as Windows PowerShell and cmd.exe expect. play.ps1 also
+# starts with a UTF-8 byte order mark: without one, Windows PowerShell 5.1 reads it in the ANSI code
+# page and breaks its Spanish text.
+# Los scripts del paquete de Windows llevan CRLF, como esperan Windows PowerShell y cmd.exe. play.ps1
+# empieza además con la marca de orden de bytes de UTF-8: sin ella, Windows PowerShell 5.1 lo lee en la
+# página de códigos ANSI y rompe su texto en español.
+packaging/windows/*.ps1 text eol=crlf
+packaging/windows/*.cmd text eol=crlf
+
 # Game files are never committed (see .gitignore); if one is ever added by
 # mistake, it must not be treated as text.
 *.dol binary
