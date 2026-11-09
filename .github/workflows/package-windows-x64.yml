@@ -129,6 +129,13 @@ jobs:
             -p:DebugType=None -o (Join-Path $env:PUBLISH 'translator')
           if ($LASTEXITCODE -ne 0) { throw 'The translator could not be published.' }
 
+      # nodtool, at the version WiiCompiled pins, so players can give the disc image as it is.
+      - name: Download the disc tool (nodtool)
+        run: |
+          $nodTool = dotnet run --project (Join-Path $env:WIICOMPILED 'Launcher\WiiCompiled.Setup.Common.Cli') -c Release -- --workspace $env:WIICOMPILED | Select-Object -Last 1
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nodTool)) { throw 'nodtool could not be downloaded.' }
+          Copy-Item $nodTool (Join-Path $env:PUBLISH 'nodtool.exe')
+
       # The same layout and the same trimming as WiiCompiled's Build-Installer.ps1 (Toolkit,
       # BuildWorkspace), with this game's project instead of Mario Kart Wii's.
       - name: Assemble the package
@@ -149,6 +156,7 @@ jobs:
             Where-Object { $_.Name -like 'lldb*' -or $_.Name -like 'liblldb*' } | Remove-Item -Force
           New-Item -ItemType Directory -Force -Path (Join-Path $toolkit 'Translator') | Out-Null
           Copy-Item (Join-Path $env:PUBLISH 'translator\Translator.Cli.exe') (Join-Path $toolkit 'Translator')
+          Copy-Item (Join-Path $env:PUBLISH 'nodtool.exe') $toolkit
 
           # The Visual C++ runtime the portable CMake, Ninja and Dawn's shader compiler load.
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -217,6 +225,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Write-Host $output
           if ($output -notmatch 'This disc is RMCP01') { throw 'play.ps1 did not stop at the disc check.' }
+          # And the disc tool it extracts images with has to start on a clean Windows.
+          & (Join-Path $env:PACKAGE 'Toolkit\nodtool.exe') --help
+          if ($LASTEXITCODE -ne 0) { throw 'nodtool does not start.' }
           Remove-Item (Join-Path $env:PACKAGE 'UserData') -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Zip the package
