@@ -28,7 +28,8 @@ disco.
   traduce el juego entero (17 217 funciones), y está medido qué pide el juego y
   qué ya da WiiCompiled. GX, OS, DVD, VI y PPC ya tienen nombre en casi todo lo que
   el juego llama (GX 117 de 129, OS 101 de 108), y
-  ubicadas las direcciones que usa el código nativo de WiiCompiled. Ver
+  está la capa que pone las nativas de WiiCompiled en las direcciones de este
+  juego (271 de 582). Ver
   [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) y [docs/PLAN.md](docs/PLAN.md).
 
 ### Empezar
@@ -94,7 +95,8 @@ This repository contains no game data. You need your own backup of the disc.
   already translates the whole game (17,217 functions), and what the game needs
   and what WiiCompiled already provides is measured. GX, OS, DVD, VI and PPC now have
   a name for almost everything the game calls (GX 117 of 129, OS 101 of 108),
-  and the addresses WiiCompiled's native code uses are found. See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
+  and the layer that puts WiiCompiled's natives at this game's addresses is
+  done (271 of 582). See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
   and [docs/PLAN.md](docs/PLAN.md).
 
 ### Getting started
