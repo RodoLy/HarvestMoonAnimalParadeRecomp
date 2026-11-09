@@ -207,6 +207,17 @@ try {
     $translated = (Test-Path -LiteralPath (Join-Path $shards 'shards.cmake') -PathType Leaf) -and
         (Test-Path -LiteralPath $stamp -PathType Leaf) -and
         ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $dolSha)
+    # The project (recomp.yml, MAP.txt, the natives' addresses) decides what is translated, so a newer
+    # project file translates again.
+    if ($translated) {
+        $translatedAt = (Get-Item -LiteralPath $stamp).LastWriteTimeUtc
+        $newer = Get-ChildItem -LiteralPath (Join-Path $workspace 'projects\animal-parade') -Recurse -File |
+            Where-Object { $_.LastWriteTimeUtc -gt $translatedAt } | Select-Object -First 1
+        if ($newer) {
+            Write-Host "Project changed ($($newer.Name)); translating again / El proyecto cambió; se traduce otra vez"
+            $translated = $false
+        }
+    }
     if ($Rebuild -or -not $translated) {
         Write-Step 'Translating your main.dol into C++' 'Traduciendo tu main.dol a C++'
         if (Test-Path -LiteralPath $stamp) { Remove-Item -LiteralPath $stamp -Force }
