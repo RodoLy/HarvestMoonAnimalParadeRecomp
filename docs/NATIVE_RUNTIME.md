@@ -57,14 +57,14 @@ que para *Magical Melody* (GameCube) son trabajo nuevo, aquí ya están:
 | GX (gráficos) | 129 | 117 | **98 de 117** | Nativa, con aurora. Las otras 19 corren traducidas. |
 | OS (sistema) | 108 | 101 | 36 | Nativa en parte: hilos, alarmas, interrupciones, caché. |
 | PPC (registros del procesador) | 23 | 23 | 15 | Nativa en parte; el resto toca registros que no existen fuera de la consola. |
-| DVD (disco) | 24 | 21 | 5 | Nativa: lectura de la carpeta extraída. |
-| VI (video) | 32 | 29 | 10 | Nativa. |
-| PAD (control de GameCube) | 6 | 3 | 2 | Nativa. |
-| AI / DSP / AX (audio) | 15 | 8 | 7 | Debajo de AX, nativo; AX corre traducido. |
-| IPC / IOS | 38 | 16 | 2 | Los dispositivos de IOS son nativos; la biblioteca corre traducida. |
-| NAND, SC, WPAD, KPAD, WUD, BTE | 244 | 108 | 2 | Corren traducidas sobre los dispositivos de IOS. |
-| MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 53 | 1 | Código normal: corre traducido. |
-| **Total** | **706** | **479** | **178** | |
+| DVD (disco) | 25 | 22 | 5 | Nativa: lectura de la carpeta extraída. |
+| VI (video) | 34 | 31 | 12 | Nativa. |
+| PAD (control de GameCube) | 6 | 5 | 4 | Nativa. |
+| AI / DSP / AX / AXFX (audio) | 60 | 47 | 11 | Debajo de AX, nativo; AX corre traducido. |
+| IPC / IOS | 41 | 33 | 7 | Los dispositivos de IOS son nativos; la biblioteca corre traducida. |
+| NAND, SC, WPAD, KPAD, WUD, BTE | 248 | 121 | 11 | Corren traducidas sobre los dispositivos de IOS. |
+| MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 63 | 5 | Código normal: corre traducido. |
+| **Total** | **761** | **563** | **204** | |
 
 Lo importante es la primera fila: **de las 117 funciones de GX que el juego
 llama y ya tienen nombre, WiiCompiled da 98.** Las otras 19 no son un bloqueo,
@@ -89,7 +89,7 @@ para mandar vértices.
 ### OS, DVD, VI y PPC: qué se hace nativo (decidido 2026-11-08)
 
 Aquí WiiCompiled no da la biblioteca entera sino una parte: **36 de 101 en OS,
-5 de 21 en DVD, 10 de 29 en VI, 15 de 23 en PPC.** Las demás corren
+5 de 22 en DVD, 12 de 31 en VI, 15 de 23 en PPC.** Las demás corren
 traducidas. La duda era si eso obliga a hacer nativas enteras las partes de OS
 donde una función nativa y una traducida comparten estado (hilos, alarmas,
 mutex). **No hace falta**, por tres razones:
@@ -110,8 +110,8 @@ mutex). **No hace falta**, por tres razones:
    | GX | 98 | 17 | 2 |
    | OS | 36 | 62 | 3 |
    | PPC | 15 | 8 | 0 |
-   | DVD | 5 | 16 | 0 |
-   | VI | 10 | 18 | 1 |
+   | DVD | 5 | 17 | 0 |
+   | VI | 12 | 18 | 1 |
 
 3. **Lo que sí hay que hacer es darle a WiiCompiled las direcciones de este
    juego.** Su OS nativo busca 25 cosas en direcciones fijas de *Mario Kart
@@ -343,14 +343,14 @@ that are new work for *Magical Melody* (GameCube) are already there:
 | GX (graphics) | 129 | 117 | **98 of 117** | Native, with aurora. The other 19 run translated. |
 | OS (system) | 108 | 101 | 36 | Partly native: threads, alarms, interrupts, cache. |
 | PPC (processor registers) | 23 | 23 | 15 | Partly native; the rest touch registers that only exist on the console. |
-| DVD (disc) | 24 | 21 | 5 | Native: reading the extracted folder. |
-| VI (video) | 32 | 29 | 10 | Native. |
-| PAD (GameCube controller) | 6 | 3 | 2 | Native. |
-| AI / DSP / AX (audio) | 15 | 8 | 7 | Native below AX; AX runs translated. |
-| IPC / IOS | 38 | 16 | 2 | The IOS devices are native; the library runs translated. |
-| NAND, SC, WPAD, KPAD, WUD, BTE | 244 | 108 | 2 | Run translated on top of the IOS devices. |
-| MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 53 | 1 | Ordinary code: runs translated. |
-| **Total** | **706** | **479** | **178** | |
+| DVD (disc) | 25 | 22 | 5 | Native: reading the extracted folder. |
+| VI (video) | 34 | 31 | 12 | Native. |
+| PAD (GameCube controller) | 6 | 5 | 4 | Native. |
+| AI / DSP / AX / AXFX (audio) | 60 | 47 | 11 | Native below AX; AX runs translated. |
+| IPC / IOS | 41 | 33 | 7 | The IOS devices are native; the library runs translated. |
+| NAND, SC, WPAD, KPAD, WUD, BTE | 248 | 121 | 11 | Run translated on top of the IOS devices. |
+| MTX, MEM, ARC, WENC, EXI, SI, DB | 87 | 63 | 5 | Ordinary code: runs translated. |
+| **Total** | **761** | **563** | **204** | |
 
 The first row is what matters: **of the 117 GX functions the game calls that
 have a name, WiiCompiled provides 98.** The other 19 are not a blocker,
@@ -375,7 +375,7 @@ send vertices.
 ### OS, DVD, VI and PPC: what goes native (decided 2026-11-08)
 
 Here WiiCompiled does not provide the whole library but a part: **36 of 101
-in OS, 5 of 21 in DVD, 10 of 29 in VI, 15 of 23 in PPC.** The rest run
+in OS, 5 of 22 in DVD, 12 of 31 in VI, 15 of 23 in PPC.** The rest run
 translated. The question was whether that forces making fully native the parts
 of OS where a native function and a translated one share state (threads,
 alarms, mutexes). **It does not**, for three reasons:
@@ -396,8 +396,8 @@ alarms, mutexes). **It does not**, for three reasons:
    | GX | 98 | 17 | 2 |
    | OS | 36 | 62 | 3 |
    | PPC | 15 | 8 | 0 |
-   | DVD | 5 | 16 | 0 |
-   | VI | 10 | 18 | 1 |
+   | DVD | 5 | 17 | 0 |
+   | VI | 12 | 18 | 1 |
 
 3. **What must be done is to give WiiCompiled this game's addresses.** Its
    native OS looks for 25 things at fixed *Mario Kart Wii* addresses
