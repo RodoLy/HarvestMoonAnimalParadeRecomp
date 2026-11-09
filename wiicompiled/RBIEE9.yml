@@ -6,11 +6,10 @@
 # Copia este archivo a projects/animal-parade/recomp.yml dentro de una copia de WiiCompiled.
 # docs/NATIVE_RUNTIME.md explica los pasos.
 #
-# Only the translation is set up. WiiCompiled's runtime replaces SDK functions at Mario Kart Wii's
-# addresses, so none of it is registered here: in this game those addresses hold other code.
-# Solo está preparada la traducción. El runtime de WiiCompiled reemplaza funciones del SDK en las
-# direcciones de Mario Kart Wii, así que aquí no se registra nada de él: en este juego esas
-# direcciones tienen otro código.
+# WiiCompiled's runtime replaces SDK functions at Mario Kart Wii's addresses;
+# tools/export_wiicompiled_layer.py places them at this game's. docs/NATIVE_RUNTIME.md explains the steps.
+# El runtime de WiiCompiled reemplaza funciones del SDK en las direcciones de Mario Kart Wii.
+# tools/export_wiicompiled_layer.py las coloca en las de este juego.
 
 schema_version: 1
 workspace_root: ../..
@@ -50,12 +49,11 @@ translation:
   allow_unsupported_instructions: false
 
 runtime:
-  # An empty folder on purpose. Left out, this setting defaults to runtime/src, and then the
-  # translator takes Mario Kart Wii's native functions as this game's: it does not inline the game
-  # functions at those addresses and assumes another function's register effects for calls to them.
-  # Una carpeta vacía a propósito. Si se omite, este ajuste vale runtime/src por defecto, y el
-  # traductor toma las funciones nativas de Mario Kart Wii como si fueran de este juego: no mete en
-  # línea las funciones del juego en esas direcciones y supone efectos de registros de otra función.
+  # Holds only native/natives.cpp from tools/export_wiicompiled_layer.py: WiiCompiled's natives at
+  # this game's addresses. Left out, this setting defaults to runtime/src, and then the translator
+  # takes the natives at Mario Kart Wii's addresses as this game's.
+  # Solo contiene native/natives.cpp de tools/export_wiicompiled_layer.py. Si se omite, vale
+  # runtime/src, y el traductor toma las nativas en las direcciones de Mario Kart Wii como de este juego.
   native_registration_root: projects/animal-parade/native
   native_abi_directories: []
 
