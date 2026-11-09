@@ -32,6 +32,15 @@ disco.
   juego (271 de 582). Ver
   [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) y [docs/PLAN.md](docs/PLAN.md).
 
+### Jugar en Windows (x86-64, en pruebas)
+
+El workflow **Windows x64 package** (pestaña Actions → Run workflow) arma un
+paquete sin datos del juego: el runtime de WiiCompiled con la capa de este juego,
+su traductor y su compilador portátil. En tu computadora, `play.cmd` traduce tu
+disco, compila el juego y lo inicia. Los pasos están en
+[packaging/windows/README.txt](packaging/windows/README.txt). En Windows sobre ARM
+corre con la emulación de x86-64 de Windows.
+
 ### Empezar
 
 Necesitas Python 3.11+.
@@ -98,6 +107,15 @@ This repository contains no game data. You need your own backup of the disc.
   and the layer that puts WiiCompiled's natives at this game's addresses is
   done (271 of 582). See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
   and [docs/PLAN.md](docs/PLAN.md).
+
+### Play on Windows (x86-64, being tried)
+
+The **Windows x64 package** workflow (Actions tab → Run workflow) builds a
+package with no game data: WiiCompiled's runtime with this game's layer, its
+translator and its portable compiler. On your computer, `play.cmd` translates
+your disc, compiles the game and starts it. The steps are in
+[packaging/windows/README.txt](packaging/windows/README.txt). On Windows on ARM
+it runs through Windows' x86-64 emulation.
 
 ### Getting started
 
