@@ -1399,22 +1399,35 @@ index 3dbdc8d..be45c92 100644
      EnsureAuroraFrameActive();
      GX_SYNC_INLINE();
 diff --git a/runtime/src/hle/gx/gx_dl.cpp b/runtime/src/hle/gx/gx_dl.cpp
-index daceeb7..d29d19f 100644
+index daceeb7..2a2da37 100644
 --- a/runtime/src/hle/gx/gx_dl.cpp
 +++ b/runtime/src/hle/gx/gx_dl.cpp
-@@ -1,4 +1,5 @@
+@@ -1,8 +1,10 @@
  #include "gx_internal.h"
 +#include "gx_frame_trace.h"
  #include "gx_stream_common.h"
  #include "gx_cp_decode.h"
  #include "isa/big_endian.h"
-@@ -1295,6 +1296,10 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+ 
++#include <cstdio>
+ #include <cstdlib>
+ #include <unordered_map>
+ 
+@@ -1295,6 +1297,18 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
  
  extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes) {
      if (nbytes == 0 || listAddr == 0) return;
 +    if (GxFrameTrace::Active() && !GxWorker::OnWorker()) {
 +        auto* cpu = TryGetCpuContext();
-+        GxFrameTrace::Note("CallDisplayList 0x%08X (%u bytes) lr=0x%08X", listAddr, nbytes, cpu ? cpu->lr : 0u);
++        // The list's first bytes, as the game wrote them: they hold the vertex descriptor and format
++        // writes that come before its draws, before anything here rewrites them.
++        char head[3 * 64 + 1] = {};
++        const uint32_t shown = nbytes < 64u ? nbytes : 64u;
++        for (uint32_t i = 0; i < shown; ++i) {
++            std::snprintf(head + i * 3, 4, " %02x", Memory::Read8(listAddr + i));
++        }
++        GxFrameTrace::Note("CallDisplayList 0x%08X (%u bytes) lr=0x%08X:%s", listAddr, nbytes, cpu ? cpu->lr : 0u,
++                           head);
 +    }
      // List bytes and the arrays it indexes are GPU-side reads, so they are read when the worker runs.
      if (GxWorker::ShouldDefer()) {
@@ -1445,7 +1458,7 @@ index 0baaa0f..42e9b83 100644
 +PPC_NATIVE_OVERRIDE_VOID(80173df8, GX__ClearGPMetric_80173df8, (CpuContext* ctx), (ctx));
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
-index 0000000..5c183fc
+index 0000000..65bdeb6
 --- /dev/null
 +++ b/runtime/src/hle/gx/gx_frame_trace.cpp
 @@ -0,0 +1,61 @@
@@ -1484,7 +1497,7 @@ index 0000000..5c183fc
 +    if (line > kLinesPerFrame) {
 +        return;
 +    }
-+    char text[256];
++    char text[512];
 +    va_list args;
 +    va_start(args, format);
 +    std::vsnprintf(text, sizeof(text), format, args);
