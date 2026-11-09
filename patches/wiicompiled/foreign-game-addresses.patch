@@ -563,6 +563,29 @@ index ad031c1..18bf15f 100644
      uint32_t soundManager = 0;
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
+diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
+index 6c2083a..9448080 100644
+--- a/runtime/src/settings_overlay.cpp
++++ b/runtime/src/settings_overlay.cpp
+@@ -1,4 +1,5 @@
+ #include "settings_overlay.h"
++#include "guest_abi/guest_region.h"
+ #include "gx_worker.h"
+ #include "audio_backend.h"
+ #include "aurora_events.h"
+@@ -1732,7 +1733,11 @@ void Draw() noexcept {
+ }
+ 
+ bool StartupScreenVisible() noexcept {
+-    return !g_strapInputAccepted.load(std::memory_order_acquire) ||
++    // The screen waits for Mario Kart Wii's strap scene to take input (strap_scene.cpp). A foreign game
++    // has no such scene, so it waits only for the boot shaders, and the game's own frames show after.
++    const bool strapAccepted =
++        GuestRegion::IsForeignGame() || g_strapInputAccepted.load(std::memory_order_acquire);
++    return !strapAccepted ||
+            !g_bootShadersReady.load(std::memory_order_acquire) ||
+            g_presentedFrame < g_startupDismissFrame.load(std::memory_order_relaxed);
+ }
 diff --git a/runtime/src/system_bridge.cpp b/runtime/src/system_bridge.cpp
 index 99f2abd..e88908a 100644
 --- a/runtime/src/system_bridge.cpp
