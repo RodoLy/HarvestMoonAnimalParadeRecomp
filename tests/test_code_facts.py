@@ -124,6 +124,13 @@ def test_reads_the_constants_the_offsets_the_calls_and_the_bit_fields(tmp_path):
     assert facts.callees == {"callee", f"0x{NAMELESS:08X}"}  # an unnamed callee is written as its address
 
 
+def test_a_store_at_an_offset_from_r13_is_a_store_at_a_known_address(tmp_path):
+    facts = hand_built_facts(tmp_path)[READS_AND_WRITES]
+    # stw r4, -0x20(r13) writes a variable of the small data area; lwz r4, 0x10(r3) reads through a
+    # register that holds a number (li r3, 5), not an address the reader knows.
+    assert facts.accessed_addresses == {SMALL_DATA_BASE - 0x20}
+
+
 def test_finds_the_texts_whose_address_the_function_puts_together(tmp_path):
     facts = hand_built_facts(tmp_path)[POINTS_AT_TEXTS]
     finished = {GREETING, SHORT_TEXT, MESSAGES, MESSAGES + SECOND_MESSAGE_OFFSET}

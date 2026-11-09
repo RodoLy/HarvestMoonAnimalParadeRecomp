@@ -107,6 +107,9 @@ class CodeFacts:
     callees: frozenset[str]  # names of the called functions; an unnamed one is written as its address
     inserted_fields: frozenset[InsertedField]
     addresses: frozenset[int]
+    # The data words the function reads or writes at an address it knows: an offset from r13 or r2, or from
+    # a register a lis (and maybe an addi) filled. `lwz r3, -0x6268(r13)` reads 0x806B43B8.
+    accessed_addresses: frozenset[int]
     strings: frozenset[str]
     previous_function: str | None  # None when the code right before it belongs to no known function
     next_function: str | None
@@ -155,6 +158,7 @@ def read_code_facts(
 
     constants, offsets, loaded_offsets, stored_offsets = set(), set(), set(), set()
     callees, inserted_fields, addresses, strings = set(), set(), set(), set()
+    accessed_addresses = set()
     # The addresses that a register is known to hold, from a lis, a lis/addi pair or a small-data base.
     known_addresses: dict[int, int] = dict(small_data_bases)
 
@@ -166,6 +170,9 @@ def read_code_facts(
             constants.add(instruction.unsigned_immediate)
         if opcode in MEMORY_OPCODES:
             offsets.add(instruction.displacement)
+            if instruction.ra in known_addresses:
+                base = known_addresses[instruction.ra]
+                accessed_addresses.add((base + instruction.displacement) & WORD_MASK)
             if opcode in INTEGER_LOAD_OPCODES:
                 loaded_offsets.add(instruction.displacement)
             elif opcode in INTEGER_STORE_OPCODES:
@@ -202,6 +209,7 @@ def read_code_facts(
         callees=frozenset(callees),
         inserted_fields=frozenset(inserted_fields),
         addresses=frozenset(addresses),
+        accessed_addresses=frozenset(accessed_addresses),
         strings=frozenset(strings),
         previous_function=_function_name_at(symbols, function.address - INSTRUCTION_SIZE),
         next_function=_function_name_at(symbols, function.address + function.size),
@@ -226,6 +234,7 @@ class Evidence:
     callees: Set[str] = frozenset()
     inserted_fields: Set[InsertedField] = frozenset()
     addresses: Set[int] = frozenset()
+    accessed_addresses: Set[int] = frozenset()
     strings: Set[str] = frozenset()
     comes_after: str | None = None
     comes_before: str | None = None
@@ -240,6 +249,7 @@ class Evidence:
             "calls": set(self.callees - facts.callees),
             "bit fields": set(self.inserted_fields - facts.inserted_fields),
             "addresses": set(self.addresses - facts.addresses),
+            "accessed addresses": set(self.accessed_addresses - facts.accessed_addresses),
             "strings": {
                 start for start in self.strings if not any(text.startswith(start) for text in facts.strings)
             },
