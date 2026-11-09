@@ -153,9 +153,10 @@ def test_the_members_are_in_address_order_and_make_runs():
 # ------------------------------------------------------------------------------ the real symbols
 
 # The ranges in docs/FUNCTION_MAP.md, from the names written in symbols.txt. Several libraries are
-# much wider than their run: most of their functions are not named yet (the GX run, for example, holds
-# 44 names among 190 functions).
+# wider than their run: some of their functions are not named yet (the GX run holds 163 names among 190
+# functions).
 RUNS_IN_SYMBOLS_TXT = [
+    ("PPC", 0x802505A0, 0x802507C0),
     ("OS", 0x802508C0, 0x80252AD4),
     ("AI", 0x80252AE0, 0x80252D00),
     ("OS", 0x80252FA0, 0x8025D258),
