@@ -37,7 +37,7 @@ organiza el ejecutable son los mismos que en GameCube.
 | …destino de algún `bl` | 10 560 | 3 637 |
 | Tablas de `switch` | 220 (1 sin comprobación de límite) | 274 |
 | Datos dentro de código | 3 | 3 |
-| Funciones con nombre | 1 067, todas del SDK (19 por versión, 785 por firma, 196 por el mapa de Mario Kart Wii, 67 leyendo su código) | 682 |
+| Funciones con nombre | 1 211, todas del SDK (19 por versión, 785 por firma, 334 por el mapa de Mario Kart Wii, 73 leyendo su código) | 682 |
 
 Bibliotecas del SDK identificadas: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI,
 NAND, SC, ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -83,19 +83,19 @@ ARC, WENC, WPAD, KPAD, WUD y la pila Bluetooth (BTE: `BTA_`, `BTM_`, `GKI_`…).
 
 | Biblioteca | Rango (por los nombres) | Con nombre |
 |---|---|---:|
-| PPC | `0x802505A0`–`0x802507C0` | 0 (24 con las secciones siguientes) |
-| OS | `0x802508C0`–`0x8025D258` (y `0x802938C0`) | 64 (152) |
-| MTX | `0x8025E4C0`–`0x8025F27C` | 18 |
-| DVD | `0x8025F740`–`0x80266034` | 12 (29) |
-| VI | `0x80269020`–`0x8026C858` | 14 (29) |
-| PAD | `0x8026CE40`–`0x8026E078` | 4 |
-| AI, AX, DSP | `0x8026E8B0`–`0x8027602C` | 12 |
-| GX | `0x80276250`–`0x8027DFC0` | 44 (163) |
-| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 34 |
+| PPC | `0x802505A0`–`0x802507C0` | 24 |
+| OS | `0x802508C0`–`0x8025D258` (y `0x802938C0`) | 152 |
+| MTX | `0x8025E4C0`–`0x8025F27C` | 28 |
+| DVD | `0x8025F400`–`0x80266034` | 31 |
+| VI | `0x80268C60`–`0x8026C858` | 31 |
+| PAD | `0x8026CE40`–`0x8026E078` | 10 |
+| AI, AX, AXFX, DSP | `0x8026E8B0`–`0x8027602C` | 93 |
+| GX | `0x80276250`–`0x8027DFC0` | 163 |
+| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 39 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
-| IPC | `0x8029CA70`–`0x8029F0C4` | 19 |
+| IPC | `0x8029C410`–`0x8029F0C4` | 40 |
 | NAND | `0x802A0100`–`0x802A261C` | 2 |
-| SC | `0x802A3520`–`0x802A5158` | 6 |
+| SC | `0x802A3520`–`0x802A5524` | 24 |
 | WENC, ARC | `0x802A5524`–`0x802A610C` | 5 |
 | WPAD | `0x802A9250`–`0x802AD034` | 9 |
 | WUD | `0x802B76C0`–`0x802BA53C` | 8 |
@@ -202,6 +202,29 @@ más cuidado; y `0x80258630`, `0x802646F0`, `0x80265980` (avisa con
 `SCGetLanguage` y `OSSetFontEncode`, así que parece el mensaje de error del
 disco), `0x8026C560` y `0x8026C6C0`.
 
+### Audio, IPC, SC, MTX y las demás
+
+Para ubicar las direcciones que usa el código nativo de WiiCompiled
+([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)) se nombraron con el mapa AX (59),
+AXFX (13), IPC (20), SC (16), MTX (10), PAD (6), SI (5), AI (4), DSP (4) y DVD
+(1). Eso pidió cuatro arreglos en `tools/name_from_reference_map.py`:
+
+- `--range FIRST-END` da el tramo a mano. AX tenía un solo nombre (`AXInit`),
+  así que no tenía tramo propio; con el tramo dado, el del mapa puede pasar de
+  una biblioteca del SDK a la siguiente (de AX a AXFX), pero no a código C++.
+- Un nombre que el mapa repite no se usa: `AXFXReverbHiCallback` aparece dos
+  veces, como `GXPokeAlphaUpdate`.
+- Un nombre con `__` en medio no es del SDK: el mapa lo inventa para
+  distinguir funciones `static` de dos archivos
+  (`AXFXReverbStdExp__AllocDelayLine`).
+- `IOS::Close` se lee `IOS_Close` (IOS e ISFS llevan guion bajo), y
+  `MTX::PSMTXConcat` se lee `PSMTXConcat`, no `MTXPSMTXConcat`.
+
+Seis funciones más se nombraron leyendo su código: `__DVDFSInit`,
+`ISFS_OpenLib`, `SCGetProductArea`, `SCGetProductGameRegion`,
+`VISetPreRetraceCallback` y `VISetPostRetraceCallback`
+(`tests/test_names_for_wiicompiled.py`).
+
 ### Otras cosas que se encontraron con las herramientas nuevas
 
 - **El bucle ocioso** del sistema está en `0x8025ACE0`
@@ -254,7 +277,7 @@ executable are the same as on GameCube.
 | …called with `bl` | 10,560 | 3,637 |
 | `switch` tables | 220 (1 without a bounds check) | 274 |
 | Data inside code | 3 | 3 |
-| Named functions | 1,067, all from the SDK (19 by version, 785 by signature, 196 from Mario Kart Wii's map, 67 by reading their code) | 682 |
+| Named functions | 1,211, all from the SDK (19 by version, 785 by signature, 334 from Mario Kart Wii's map, 73 by reading their code) | 682 |
 
 SDK libraries identified: OS, DVD, VI, PAD, AI, AX, DSP, GX, EXI, SI, NAND, SC,
 ENC, WPAD, KPAD, RFL, THP, HBM.
@@ -299,19 +322,19 @@ KPAD, WUD and the Bluetooth stack (BTE: `BTA_`, `BTM_`, `GKI_`…).
 
 | Library | Range (from the names) | Named |
 |---|---|---:|
-| PPC | `0x802505A0`–`0x802507C0` | 0 (24 with the next sections) |
-| OS | `0x802508C0`–`0x8025D258` (and `0x802938C0`) | 64 (152) |
-| MTX | `0x8025E4C0`–`0x8025F27C` | 18 |
-| DVD | `0x8025F740`–`0x80266034` | 12 (29) |
-| VI | `0x80269020`–`0x8026C858` | 14 (29) |
-| PAD | `0x8026CE40`–`0x8026E078` | 4 |
-| AI, AX, DSP | `0x8026E8B0`–`0x8027602C` | 12 |
-| GX | `0x80276250`–`0x8027DFC0` | 44 (163) |
-| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 34 |
+| PPC | `0x802505A0`–`0x802507C0` | 24 |
+| OS | `0x802508C0`–`0x8025D258` (and `0x802938C0`) | 152 |
+| MTX | `0x8025E4C0`–`0x8025F27C` | 28 |
+| DVD | `0x8025F400`–`0x80266034` | 31 |
+| VI | `0x80268C60`–`0x8026C858` | 31 |
+| PAD | `0x8026CE40`–`0x8026E078` | 10 |
+| AI, AX, AXFX, DSP | `0x8026E8B0`–`0x8027602C` | 93 |
+| GX | `0x80276250`–`0x8027DFC0` | 163 |
+| EXI, SI, DB | `0x80291F30`–`0x8029AE80` | 39 |
 | MEM | `0x8029B920`–`0x8029BF4C` | 2 |
-| IPC | `0x8029CA70`–`0x8029F0C4` | 19 |
+| IPC | `0x8029C410`–`0x8029F0C4` | 40 |
 | NAND | `0x802A0100`–`0x802A261C` | 2 |
-| SC | `0x802A3520`–`0x802A5158` | 6 |
+| SC | `0x802A3520`–`0x802A5524` | 24 |
 | WENC, ARC | `0x802A5524`–`0x802A610C` | 5 |
 | WPAD | `0x802A9250`–`0x802AD034` | 9 |
 | WUD | `0x802B76C0`–`0x802BA53C` | 8 |
@@ -419,6 +442,29 @@ three of `OSFont.c` and `0x80256040`, whose size differs and which need a more
 careful reading; and `0x80258630`, `0x802646F0`, `0x80265980` (it warns through
 `SCGetLanguage` and `OSSetFontEncode`, so it looks like the disc's error
 message), `0x8026C560` and `0x8026C6C0`.
+
+### Audio, IPC, SC, MTX and the rest
+
+To place the addresses WiiCompiled's native code uses
+([NATIVE_RUNTIME.md](NATIVE_RUNTIME.md)), AX (59), AXFX (13), IPC (20), SC
+(16), MTX (10), PAD (6), SI (5), AI (4), DSP (4) and DVD (1) were named from
+the map. That took four fixes to `tools/name_from_reference_map.py`:
+
+- `--range FIRST-END` gives the stretch by hand. AX had a single name
+  (`AXInit`), so it had no stretch of its own; with the stretch given, the
+  map's may cross from one library of the SDK into the next (AX into AXFX), but
+  not into C++ code.
+- A name the map gives twice is not used: `AXFXReverbHiCallback` appears
+  twice, like `GXPokeAlphaUpdate`.
+- A name with `__` in the middle is not the SDK's: the map makes it up to tell
+  apart `static` functions of two files (`AXFXReverbStdExp__AllocDelayLine`).
+- `IOS::Close` is read as `IOS_Close` (IOS and ISFS keep an underscore), and
+  `MTX::PSMTXConcat` as `PSMTXConcat`, not `MTXPSMTXConcat`.
+
+Six more functions were named by reading their code: `__DVDFSInit`,
+`ISFS_OpenLib`, `SCGetProductArea`, `SCGetProductGameRegion`,
+`VISetPreRetraceCallback` and `VISetPostRetraceCallback`
+(`tests/test_names_for_wiicompiled.py`).
 
 ### Other findings from the new tools
 
