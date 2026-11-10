@@ -2281,7 +2281,7 @@ index cd236a9..f7eeb84 100644
  // busy loops (GX drawing, the scheduler's idle spin) to keep VBlank ticking.
  void VI_HLE_PollRetrace(CpuContext* ctx) {
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
-index 56bec9f..ec21e4a 100644
+index 56bec9f..5ebd8fa 100644
 --- a/runtime/src/main.cpp
 +++ b/runtime/src/main.cpp
 @@ -53,10 +53,44 @@
@@ -2345,7 +2345,28 @@ index 56bec9f..ec21e4a 100644
          throw std::runtime_error(oss.str());
      }
      return entry;
-@@ -1457,7 +1494,14 @@ int RuntimeMain(int argc, char** argv) {
+@@ -978,6 +1015,20 @@ void ReportStructuredException(EXCEPTION_POINTERS* info) {
+     const auto faultAddress = reinterpret_cast<uintptr_t>(record->ExceptionAddress);
+     std::cerr << std::hex << std::uppercase;
+     RT_LOG(RT_TAG_RUNTIME) << "Fault address: 0x" << faultAddress << std::dec << std::nouppercase << std::endl;
++    {
++        // Name the module that holds the faulting instruction (the game's own code, Dawn, a graphics driver...).
++        HMODULE module = nullptr;
++        char modulePath[MAX_PATH] = {};
++        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++                               reinterpret_cast<LPCSTR>(record->ExceptionAddress), &module) &&
++            GetModuleFileNameA(module, modulePath, MAX_PATH) != 0) {
++            RT_LOG(RT_TAG_RUNTIME) << "Fault module: " << modulePath << " + 0x" << std::hex << std::uppercase
++                                   << (faultAddress - reinterpret_cast<uintptr_t>(module)) << std::dec
++                                   << std::nouppercase << std::endl;
++        } else {
++            RT_LOG(RT_TAG_RUNTIME) << "Fault module: not in any loaded module (generated code)" << std::endl;
++        }
++    }
+ 
+     if (code == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
+         const auto accessType = record->ExceptionInformation[0];
+@@ -1457,7 +1508,14 @@ int RuntimeMain(int argc, char** argv) {
              return "unknown";
          };
  
