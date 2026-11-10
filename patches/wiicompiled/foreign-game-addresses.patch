@@ -2560,3 +2560,20 @@ index 0000000..0c4e3a9
 +    std::printf("emulated remote: all checks passed\n");
 +    return 0;
 +}
+diff --git a/runtime/src/hle/gx/gx_stream_common.h b/runtime/src/hle/gx/gx_stream_common.h
+index 006ab47..3fa3d64 100644
+--- a/runtime/src/hle/gx/gx_stream_common.h
++++ b/runtime/src/hle/gx/gx_stream_common.h
+@@ -378,6 +378,12 @@ inline void PublishAuroraVtxState(GXVtxFmt fmt, const AuroraVtxPublishOptions& o
+         if (!options.includeNbt && attr == GX_VA_NBT) {
+             continue;
+         }
++        // Aurora stores the NBT format in the same VAT field as the normals. Publishing it after
++        // plain XYZ normals would turn them into 9-float normals, so a draw that streams 3 floats
++        // per normal runs short of data and the rest of the frame is dropped.
++        if (attr == GX_VA_NBT && g_hleGxState.vtxAttrFmt[fmt][GX_VA_NRM].cnt == GX_NRM_XYZ) {
++            continue;
++        }
+         const GXAttr gxAttr = static_cast<GXAttr>(attr);
+         if (IsMatrixIndexAttr(gxAttr)) {
+             continue;
