@@ -1604,10 +1604,16 @@ index 0baaa0f..42e9b83 100644
 +extern "C" void GX__ClearGPMetric_80173df8(CpuContext* ctx) { (void)ctx; }
 +PPC_NATIVE_OVERRIDE_VOID(80173df8, GX__ClearGPMetric_80173df8, (CpuContext* ctx), (ctx));
 diff --git a/runtime/src/hle/gx/gx_fifo.cpp b/runtime/src/hle/gx/gx_fifo.cpp
-index 108e4fd..3c79edf 100644
+index 108e4fd..6dacb4f 100644
 --- a/runtime/src/hle/gx/gx_fifo.cpp
 +++ b/runtime/src/hle/gx/gx_fifo.cpp
-@@ -431,8 +431,18 @@ void HleFifoWrite(u32 val, uint32_t sizeBytes) {
+@@ -1,4 +1,5 @@
+ #include "gx_internal.h"
++#include "gx_frame_trace.h"
+ #include "gx_stream_common.h"
+ #include "gx_cp_decode.h"
+ #include "isa/big_endian.h"
+@@ -431,8 +432,18 @@ void HleFifoWrite(u32 val, uint32_t sizeBytes) {
          const uint8_t opcode = cmd & GX_OPCODE_MASK_CMD;
          u32 sink = 0;
  
@@ -1627,6 +1633,16 @@ index 108e4fd..3c79edf 100644
              continue;
          }
  
+@@ -598,6 +609,9 @@ void HleFifoWrite(u32 val, uint32_t sizeBytes) {
+ 
+                 GXColor color{};
+                 DecodeColorBytes(colorBytes, fmt.type, fmt.cnt, color);
++                if (GxFrameTrace::Active() && !recordOnly) {
++                    GxFrameTrace::Note("  vertex color %u %u %u %u", color.r, color.g, color.b, color.a);
++                }
+ 
+                 if (!recordOnly) {
+                     if (fmt.cnt == GX_CLR_RGB) {
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
 index 0000000..4e3e352
