@@ -448,7 +448,9 @@ protocolo sin juego.
   diferencia está en cómo Direct3D 12 ordena las copias de la imagen. Hasta
   encontrar la causa, con `graphics_api = "auto"` el runtime elige Vulkan si
   hay una GPU Qualcomm (`HasQualcommGpu` en `main.cpp`); poner
-  `graphics_api = "d3d12"` en `UserData/Config.toml` lo fuerza de nuevo.
+  `graphics_api = "d3d12"` en `UserData/Config.toml` lo fuerza de nuevo. También
+  se puede elegir en el menú F10, pestaña Graphics, con «Graphics API (next
+  launch)»: Automatic, Vulkan o Direct3D 12 (se guarda y se aplica al reiniciar).
   Se descartaron, probando en esa GPU con Direct3D 12 a 3x: dibujar las copias de
   imagen con un shader, esperar a que cada pipeline esté compilado, activar el
   VSync y apagar `use_d3d12_render_pass` y `use_dxc` de Dawn. Ninguna cambió
@@ -912,7 +914,9 @@ protocol without a game.
   Direct3D 12 orders the image copies. Until the cause is found, with
   `graphics_api = "auto"` the runtime picks Vulkan when there is a Qualcomm
   GPU (`HasQualcommGpu` in `main.cpp`); `graphics_api = "d3d12"` in
-  `UserData/Config.toml` forces Direct3D 12 again.
+  `UserData/Config.toml` forces Direct3D 12 again. It can also be chosen in the
+  F10 menu, Graphics tab, with "Graphics API (next launch)": Automatic, Vulkan or
+  Direct3D 12 (saved, and applied after a restart).
   These were ruled out, testing on that GPU with Direct3D 12 at 3x: drawing the
   image copies with a shader, waiting for every pipeline to be compiled, turning
   VSync on, and turning Dawn's `use_d3d12_render_pass` and `use_dxc` off. None
