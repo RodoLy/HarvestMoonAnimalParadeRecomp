@@ -2281,14 +2281,18 @@ index cd236a9..f7eeb84 100644
  // busy loops (GX drawing, the scheduler's idle spin) to keep VBlank ticking.
  void VI_HLE_PollRetrace(CpuContext* ctx) {
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
-index 56bec9f..bb89172 100644
+index 56bec9f..ec21e4a 100644
 --- a/runtime/src/main.cpp
 +++ b/runtime/src/main.cpp
-@@ -53,6 +53,39 @@
+@@ -53,10 +53,44 @@
  #else
  #include <ucontext.h>
  #endif
 +
+ #endif
+ #include <unistd.h>
+ #endif
+ 
 +#if defined(_WIN32)
 +#include <dxgi.h>
 +
@@ -2321,10 +2325,11 @@ index 56bec9f..bb89172 100644
 +    return found;
 +}
 +#endif
- #endif
- #include <unistd.h>
- #endif
-@@ -868,10 +901,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
++
+ #include "abi_bridge.h"
+ #include "audio_backend.h"
+ #include "boot_race.h"
+@@ -868,10 +902,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
  }
  
  const TranslatedFunctionInfo* ResolveEntry() {
@@ -2340,7 +2345,7 @@ index 56bec9f..bb89172 100644
          throw std::runtime_error(oss.str());
      }
      return entry;
-@@ -1457,7 +1493,14 @@ int RuntimeMain(int argc, char** argv) {
+@@ -1457,7 +1494,14 @@ int RuntimeMain(int argc, char** argv) {
              return "unknown";
          };
  
