@@ -446,8 +446,9 @@ protocolo sin juego.
   `resolution_multiplier = 3`, y con `graphics_api = "vulkan"` desaparece. El
   juego dibuja lo mismo en los fotogramas buenos y en los malos, así que la
   diferencia está en cómo Direct3D 12 ordena las copias de la imagen. Hasta
-  encontrar la causa, en esa GPU se recomienda `graphics_api = "vulkan"` en
-  `UserData/Config.toml`, dentro de `[video]`.
+  encontrar la causa, con `graphics_api = "auto"` el runtime elige Vulkan si
+  hay una GPU Qualcomm (`HasQualcommGpu` en `main.cpp`); poner
+  `graphics_api = "d3d12"` en `UserData/Config.toml` lo fuerza de nuevo.
 - **Herramientas de diagnóstico.** F9 traza tres fotogramas; una sola pulsación
   arma además diez trazas más, una cada dos segundos, para problemas que
   ocurren mientras se camina. El runtime avisa en el log con `[frame-watch]`
@@ -901,9 +902,10 @@ protocol without a game.
   mailbox.** It happened with Direct3D 12 on an Adreno GPU (Snapdragon X) with
   `resolution_multiplier = 3`, and goes away with `graphics_api = "vulkan"`.
   The game draws the same in good and bad frames, so the difference is in how
-  Direct3D 12 orders the image copies. Until the cause is found, that GPU is
-  best run with `graphics_api = "vulkan"` in `UserData/Config.toml`, under
-  `[video]`.
+  Direct3D 12 orders the image copies. Until the cause is found, with
+  `graphics_api = "auto"` the runtime picks Vulkan when there is a Qualcomm
+  GPU (`HasQualcommGpu` in `main.cpp`); `graphics_api = "d3d12"` in
+  `UserData/Config.toml` forces Direct3D 12 again.
 - **Diagnostic tools.** F9 traces three frames; one press also arms ten more
   traces, one every two seconds, for problems that show up while walking. The
   runtime reports runs of frames with far fewer draws than usual and slow

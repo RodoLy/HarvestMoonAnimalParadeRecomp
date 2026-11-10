@@ -2281,10 +2281,50 @@ index cd236a9..f7eeb84 100644
  // busy loops (GX drawing, the scheduler's idle spin) to keep VBlank ticking.
  void VI_HLE_PollRetrace(CpuContext* ctx) {
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
-index 56bec9f..9bb0fb7 100644
+index 56bec9f..bb89172 100644
 --- a/runtime/src/main.cpp
 +++ b/runtime/src/main.cpp
-@@ -868,10 +868,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
+@@ -53,6 +53,39 @@
+ #else
+ #include <ucontext.h>
+ #endif
++
++#if defined(_WIN32)
++#include <dxgi.h>
++
++// True when the PC has a Qualcomm GPU (the Adreno of Snapdragon X laptops). Direct3D 12 on that GPU
++// shows the picture split down the middle and the character blinking out for a frame, while Vulkan
++// draws it correctly, so "auto" picks Vulkan there. dxgi.dll is loaded by hand so this adds no link.
++static bool HasQualcommGpu() {
++    using CreateFactory1Fn = HRESULT(WINAPI*)(REFIID, void**);
++    HMODULE dxgi = LoadLibraryA("dxgi.dll");
++    if (dxgi == nullptr) {
++        return false;
++    }
++    bool found = false;
++    const auto createFactory = reinterpret_cast<CreateFactory1Fn>(GetProcAddress(dxgi, "CreateDXGIFactory1"));
++    IDXGIFactory1* factory = nullptr;
++    if (createFactory != nullptr && SUCCEEDED(createFactory(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
++        constexpr UINT kQualcommVendorId = 0x5143;
++        IDXGIAdapter1* adapter = nullptr;
++        for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
++            DXGI_ADAPTER_DESC1 desc{};
++            if (SUCCEEDED(adapter->GetDesc1(&desc)) && desc.VendorId == kQualcommVendorId) {
++                found = true;
++            }
++            adapter->Release();
++            adapter = nullptr;
++        }
++        factory->Release();
++    }
++    FreeLibrary(dxgi);
++    return found;
++}
++#endif
+ #endif
+ #include <unistd.h>
+ #endif
+@@ -868,10 +901,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
  }
  
  const TranslatedFunctionInfo* ResolveEntry() {
@@ -2300,6 +2340,22 @@ index 56bec9f..9bb0fb7 100644
          throw std::runtime_error(oss.str());
      }
      return entry;
+@@ -1457,7 +1493,14 @@ int RuntimeMain(int argc, char** argv) {
+             return "unknown";
+         };
+ 
+-        const std::string backend = RuntimeConfigFile::GraphicsApi("auto");
++        std::string backend = RuntimeConfigFile::GraphicsApi("auto");
++#if defined(_WIN32)
++        if (backend == "auto" && HasQualcommGpu()) {
++            backend = "vulkan";
++            RT_LOG(RT_TAG_RUNTIME) << "Qualcomm GPU found: graphics_api auto uses Vulkan "
++                                      "(set graphics_api = \"d3d12\" to force Direct3D 12)";
++        }
++#endif
+         for (const auto& entry : kGraphicsBackends) {
+             if (backend == entry.configName) {
+                 auroraConfig.desiredBackend = entry.backend;
 diff --git a/runtime/src/music_attenuation.cpp b/runtime/src/music_attenuation.cpp
 index ad031c1..18bf15f 100644
 --- a/runtime/src/music_attenuation.cpp
