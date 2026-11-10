@@ -2425,7 +2425,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..d07abb7 100644
+index 6c2083a..d9a7395 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -2436,15 +2436,10 @@ index 6c2083a..d07abb7 100644
  #include "gx_worker.h"
  #include "audio_backend.h"
  #include "aurora_events.h"
-@@ -1286,7 +1289,64 @@ void DrawGraphicsSettings() {
-         RuntimeConfigFile::SetShowFps(g_showFps);
+@@ -1144,6 +1147,62 @@ void DrawAudioSettings() {
      }
-     ImGui::Separator();
--    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
-+    ImGui::Text("Graphics API in use: %s", GraphicsApiDisplayName());
-+    DrawGraphicsApiChoice();
-+}
-+
+ }
+ 
 +// Lets the player pick the graphics API for the next launch. The backend is
 +// created before the first frame, so the choice is saved to Config.toml and
 +// applied after a restart. "Automatic" picks Vulkan on Qualcomm (Adreno) GPUs,
@@ -2499,6 +2494,18 @@ index 6c2083a..d07abb7 100644
 +    if (selected != atLaunch) {
 +        ImGui::TextDisabled("Saved. Restart the game to apply it.");
 +    }
++}
++
+ void DrawGraphicsSettings() {
+     g_displayMode = static_cast<int>(aurora_get_display_mode());
+     if (ImGui::BeginCombo("Aspect ratio (restart required)", g_widescreen ? "16:9" : "4:3")) {
+@@ -1286,7 +1345,8 @@ void DrawGraphicsSettings() {
+         RuntimeConfigFile::SetShowFps(g_showFps);
+     }
+     ImGui::Separator();
+-    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
++    ImGui::Text("Graphics API in use: %s", GraphicsApiDisplayName());
++    DrawGraphicsApiChoice();
  }
  
  void DrawFpsOverlay() {
