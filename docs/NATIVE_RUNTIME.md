@@ -449,6 +449,13 @@ protocolo sin juego.
   encontrar la causa, con `graphics_api = "auto"` el runtime elige Vulkan si
   hay una GPU Qualcomm (`HasQualcommGpu` en `main.cpp`); poner
   `graphics_api = "d3d12"` en `UserData/Config.toml` lo fuerza de nuevo.
+  Se descartaron, probando en esa GPU con Direct3D 12 a 3x: dibujar las copias de
+  imagen con un shader, esperar a que cada pipeline esté compilado, activar el
+  VSync y apagar `use_d3d12_render_pass` y `use_dxc` de Dawn. Ninguna cambió
+  nada. A resolución nativa casi no ocurre y crece con la resolución, lo que
+  apunta a un fallo del controlador Direct3D 12 de Qualcomm con imágenes
+  grandes (la GPU dibuja por baldosas), o a un fallo del respaldo Direct3D 12 de
+  Dawn.
 - **Herramientas de diagnóstico.** F9 traza tres fotogramas; una sola pulsación
   arma además diez trazas más, una cada dos segundos, para problemas que
   ocurren mientras se camina. El runtime avisa en el log con `[frame-watch]`
@@ -906,6 +913,12 @@ protocol without a game.
   `graphics_api = "auto"` the runtime picks Vulkan when there is a Qualcomm
   GPU (`HasQualcommGpu` in `main.cpp`); `graphics_api = "d3d12"` in
   `UserData/Config.toml` forces Direct3D 12 again.
+  These were ruled out, testing on that GPU with Direct3D 12 at 3x: drawing the
+  image copies with a shader, waiting for every pipeline to be compiled, turning
+  VSync on, and turning Dawn's `use_d3d12_render_pass` and `use_dxc` off. None
+  changed anything. At native resolution it almost never happens and it grows
+  with the resolution, which points to a fault in Qualcomm's Direct3D 12 driver
+  with large images (the GPU draws in tiles), or in Dawn's Direct3D 12 backend.
 - **Diagnostic tools.** F9 traces three frames; one press also arms ten more
   traces, one every two seconds, for problems that show up while walking. The
   runtime reports runs of frames with far fewer draws than usual and slow
