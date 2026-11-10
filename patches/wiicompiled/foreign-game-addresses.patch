@@ -485,6 +485,25 @@ index 0000000..15ca9df
 +inline std::atomic<uint64_t> g_windowUpdates{0};
 +
 +} // namespace HangWatch
+diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
+index ea5a12b..7accece 100644
+--- a/runtime/include/runtime_config.h
++++ b/runtime/include/runtime_config.h
+@@ -665,6 +665,14 @@ inline bool SetDisplayMode(std::string value) {
+     return WriteSetting("video", "display_mode", FormatString(value));
+ }
+ 
++inline bool SetGraphicsApi(std::string value) {
++    if (!IsSupportedGraphicsApi(value)) {
++        return false;
++    }
++    Mutable().graphicsApi = value;
++    return WriteSetting("video", "graphics_api", FormatString(value));
++}
++
+ inline bool SetSkipUnreadyPipelines(bool value) {
+     Mutable().skipUnreadyPipelines = value;
+     return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
 diff --git a/runtime/src/abi_bridge.cpp b/runtime/src/abi_bridge.cpp
 index 55fe416..99fc9ef 100644
 --- a/runtime/src/abi_bridge.cpp
@@ -2406,7 +2425,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..4307c85 100644
+index 6c2083a..d07abb7 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -2417,7 +2436,73 @@ index 6c2083a..4307c85 100644
  #include "gx_worker.h"
  #include "audio_backend.h"
  #include "aurora_events.h"
-@@ -1663,6 +1666,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1286,7 +1289,64 @@ void DrawGraphicsSettings() {
+         RuntimeConfigFile::SetShowFps(g_showFps);
+     }
+     ImGui::Separator();
+-    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
++    ImGui::Text("Graphics API in use: %s", GraphicsApiDisplayName());
++    DrawGraphicsApiChoice();
++}
++
++// Lets the player pick the graphics API for the next launch. The backend is
++// created before the first frame, so the choice is saved to Config.toml and
++// applied after a restart. "Automatic" picks Vulkan on Qualcomm (Adreno) GPUs,
++// where Direct3D 12 can show a split or flashing picture at high resolutions.
++void DrawGraphicsApiChoice() {
++    struct Choice {
++        const char* label;
++        const char* configName;
++    };
++#if defined(_WIN32)
++    static constexpr std::array<Choice, 3> kChoices{{
++        {"Automatic (recommended)", "auto"},
++        {"Vulkan", "vulkan"},
++        {"Direct3D 12", "d3d12"},
++    }};
++#elif defined(__APPLE__)
++    static constexpr std::array<Choice, 2> kChoices{{
++        {"Automatic (recommended)", "auto"},
++        {"Metal", "metal"},
++    }};
++#else
++    static constexpr std::array<Choice, 2> kChoices{{
++        {"Automatic (recommended)", "auto"},
++        {"Vulkan", "vulkan"},
++    }};
++#endif
++    static int selected = [] {
++        const std::string saved = RuntimeConfigFile::GraphicsApi("auto");
++        for (size_t i = 0; i < kChoices.size(); ++i) {
++            if (saved == kChoices[i].configName) {
++                return static_cast<int>(i);
++            }
++        }
++        return 0;
++    }();
++    static const int atLaunch = selected;
++
++    if (ImGui::BeginCombo("Graphics API (next launch)", kChoices[static_cast<size_t>(selected)].label)) {
++        for (size_t i = 0; i < kChoices.size(); ++i) {
++            const bool isSelected = static_cast<int>(i) == selected;
++            if (ImGui::Selectable(kChoices[i].label, isSelected) && !isSelected) {
++                if (RuntimeConfigFile::SetGraphicsApi(kChoices[i].configName)) {
++                    selected = static_cast<int>(i);
++                }
++            }
++            if (isSelected) {
++                ImGui::SetItemDefaultFocus();
++            }
++        }
++        ImGui::EndCombo();
++    }
++    if (selected != atLaunch) {
++        ImGui::TextDisabled("Saved. Restart the game to apply it.");
++    }
+ }
+ 
+ void DrawFpsOverlay() {
+@@ -1663,6 +1723,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
              CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED
                                                                    : static_cast<uint32_t>(PAD_KEY_INVALID));
          }
@@ -2428,7 +2513,7 @@ index 6c2083a..4307c85 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1739,12 @@ void Draw() noexcept {
+@@ -1732,6 +1796,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
