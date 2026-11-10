@@ -1645,10 +1645,10 @@ index 108e4fd..6dacb4f 100644
                      if (fmt.cnt == GX_CLR_RGB) {
 diff --git a/runtime/src/hle/gx/gx_frame_trace.cpp b/runtime/src/hle/gx/gx_frame_trace.cpp
 new file mode 100644
-index 0000000..bbe94e4
+index 0000000..8a02701
 --- /dev/null
 +++ b/runtime/src/hle/gx/gx_frame_trace.cpp
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,149 @@
 +#include "gx_frame_trace.h"
 +
 +#include "runtime_log.h"
@@ -1675,14 +1675,27 @@ index 0000000..bbe94e4
 +constexpr int kWarmUpFrames = 120;
 +constexpr int kMaxWatchReports = 300;
 +constexpr double kSlowFrameMs = 90.0;
++
++// One F9 press also arms a series of traces, one every couple of seconds, for a problem that has to be
++// caught while the player is busy walking and cannot press F9 again.
++constexpr int kAutoTraces = 10;
++constexpr int kAutoGapFrames = 60;
++std::atomic<int> g_autoTracesLeft{0};
++int g_framesSinceAuto = 0;
 +} // namespace
 +
-+void Request(int frames) {
++static void StartTrace(int frames) {
 +    g_session.fetch_add(1);
 +    g_frame.store(0);
 +    g_line.store(0);
 +    g_framesLeft.store(frames);
 +    RT_LOGF(RT_TAG_GX, "[gx-trace] tracing the next %d frames\n", frames);
++}
++
++void Request(int frames) {
++    g_autoTracesLeft.store(kAutoTraces);
++    g_framesSinceAuto = 0;
++    StartTrace(frames);
 +}
 +
 +bool Active() { return g_framesLeft.load(std::memory_order_relaxed) > 0; }
@@ -1768,6 +1781,11 @@ index 0000000..bbe94e4
 +
 +void EndFrame() {
 +    WatchFrame();
++    if (!Active() && g_autoTracesLeft.load() > 0 && ++g_framesSinceAuto >= kAutoGapFrames) {
++        g_framesSinceAuto = 0;
++        g_autoTracesLeft.fetch_sub(1);
++        StartTrace(3);
++    }
 +    if (!Active()) {
 +        return;
 +    }
