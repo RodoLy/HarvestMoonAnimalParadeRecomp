@@ -427,6 +427,32 @@ El acelerómetro queda quieto, apuntando a la pantalla, así que todavía no hay
 forma de agitar el control. `runtime/tests/emulated_remote_tests.cpp` prueba el
 protocolo sin juego.
 
+### Qué se arregló al jugar y qué queda (2026-11-09)
+
+- **Personaje deformado en "Choose Your Character!".** Eran dos fallos de ABI
+  entre el traductor y el runtime: los ayudantes `0x802F55E4`–`0x802F56C0`
+  usan f22–f27 como acumuladores de entrada y salida. El traductor ahora los
+  trata como pares de singles al entrar a la función
+  (`ComputeEntryPairedSeed`) y el runtime ya no los restaura después de la
+  llamada (`accumulatorFprMask`).
+- **Parpadeo gris en las cinemáticas y error "unsupported primitive type 192".**
+  Al publicar un dibujo a Aurora también se publicaba el formato NBT, que
+  comparte campo con las normales, y las normales de 3 floats pasaban a ser de
+  9. El dibujo se quedaba sin datos, Aurora descartaba el resto del fotograma
+  y luego leía el búfer desincronizado. Ahora el formato NBT no se publica si
+  las normales son XYZ (`PublishAuroraVtxState`).
+- **Personaje partido por el centro y destellos del personaje y el buzón.**
+  Pasaba con Direct3D 12 en una GPU Adreno (Snapdragon X) con
+  `resolution_multiplier = 3`, y con `graphics_api = "vulkan"` desaparece. El
+  juego dibuja lo mismo en los fotogramas buenos y en los malos, así que la
+  diferencia está en cómo Direct3D 12 ordena las copias de la imagen. Hasta
+  encontrar la causa, en esa GPU se recomienda `graphics_api = "vulkan"` en
+  `UserData/Config.toml`, dentro de `[video]`.
+- **Herramientas de diagnóstico.** F9 traza tres fotogramas; una sola pulsación
+  arma además diez trazas más, una cada dos segundos, para problemas que
+  ocurren mientras se camina. El runtime avisa en el log con `[frame-watch]`
+  de tramos con muchos menos dibujos de lo normal y de fotogramas lentos.
+
 ### Qué sigue
 
 1. Compilar el runtime de WiiCompiled con la capa (los pasos de arriba) en
@@ -857,6 +883,31 @@ is there.
 The accelerometer stays still, pointing at the screen, so there is no way to
 shake the remote yet. `runtime/tests/emulated_remote_tests.cpp` tests the
 protocol without a game.
+
+### What was fixed while playing and what is left (2026-11-09)
+
+- **Deformed character on "Choose Your Character!".** Two ABI faults between
+  the translator and the runtime: the helpers `0x802F55E4`–`0x802F56C0` use
+  f22–f27 as in/out accumulators. The translator now treats them as paired
+  singles at function entry (`ComputeEntryPairedSeed`) and the runtime no
+  longer restores them after the call (`accumulatorFprMask`).
+- **Grey flicker in the cutscenes and "unsupported primitive type 192".**
+  Publishing a draw to Aurora also published the NBT format, which shares a
+  field with the normals, so 3-float normals became 9-float ones. The draw ran
+  out of data, Aurora dropped the rest of the frame and then read the buffer
+  out of step. The NBT format is now left out when the normals are XYZ
+  (`PublishAuroraVtxState`).
+- **Character split down the middle and flashes of the character and the
+  mailbox.** It happened with Direct3D 12 on an Adreno GPU (Snapdragon X) with
+  `resolution_multiplier = 3`, and goes away with `graphics_api = "vulkan"`.
+  The game draws the same in good and bad frames, so the difference is in how
+  Direct3D 12 orders the image copies. Until the cause is found, that GPU is
+  best run with `graphics_api = "vulkan"` in `UserData/Config.toml`, under
+  `[video]`.
+- **Diagnostic tools.** F9 traces three frames; one press also arms ten more
+  traces, one every two seconds, for problems that show up while walking. The
+  runtime reports runs of frames with far fewer draws than usual and slow
+  frames in the log with `[frame-watch]`.
 
 ### What comes next
 
