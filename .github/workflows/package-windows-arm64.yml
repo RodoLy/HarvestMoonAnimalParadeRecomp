@@ -1,0 +1,263 @@
+name: Windows ARM64 package
+
+# The same package as package-windows-x64.yml, for Windows on ARM PCs (Snapdragon X laptops), built
+# on an ARM64 runner with the ARM64 toolkit so that the game runs natively instead of through the
+# x64 emulator.
+#
+# Lo mismo que package-windows-x64.yml, para PCs con Windows on ARM (laptops Snapdragon X): se arma en
+# un runner ARM64 con el toolkit ARM64, para que el juego corra de forma nativa y no con el emulador x64.
+#
+# Builds the package that lets a player build and run the game natively on Windows: WiiCompiled's
+# runtime with this game's layer, its translator, its portable compiler (llvm-mingw), the pinned
+# dependencies and the precompiled aurora/runtime archives, plus packaging/windows/play.ps1. The
+# player's own computer translates their disc and compiles the game; no game data is involved here.
+#
+# Arma el paquete con el que un jugador compila y corre el juego de forma nativa en Windows: el
+# runtime de WiiCompiled con la capa de este juego, su traductor, su compilador portátil, las
+# dependencias fijadas y los archivos precompilados, más packaging/windows/play.ps1. La computadora
+# del jugador traduce su disco y compila el juego; aquí no hay datos del juego.
+#
+# It only runs when asked for: Actions tab > Windows ARM64 package > Run workflow. The first run
+# builds the tools and precompiled archives (about an hour); they are cached, keyed by everything
+# they are built from, so a later run that only changes play.ps1 or the docs takes minutes.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build, assemble and check the package
+    runs-on: windows-11-arm
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      WIICOMPILED_URL: https://github.com/patchzyy/wiicompiled.git
+      WIICOMPILED_COMMIT: 27ff3b03fd5c88e783a8b6f4d821b38e3b091297
+      # Short paths on purpose: the translated sources and their objects have long names.
+      WIICOMPILED: C:\wc
+      LAYER: C:\layer
+      PUBLISH: C:\publish
+      PACKAGE: C:\HMAP
+      # Part of the cache key. Change it when the preparation steps in this file change.
+      PREPARATION_VERSION: "1"
+      # Makes WiiCompiled's Prepare-*.ps1 scripts fetch the ARM64 compiler, CMake, Ninja and Dawn.
+      MKW_PACKAGE_ARCH: arm64
+    steps:
+      # Before the first checkout, so the patches apply to files with the line endings they expect.
+      - name: Keep the line endings of the repositories, and allow long paths
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          # capstone has no wheel for Windows ARM64, and these scripts only read files.
+          architecture: x64
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Download WiiCompiled at the commit the project is pinned to
+        run: |
+          git init $env:WIICOMPILED
+          git -C $env:WIICOMPILED remote add origin $env:WIICOMPILED_URL
+          git -C $env:WIICOMPILED fetch --depth 1 origin $env:WIICOMPILED_COMMIT
+          git -C $env:WIICOMPILED checkout --detach FETCH_HEAD
+          git -C $env:WIICOMPILED submodule update --init --recursive
+          if ($LASTEXITCODE -ne 0) { throw 'The aurora submodule could not be fetched.' }
+
+      - name: Apply this project's patches to WiiCompiled
+        run: |
+          foreach ($patch in 'skip-calls-outside-ram', 'foreign-game-addresses', 'foreign-game-translator', 'windows-arm64') {
+            git -C $env:WIICOMPILED apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\$patch.patch"
+            if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
+          }
+          # aurora is a submodule, so its patches apply inside it.
+          foreach ($patch in 'aurora-storage-buffer', 'aurora-overrun-layout') {
+            git -C (Join-Path $env:WIICOMPILED 'aurora-main') apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\$patch.patch"
+            if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
+          }
+
+      # The layer is written from symbols.txt and WiiCompiled's sources, so it is made here, and it
+      # has to be in runtime\include before the precompiled runtime archive is built.
+      - name: Place WiiCompiled's natives at this game's addresses
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python tools/export_wiicompiled_layer.py --wiicompiled $env:WIICOMPILED --out $env:LAYER
+          if ($LASTEXITCODE -ne 0) { throw 'The layer exporter failed.' }
+          $project = Join-Path $env:WIICOMPILED 'projects\animal-parade'
+          New-Item -ItemType Directory -Force -Path (Join-Path $project 'native') | Out-Null
+          Copy-Item wiicompiled\RBIEE9.yml (Join-Path $project 'recomp.yml')
+          Copy-Item wiicompiled\RBIEE9-MAP.txt (Join-Path $project 'MAP.txt')
+          Copy-Item (Join-Path $env:LAYER 'native\natives.cpp') (Join-Path $project 'native')
+          Copy-Item (Join-Path $env:LAYER 'guest_abi\*.inc') (Join-Path $env:WIICOMPILED 'runtime\include\guest_abi')
+
+      # Keyed by every input of the tools, the dependencies and the precompiled archives: the pinned
+      # WiiCompiled, this project's patches and the layer that goes into the runtime.
+      - name: Look for tools and archives prepared earlier from the same sources
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: C:\wc\Launcher\artifacts
+          key: wiicompiled-artifacts-arm64-${{ env.PREPARATION_VERSION }}-${{ env.WIICOMPILED_COMMIT }}-${{ hashFiles('patches/wiicompiled/*.patch', 'config/RBIEE9/symbols.txt', 'tools/export_wiicompiled_layer.py', 'tools/wiicompiled_coverage.py', 'wiicompiled/RBIEE9-*-addresses.txt') }}
+          # A partial match still saves the downloads; the precompiled archives are rebuilt below.
+          restore-keys: |
+            wiicompiled-artifacts-arm64-${{ env.PREPARATION_VERSION }}-${{ env.WIICOMPILED_COMMIT }}-
+
+      - name: Download the portable compiler, CMake, Ninja and the pinned dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          $artifacts = Join-Path $env:WIICOMPILED 'Launcher\artifacts'
+          & (Join-Path $env:WIICOMPILED 'Launcher\Prepare-PortableTools.ps1') -Destination (Join-Path $artifacts 'portable-tools')
+          & (Join-Path $env:WIICOMPILED 'Launcher\Prepare-Dependencies.ps1') -Destination (Join-Path $artifacts 'dependencies')
+
+      - name: Build the precompiled aurora, third-party and runtime archives
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          $artifacts = Join-Path $env:WIICOMPILED 'Launcher\artifacts'
+          $prebuilt = Join-Path $artifacts 'dependencies\native_prebuilt'
+          if (Test-Path $prebuilt) { Remove-Item $prebuilt -Recurse -Force }
+          & (Join-Path $env:WIICOMPILED 'Launcher\Prepare-NativePrebuilt.ps1') `
+            -PortableToolsDirectory (Join-Path $artifacts 'portable-tools') `
+            -DependencySourceDirectory (Join-Path $artifacts 'dependencies')
+          if ($LASTEXITCODE -ne 0) { throw 'The precompiled archives could not be built.' }
+
+      - name: Publish the translator as one program
+        run: |
+          dotnet publish (Join-Path $env:WIICOMPILED 'translator\src\Translator.Cli\Translator.Cli.csproj') `
+            -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None -o (Join-Path $env:PUBLISH 'translator')
+          if ($LASTEXITCODE -ne 0) { throw 'The translator could not be published.' }
+
+      # nodtool, at the version WiiCompiled pins, so players can give the disc image as it is.
+      - name: Download the disc tool (nodtool)
+        run: |
+          $nodTool = dotnet run --project (Join-Path $env:WIICOMPILED 'Launcher\WiiCompiled.Setup.Common.Cli') -c Release -- --workspace $env:WIICOMPILED | Select-Object -Last 1
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nodTool)) { throw 'nodtool could not be downloaded.' }
+          Copy-Item $nodTool (Join-Path $env:PUBLISH 'nodtool.exe')
+
+      # The same layout and the same trimming as WiiCompiled's Build-Installer.ps1 (Toolkit,
+      # BuildWorkspace), with this game's project instead of Mario Kart Wii's.
+      - name: Assemble the package
+        run: |
+          $wc = $env:WIICOMPILED
+          $artifacts = Join-Path $wc 'Launcher\artifacts'
+          $toolkit = Join-Path $env:PACKAGE 'Toolkit'
+          $workspace = Join-Path $env:PACKAGE 'BuildWorkspace'
+          if (Test-Path $env:PACKAGE) { Remove-Item $env:PACKAGE -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $toolkit, $workspace | Out-Null
+
+          foreach ($tool in 'llvm-mingw', 'CMake', 'Ninja') {
+            Copy-Item (Join-Path $artifacts "portable-tools\$tool") (Join-Path $toolkit $tool) -Recurse
+          }
+          Remove-Item (Join-Path $toolkit 'llvm-mingw\python') -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $toolkit 'CMake\bin\cmake-gui.exe') -Force -ErrorAction SilentlyContinue
+          Get-ChildItem (Join-Path $toolkit 'llvm-mingw\bin') -File |
+            Where-Object { $_.Name -like 'lldb*' -or $_.Name -like 'liblldb*' } | Remove-Item -Force
+          New-Item -ItemType Directory -Force -Path (Join-Path $toolkit 'Translator') | Out-Null
+          Copy-Item (Join-Path $env:PUBLISH 'translator\Translator.Cli.exe') (Join-Path $toolkit 'Translator')
+          Copy-Item (Join-Path $env:PUBLISH 'nodtool.exe') $toolkit
+
+          # The Visual C++ runtime the portable CMake, Ninja and Dawn's shader compiler load.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath | Select-Object -First 1
+          $vcRuntime = Get-ChildItem (Join-Path $installation 'VC\Redist\MSVC') -Directory -Recurse |
+            Where-Object { $_.Parent.Name -eq 'arm64' -and $_.Name -match '^Microsoft\.VC\d+\.CRT$' -and
+              (Test-Path (Join-Path $_.FullName 'vcruntime140.dll')) } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $vcRuntime) { throw 'No ARM64 Visual C++ runtime was found.' }
+          New-Item -ItemType Directory -Force -Path (Join-Path $toolkit 'Redist') | Out-Null
+          foreach ($destination in (Join-Path $toolkit 'Redist'), (Join-Path $toolkit 'CMake\bin'), (Join-Path $toolkit 'Ninja')) {
+            Copy-Item (Join-Path $vcRuntime.FullName '*.dll') $destination
+          }
+
+          Copy-Item (Join-Path $wc 'runtime') (Join-Path $workspace 'runtime') -Recurse
+          Remove-Item (Join-Path $workspace 'runtime\build') -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item (Join-Path $wc 'aurora-main') (Join-Path $workspace 'aurora-main') -Recurse
+          Remove-Item (Join-Path $workspace 'aurora-main\.git') -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem (Join-Path $workspace 'aurora-main\extern') -Directory -Force | Remove-Item -Recurse -Force
+          New-Item -ItemType Directory -Force -Path (Join-Path $workspace 'projects') | Out-Null
+          Copy-Item (Join-Path $wc 'projects\animal-parade') (Join-Path $workspace 'projects\animal-parade') -Recurse
+          Copy-Item (Join-Path $wc 'Launcher\NativeBuildFlags.ps1') $workspace
+          Copy-Item (Join-Path $artifacts 'dependencies') (Join-Path $workspace 'Dependencies') -Recurse
+
+          foreach ($file in 'play.ps1', 'play.cmd', 'README.txt') {
+            Copy-Item "packaging\windows\$file" $env:PACKAGE
+          }
+          # Makes the runtime keep its settings, saves and logs in UserData next to play.ps1.
+          Set-Content (Join-Path $env:PACKAGE 'portable.txt') 'Harvest Moon: Animal Parade keeps its user data in UserData.'
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:PACKAGE 'licenses') | Out-Null
+          Copy-Item LICENSE (Join-Path $env:PACKAGE 'licenses\harvest-moon-animal-parade-recomp.txt')
+          Copy-Item (Join-Path $wc 'LICENSE') (Join-Path $env:PACKAGE 'licenses\wiicompiled.txt')
+          Copy-Item (Join-Path $wc 'THIRD-PARTY-NOTICES.md') (Join-Path $env:PACKAGE 'licenses\wiicompiled-third-party.md')
+
+      # Players run play.ps1 under Windows PowerShell 5.1, whatever shell built the package, so the
+      # package is accepted (or not) here exactly the way it will be on their computers.
+      - name: Check the package under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workspace = Join-Path $env:PACKAGE 'BuildWorkspace'
+          $toolkit = Join-Path $env:PACKAGE 'Toolkit'
+          . (Join-Path $workspace 'NativeBuildFlags.ps1')
+
+          # A rejected precompiled package would make every player compile aurora from source.
+          $prebuilt = Resolve-MkwNativePrebuiltDirectory (Join-Path $workspace 'Dependencies') `
+            (Join-Path $toolkit 'llvm-mingw\bin') (Join-Path $workspace 'aurora-main') (Join-Path $workspace 'runtime\third_party')
+          if (-not $prebuilt) { throw 'The precompiled archives are not accepted by this toolkit.' }
+
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:PACKAGE 'play.ps1'), [ref]$null, [ref]$errors)
+          if ($errors) { throw "play.ps1 does not parse: $($errors -join '; ')" }
+
+          # A made-up disc of another game: the script must load its helpers, find the disc and
+          # stop at the disc check, before anything is translated.
+          $fake = 'C:\fake-disc'
+          New-Item -ItemType Directory -Force -Path "$fake\sys", "$fake\files" | Out-Null
+          [IO.File]::WriteAllBytes("$fake\sys\boot.bin", [Text.Encoding]::ASCII.GetBytes('RMCP01' + ("`0" * 26)))
+          Set-Content "$fake\sys\main.dol" 'not a game'
+          Set-Content "$fake\sys\fst.bin" 'not a game'
+          # The script is meant to fail here, and Windows PowerShell turns a program's error output
+          # into an error of its own when $ErrorActionPreference is Stop.
+          $ErrorActionPreference = 'Continue'
+          $output = & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $env:PACKAGE 'play.ps1') -Disc $fake -NoStart 2>&1 | Out-String
+          $global:LASTEXITCODE = 0
+          $ErrorActionPreference = 'Stop'
+          Write-Host $output
+          if ($output -notmatch 'This disc is RMCP01') { throw 'play.ps1 did not stop at the disc check.' }
+          # And the disc tool it extracts images with has to start on a clean Windows.
+          & (Join-Path $env:PACKAGE 'Toolkit\nodtool.exe') --help
+          if ($LASTEXITCODE -ne 0) { throw 'nodtool does not start.' }
+          Remove-Item (Join-Path $env:PACKAGE 'UserData') -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Zip the package
+        run: |
+          $zip = 'C:\HarvestMoonAnimalParade-windows-arm64.zip'
+          tar -a -c -f $zip -C (Split-Path $env:PACKAGE) (Split-Path $env:PACKAGE -Leaf)
+          if ($LASTEXITCODE -ne 0) { throw 'The zip could not be written.' }
+          Write-Host ("{0:N0} MB" -f ((Get-Item $zip).Length / 1MB))
+
+      - name: Keep the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HarvestMoonAnimalParade-windows-arm64
+          path: C:\HarvestMoonAnimalParade-windows-arm64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

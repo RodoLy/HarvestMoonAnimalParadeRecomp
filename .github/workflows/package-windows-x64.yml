@@ -72,7 +72,7 @@ jobs:
 
       - name: Apply this project's patches to WiiCompiled
         run: |
-          foreach ($patch in 'skip-calls-outside-ram', 'foreign-game-addresses', 'foreign-game-translator') {
+          foreach ($patch in 'skip-calls-outside-ram', 'foreign-game-addresses', 'foreign-game-translator', 'windows-arm64') {
             git -C $env:WIICOMPILED apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\$patch.patch"
             if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
           }
