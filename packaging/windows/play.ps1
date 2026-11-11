@@ -176,9 +176,13 @@ $translator = Join-Path $toolkit 'Translator\Translator.Cli.exe'
 $cmake = Join-Path $toolkit 'CMake\bin\cmake.exe'
 $ninja = Join-Path $toolkit 'Ninja\ninja.exe'
 $toolchainBin = Join-Path $toolkit 'llvm-mingw\bin'
-$cc = Join-Path $toolchainBin 'x86_64-w64-mingw32-clang.exe'
-$cxx = Join-Path $toolchainBin 'x86_64-w64-mingw32-clang++.exe'
-$windres = Join-Path $toolchainBin 'x86_64-w64-mingw32-windres.exe'
+# The toolkit decides what the game is built for: the x64 package builds x86_64, the Windows on ARM
+# package builds aarch64, and each of them only has the matching precompiled archives.
+$env:MKW_TARGET_PROCESSOR = Get-MkwToolchainProcessor $toolchainBin
+$triple = "$($env:MKW_TARGET_PROCESSOR)-w64-mingw32"
+$cc = Join-Path $toolchainBin "$triple-clang.exe"
+$cxx = Join-Path $toolchainBin "$triple-clang++.exe"
+$windres = Join-Path $toolchainBin "$triple-windres.exe"
 foreach ($required in @($translator, $cmake, $ninja, $cc, $cxx, $windres)) { Assert-File $required 'Package file' }
 
 $generated = Join-Path $workspace 'generated'
@@ -196,8 +200,10 @@ $memoryGiB = [math]::Max(1, [math]::Floor((Get-CimInstance Win32_ComputerSystem)
 $translatorThreads = [math]::Max(1, [math]::Min([Environment]::ProcessorCount, 16))
 $translatedJobs = [math]::Max(1, [math]::Min([Environment]::ProcessorCount, [math]::Floor(($memoryGiB - 2) / 0.5)))
 $globalJobs = [math]::Max($translatedJobs, [Environment]::ProcessorCount)
-# Windows on ARM runs this x86-64 build through its emulator, which is safest without AVX2.
-$cpuProfile = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { 'v2' } else { 'v3' }
+# The x64 build on a Windows on ARM PC runs through its emulator, which is safest without AVX2. The ARM64
+# package is native and ignores this setting.
+$cpuProfile = if ($env:MKW_TARGET_PROCESSOR -eq 'x86_64' -and
+    ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64')) { 'v2' } else { 'v3' }
 
 $oldPath = $env:PATH
 $env:PATH = Get-MkwToolchainPath $toolkit
