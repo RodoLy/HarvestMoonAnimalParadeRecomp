@@ -1,0 +1,41 @@
+name: Package to draft release
+
+# Copies the package a "Windows ... package" run kept as an artifact into a draft release. A draft is
+# only visible to people who can write to the repository, and its files can be downloaded with the
+# release tools, which is handy where the artifact storage itself cannot be reached.
+#
+# Copia el paquete que una corrida de "Windows ... package" guardó como artefacto a un borrador de
+# release. Un borrador solo lo ven quienes pueden escribir en el repositorio, y sus archivos se bajan
+# con las herramientas de releases, útil donde no se alcanza el almacenamiento de artefactos.
+#
+# Actions tab > Package to draft release > Run workflow, with the number of the package run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Number of the package run (the digits at the end of its address)
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  copy:
+    name: Copy the package into a draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+    steps:
+      - name: Download the package of that run
+        run: gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir package
+
+      - name: Attach it to a draft release
+        run: |
+          ls -l package/*/
+          gh release create "package-$RUN_ID" package/*/*.zip --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Package from run $RUN_ID" \
+            --notes "Test package built by run $RUN_ID. It holds no game data. / Paquete de prueba de la corrida $RUN_ID. No contiene datos del juego."
