@@ -39,8 +39,12 @@ paquete sin datos del juego: el runtime de WiiCompiled con la capa de este juego
 su traductor y su compilador portátil. En tu computadora, `play.cmd` toma tu
 imagen del disco (.rvz, .iso o .wbfs), la extrae, traduce el juego, lo compila y
 lo inicia. Los pasos están en
-[packaging/windows/README.txt](packaging/windows/README.txt). En Windows sobre ARM
-corre con la emulación de x86-64 de Windows.
+[packaging/windows/README.txt](packaging/windows/README.txt). Para PCs con Windows
+sobre ARM (por ejemplo laptops Snapdragon X) hay un segundo workflow, **Windows
+ARM64 package**, que arma el mismo paquete con herramientas ARM64 para que el
+juego corra de forma nativa y no con la emulación de x86-64 (en pruebas: aún no
+se ha comprobado que arranque). Allí el runtime se compila en tu computadora la
+primera vez.
 
 ### Empezar
 
@@ -116,8 +120,11 @@ package with no game data: WiiCompiled's runtime with this game's layer, its
 translator and its portable compiler. On your computer, `play.cmd` takes your
 disc image (.rvz, .iso or .wbfs), extracts it, translates the game, compiles it
 and starts it. The steps are in
-[packaging/windows/README.txt](packaging/windows/README.txt). On Windows on ARM
-it runs through Windows' x86-64 emulation.
+[packaging/windows/README.txt](packaging/windows/README.txt). For Windows on ARM
+PCs (for example Snapdragon X laptops) a second workflow, **Windows ARM64
+package**, builds the same package with ARM64 tools so the game runs natively
+instead of through x86-64 emulation (being tried: it has not yet been confirmed
+to start). There the runtime is compiled on your computer the first time.
 
 ### Getting started
 
