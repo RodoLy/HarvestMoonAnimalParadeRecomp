@@ -1,17 +1,18 @@
 diff --git a/include/dolphin/gx/GXAurora.h b/include/dolphin/gx/GXAurora.h
-index 3f6a13a..36921bb 100644
+index 3f6a13a..e2f19d4 100644
 --- a/include/dolphin/gx/GXAurora.h
 +++ b/include/dolphin/gx/GXAurora.h
-@@ -169,6 +169,17 @@ typedef enum _AuroraViewportPolicy {
+@@ -169,6 +169,18 @@ typedef enum _AuroraViewportPolicy {
   */
  void AuroraSetViewportPolicy(AuroraViewportPolicy policy);
  
 +/**
 + * Wide picture, for a game that only knows how to draw a 4:3 picture. With AURORA_VIEWPORT_STRETCH the
 + * frame takes the shape of the window, which stretches that picture sideways. Wide picture undoes the
-+ * stretch: the 3D scene shows more to the left and right instead (the camera opens up, nothing gets
-+ * fatter), and what the game draws flat on the screen - its clock, its text boxes - keeps its shape in
-+ * the middle. Draws that cover the whole frame, like a fade to black, still reach both sides.
++ * stretch for what the game draws flat on the screen - its clock, its text boxes - which keeps its shape
++ * in the middle; draws that cover the whole frame, like a fade to black, still reach both sides. The 3D
++ * scene is the caller's part: it has the game build its cameras as wide as the window, so they show
++ * more to the left and right instead of getting fatter.
 + *
 + * gameAspect is the shape the game draws its picture for (4.0f / 3.0f); 0 turns wide picture off.
 + */
@@ -307,25 +308,22 @@ index 02be26a..559dd5c 100644
  void clear_copy_texture_cache() noexcept;
  void evict_copy_texture(const void* dest) noexcept;
 diff --git a/lib/gx/shader_info.cpp b/lib/gx/shader_info.cpp
-index f5df625..47204b1 100644
+index f5df625..423a5da 100644
 --- a/lib/gx/shader_info.cpp
 +++ b/lib/gx/shader_info.cpp
-@@ -436,6 +436,19 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
+@@ -436,6 +436,16 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
      }
    }
    auto proj = g_gxState.proj;
-+  // Wide picture: the frame is `wide` times wider than the picture the game draws for, so every
-+  // horizontal position is brought back by that much around the middle. A perspective scene then
-+  // simply shows more at the sides. A flat draw keeps its shape in the middle, unless it covers the
-+  // whole frame (a fade, the scene drawn back from a copy), which must still reach both sides.
-+  if (const float wide = wide_picture_factor(); wide > 1.f) {
-+    if (g_gxState.projType == GX_PERSPECTIVE) {
-+      proj.m0[0] /= wide;
-+      proj.m0[2] /= wide;
-+    } else if (!g_gxState.orthoDrawFillsWidth) {
-+      proj.m0[0] /= wide;
-+      proj.m0[3] /= wide;
-+    }
++  // Wide picture: the frame is `wide` times wider than the picture the game draws for. A flat draw
++  // keeps its shape in the middle, so its horizontal positions are brought back by that much, unless
++  // it covers the whole frame (a fade, the scene drawn back from a copy), which must still reach both
++  // sides. A 3D camera is left alone: the game is asked to build it wide in the first place (see
++  // AuroraSetWidePicture), which keeps its shadows and its culling in step with what is drawn.
++  if (const float wide = wide_picture_factor(); wide > 1.f && g_gxState.projType == GX_ORTHOGRAPHIC &&
++                                                !g_gxState.orthoDrawFillsWidth) {
++    proj.m0[0] /= wide;
++    proj.m0[3] /= wide;
 +  }
    if constexpr (UseReversedZ) {
      proj.m2 = proj.m2 * Vec4{-1.f, -1.f, -1.f, -1.f};
