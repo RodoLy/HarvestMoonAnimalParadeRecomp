@@ -31,11 +31,17 @@ jobs:
       RUN_ID: ${{ inputs.run_id }}
     steps:
       - name: Download the package of that run
-        run: gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir package
+        # The artifact's own download is the package zip itself (it is uploaded unzipped); gh run
+        # download would unpack it into a folder instead.
+        run: |
+          mkdir -p package
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '.artifacts[] | "\(.id) \(.name)"' | while read -r id name; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "package/$name"
+          done
 
       - name: Attach it to a draft release
         run: |
-          # An older run keeps its zip inside a folder named after the artifact; a newer one is the zip itself.
           find package -type f -name '*.zip' -ls
           gh release create "package-$RUN_ID" $(find package -type f -name '*.zip') --repo "$GITHUB_REPOSITORY" --draft \
             --title "Package from run $RUN_ID" \
