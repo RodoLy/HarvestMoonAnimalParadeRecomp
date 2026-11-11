@@ -245,10 +245,11 @@ jobs:
           Write-Host ("{0:N0} MB" -f ((Get-Item $zip).Length / 1MB))
 
       - name: Keep the package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: HarvestMoonAnimalParade-windows-x64
+          # The package is already a zip: upload it as it is, so the download is that zip and not a
+          # zip holding it. / El paquete ya es un zip: se sube tal cual, sin meterlo en otro zip.
           path: C:\HarvestMoonAnimalParade-windows-x64.zip
+          archive: false
           if-no-files-found: error
-          compression-level: 0
           retention-days: 14
