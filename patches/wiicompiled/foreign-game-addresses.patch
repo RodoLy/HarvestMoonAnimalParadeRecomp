@@ -62,7 +62,7 @@ index 4ca4439..cd7d8c4 100644
  // A native that calls through with MKW_GUEST_NEXT, so a mod overlay at its address still runs.
  #define REGISTER_NATIVE_WRAPPER_AS(address, fn, pretty_name) REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name)
 diff --git a/runtime/include/aurora_events.h b/runtime/include/aurora_events.h
-index f44f861..94bfbfb 100644
+index f44f861..c20ca9d 100644
 --- a/runtime/include/aurora_events.h
 +++ b/runtime/include/aurora_events.h
 @@ -13,6 +13,7 @@
@@ -73,7 +73,18 @@ index f44f861..94bfbfb 100644
  #include <chrono>
  
  #if defined(_WIN32)
-@@ -180,5 +181,6 @@ inline void EndAuroraFrame() {
+@@ -23,6 +24,10 @@ extern "C" bool g_dynamicAspectRatioEnabled;
+ void ConfigureMkwDynamicAspect(bool widescreen, bool forceAspect, uint32_t surfaceWidth, uint32_t surfaceHeight);
+ void SetMkwForceAspect(bool enabled);
+ void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight);
++// For a game other than Mario Kart Wii: true shows a wide picture that fills the window (the 3D scene
++// shows more at the sides and the game's flat drawings keep their shape), false shows the game's own
++// 4:3 picture with bars at the sides. Takes effect on the next frame.
++void SetWidePicture(bool enabled);
+ // Arms the "keep EGG::Frustum's projection scale" flag on every screen that
+ // renders to a fixed-size offscreen target. Cheap and idempotent; called from
+ // the GX viewport path so it beats bakes that never cross a frame boundary.
+@@ -180,5 +185,6 @@ inline void EndAuroraFrame() {
  
  // Poll Aurora events and update cached window/framebuffer dimensions.
  inline void UpdateAuroraAndProcessEvents() {
@@ -564,7 +575,7 @@ index 55fe416..99fc9ef 100644
      if (RegistryFrozen().load(std::memory_order_acquire)) {
          RT_LOG(RT_TAG_RUNTIME) << "ERROR: Attempted to register function after registry was finalized: 0x"
 diff --git a/runtime/src/dynamic_aspect.cpp b/runtime/src/dynamic_aspect.cpp
-index 67f94fb..4c9e754 100644
+index 67f94fb..2429924 100644
 --- a/runtime/src/dynamic_aspect.cpp
 +++ b/runtime/src/dynamic_aspect.cpp
 @@ -23,29 +23,29 @@ uint32_t g_lastEggWidth169 = 0;
@@ -609,9 +620,45 @@ index 67f94fb..4c9e754 100644
  constexpr uint32_t kEggScreenFlagsOffset = 0x34u;
  constexpr uint16_t kEggScreenFlagFramebufferCanvas = 0x0008u;
  constexpr uint16_t kEggScreenFlagKeepFrustumScale = 0x0040u;
-@@ -163,6 +163,9 @@ void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
+@@ -159,10 +159,45 @@ void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
+     }
+ }
+ 
++// ---------------------------------------------------------------------------------------------
++// A game other than Mario Kart Wii
++// ---------------------------------------------------------------------------------------------
++// Such a game has no EGG screens to resize, and the ones seen so far only draw a 4:3 picture: they
++// never ask the console whether the TV is 16:9. So the choice is made outside the game. "Wide" lets
++// the frame take the shape of the window and has aurora undo the stretch that would cause
++// (AuroraSetWidePicture), which shows more of the scene at the sides. "Original" keeps the 4:3
++// picture and puts bars beside it.
++std::atomic_bool g_requestedWidePicture{true};
++
++void ApplyForeignPicture() {
++    static int applied = -1;
++    const int requested = g_requestedWidePicture.load(std::memory_order_acquire) ? 1 : 0;
++    if (applied == requested) {
++        return;
++    }
++    applied = requested;
++    if (requested != 0) {
++        AuroraSetViewportPolicy(AURORA_VIEWPORT_STRETCH);
++        VIUnlockAspectRatio();
++        AuroraSetWidePicture(4.0f / 3.0f);
++    } else {
++        AuroraSetViewportPolicy(AURORA_VIEWPORT_FIT);
++        VILockAspectRatio(4, 3);
++        AuroraSetWidePicture(0.0f);
++    }
++}
++
+ } // namespace
  
  
++void SetWidePicture(bool enabled) {
++    g_requestedWidePicture.store(enabled, std::memory_order_release);
++}
++
  void AssertMkwOffscreenScreenBypass() {
 +    if (GuestRegion::IsForeignGame()) {
 +        return;
@@ -619,21 +666,24 @@ index 67f94fb..4c9e754 100644
      static int lastSweptFrame = -1;
      if (lastSweptFrame == g_gxFrameCount) {
          return;
-@@ -172,6 +175,9 @@ void AssertMkwOffscreenScreenBypass() {
+@@ -172,6 +207,10 @@ void AssertMkwOffscreenScreenBypass() {
  }
  
  void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight) {
 +    if (GuestRegion::IsForeignGame()) {
-+        return;  // Mario Kart Wii's EGG screens: another game has none
++        ApplyForeignPicture();  // Mario Kart Wii's EGG screens: another game has none
++        return;
 +    }
      const bool requestedForceAspect = g_requestedForceAspect.load(std::memory_order_acquire);
      if (g_forceAspect != requestedForceAspect) {
          g_forceAspect = requestedForceAspect;
-@@ -198,6 +204,9 @@ void SetMkwForceAspect(bool enabled) {
+@@ -198,6 +237,11 @@ void SetMkwForceAspect(bool enabled) {
  }
  
  void ConfigureMkwDynamicAspect(bool widescreen, bool forceAspect, uint32_t surfaceWidth, uint32_t surfaceHeight) {
 +    if (GuestRegion::IsForeignGame()) {
++        // Applied by UpdateMkwDynamicAspectSurface once aurora is running.
++        SetWidePicture(widescreen);
 +        return;
 +    }
      g_widescreen = widescreen;
@@ -2080,6 +2130,51 @@ index 0f79533..a848636 100644
      if (GxWorker::ShouldDefer()) {
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
+diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
+index 54e15fa..a5a6fb4 100644
+--- a/runtime/src/hle/gx/gx_transform.cpp
++++ b/runtime/src/hle/gx/gx_transform.cpp
+@@ -1,6 +1,7 @@
+ // gx_transform.cpp - Viewport, Projection, and Matrix Functions
+ #include "isa/big_endian.h"
+ #include "gx_internal.h"
++#include "gx_frame_trace.h"
+ 
+ namespace {
+     static inline void SwapBeF32ArrayToHost(const uint32_t* srcBe, float* dst, size_t count) {
+@@ -45,6 +46,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
+ PPC_NATIVE_OVERRIDE_VOID(80173378, GX__SetViewportJitter_80173378, (float l, float t, float w, float h, float nz, float fz, uint32_t f), (l, t, w, h, nz, fz, f));
+ 
+ extern "C" void GX__SetViewport_801733b4(float l, float t, float w, float h, float nz, float fz) {
++    if (GxFrameTrace::Active()) {
++        GxFrameTrace::Note("SetViewport (%.1f,%.1f %.1fx%.1f)", l, t, w, h);
++    }
+     g_viewportState[0]=l; g_viewportState[1]=t; g_viewportState[2]=w; g_viewportState[3]=h; g_viewportState[4]=nz; g_viewportState[5]=fz;
+     GxWorker::Run([=] { GXSetViewport(l, t, w, h, nz, fz); });
+ }
+@@ -104,6 +108,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
+     // No viewport replay here: aurora recomputes viewport and scissor together
+     // on every scissor change (set_logical_scissor -> apply_logical_render_state),
+     // so re-issuing the current viewport would be duplicate work.
++    if (GxFrameTrace::Active()) {
++        GxFrameTrace::Note("SetScissor (%u,%u %ux%u)", l, t, w, h);
++    }
+     GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
+ }
+ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
+@@ -115,6 +122,12 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+ extern "C" void GX__SetProjection_8017301c(uint32_t ma, uint32_t pt) {
+     const uint32_t* raw=(const uint32_t*)GuestToHostPtr(ma, 64); float m[16];
+     SwapBeF32ArrayToHost(raw, m, 16);
++    if (GxFrameTrace::Active()) {
++        // Orthographic: x scale and offset, y scale and offset. Perspective: the same slots hold the
++        // x and y scales and their skews.
++        GxFrameTrace::Note("SetProjection %s x=%.5f,%.5f y=%.5f,%.5f", pt == GX_PERSPECTIVE ? "perspective" : "ortho",
++                           m[0], pt == GX_PERSPECTIVE ? m[2] : m[3], m[5], pt == GX_PERSPECTIVE ? m[6] : m[7]);
++    }
+     GxWorker::Run([mtx = std::to_array(m), pt]() mutable { GXSetProjection(mtx.data(), (GXProjectionType)pt); });
+     UpdateProjectionVectorFromMatrix(m, (GXProjectionType)pt);
+ }
 diff --git a/runtime/src/hle/gx/gx_vertex.cpp b/runtime/src/hle/gx/gx_vertex.cpp
 index 3a8c43b..1df0c2c 100644
 --- a/runtime/src/hle/gx/gx_vertex.cpp
@@ -2628,7 +2723,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..358eeff 100644
+index 6c2083a..0045b17 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -2663,10 +2758,56 @@ index 6c2083a..358eeff 100644
  
  bool IsHighResolutionScale(float scale) {
      return std::fabs(scale - 6.0f) < 0.001f || std::fabs(scale - 8.0f) < 0.001f;
-@@ -1144,6 +1149,62 @@ void DrawAudioSettings() {
+@@ -1074,22 +1079,25 @@ void DrawAudioSettings() {
+         AudioBackend::Instance().SetMasterVolume(volume);
+         RuntimeConfigFile::SetAudioVolume(volume);
+     }
+-    if (ImGui::SliderInt("Music", &g_musicVolumePercent, 0, 100, "%d%%")) {
++    // The four sliders below and the external-media option work through Mario Kart Wii's sound
++    // manager, so they are only offered for that game.
++    const bool foreignGame = GuestRegion::IsForeignGame();
++    if (!foreignGame && ImGui::SliderInt("Music", &g_musicVolumePercent, 0, 100, "%d%%")) {
+         const float volume = static_cast<float>(g_musicVolumePercent) / 100.0f;
+         MusicAttenuation::SetMusicVolume(volume);
+         RuntimeConfigFile::SetMusicVolume(volume);
+     }
+-    if (ImGui::SliderInt("Sound Effects", &g_soundEffectsVolumePercent, 0, 100, "%d%%")) {
++    if (!foreignGame && ImGui::SliderInt("Sound Effects", &g_soundEffectsVolumePercent, 0, 100, "%d%%")) {
+         const float volume = static_cast<float>(g_soundEffectsVolumePercent) / 100.0f;
+         MusicAttenuation::SetSoundEffectsVolume(volume);
+         RuntimeConfigFile::SetSoundEffectsVolume(volume);
+     }
+-    if (ImGui::SliderInt("UI", &g_uiVolumePercent, 0, 100, "%d%%")) {
++    if (!foreignGame && ImGui::SliderInt("UI", &g_uiVolumePercent, 0, 100, "%d%%")) {
+         const float volume = static_cast<float>(g_uiVolumePercent) / 100.0f;
+         MusicAttenuation::SetUiVolume(volume);
+         RuntimeConfigFile::SetUiVolume(volume);
+     }
+-    if (ImGui::SliderInt("Voices", &g_voicesVolumePercent, 0, 100, "%d%%")) {
++    if (!foreignGame && ImGui::SliderInt("Voices", &g_voicesVolumePercent, 0, 100, "%d%%")) {
+         const float volume = static_cast<float>(g_voicesVolumePercent) / 100.0f;
+         MusicAttenuation::SetVoicesVolume(volume);
+         RuntimeConfigFile::SetVoicesVolume(volume);
+@@ -1114,6 +1122,9 @@ void DrawAudioSettings() {
+             "Runs the AX/DSP voice mix off the game thread. Turn this off if you "
+             "suspect an audio problem; the mix then runs inline as it used to.");
+     }
++    if (foreignGame) {
++        return;
++    }
+     ImGui::Separator();
+     if (ImGui::Checkbox("Mute game music while external media is playing",
+                         &g_attenuateMusicWhenMediaPlays)) {
+@@ -1144,24 +1155,100 @@ void DrawAudioSettings() {
      }
  }
  
+-void DrawGraphicsSettings() {
+-    g_displayMode = static_cast<int>(aurora_get_display_mode());
+-    if (ImGui::BeginCombo("Aspect ratio (restart required)", g_widescreen ? "16:9" : "4:3")) {
+-        if (ImGui::Selectable("16:9", g_widescreen)) {
+-            g_widescreen = true;
+-            RuntimeConfigFile::SetWidescreen(true);
 +// Lets the player pick the graphics API for the next launch. The backend is
 +// created before the first frame, so the choice is saved to Config.toml and
 +// applied after a restart. "Automatic" picks Vulkan on Qualcomm (Adreno) GPUs,
@@ -2699,7 +2840,10 @@ index 6c2083a..358eeff 100644
 +            if (saved == kChoices[i].configName) {
 +                return static_cast<int>(i);
 +            }
-+        }
+         }
+-        if (ImGui::Selectable("4:3", !g_widescreen)) {
+-            g_widescreen = false;
+-            RuntimeConfigFile::SetWidescreen(false);
 +        return 0;
 +    }();
 +    static const int atLaunch = selected;
@@ -2715,18 +2859,83 @@ index 6c2083a..358eeff 100644
 +            if (isSelected) {
 +                ImGui::SetItemDefaultFocus();
 +            }
-+        }
-+        ImGui::EndCombo();
-+    }
+         }
+         ImGui::EndCombo();
+     }
+-    if (ImGui::Checkbox("Force aspect ratio", &g_forceAspect)) {
+-        SetMkwForceAspect(g_forceAspect);
+-        RuntimeConfigFile::SetForceAspect(g_forceAspect);
 +    if (selected != atLaunch) {
 +        ImGui::TextDisabled("Saved. Restart the game to apply it.");
 +    }
 +}
 +
- void DrawGraphicsSettings() {
-     g_displayMode = static_cast<int>(aurora_get_display_mode());
-     if (ImGui::BeginCombo("Aspect ratio (restart required)", g_widescreen ? "16:9" : "4:3")) {
-@@ -1205,13 +1266,13 @@ void DrawGraphicsSettings() {
++void DrawGraphicsSettings() {
++    g_displayMode = static_cast<int>(aurora_get_display_mode());
++    // The aspect, force-aspect and bloom settings below drive Mario Kart Wii's own screens and
++    // effects. Another game has neither, so it gets the one choice that does something for it.
++    const bool foreignGame = GuestRegion::IsForeignGame();
++    if (foreignGame) {
++        if (ImGui::BeginCombo("Picture", g_widescreen ? "Wide (fills the window)" : "Original (4:3)")) {
++            if (ImGui::Selectable("Wide (fills the window)", g_widescreen) && !g_widescreen) {
++                g_widescreen = true;
++                SetWidePicture(true);
++                RuntimeConfigFile::SetWidescreen(true);
++            }
++            if (ImGui::Selectable("Original (4:3)", !g_widescreen) && g_widescreen) {
++                g_widescreen = false;
++                SetWidePicture(false);
++                RuntimeConfigFile::SetWidescreen(false);
++            }
++            ImGui::EndCombo();
++        }
++        ImGui::TextDisabled("Wide shows more of the scene at the sides. Original keeps the game's own picture.");
++    } else {
++        if (ImGui::BeginCombo("Aspect ratio (restart required)", g_widescreen ? "16:9" : "4:3")) {
++            if (ImGui::Selectable("16:9", g_widescreen)) {
++                g_widescreen = true;
++                RuntimeConfigFile::SetWidescreen(true);
++            }
++            if (ImGui::Selectable("4:3", !g_widescreen)) {
++                g_widescreen = false;
++                RuntimeConfigFile::SetWidescreen(false);
++            }
++            ImGui::EndCombo();
++        }
++        if (ImGui::Checkbox("Force aspect ratio", &g_forceAspect)) {
++            SetMkwForceAspect(g_forceAspect);
++            RuntimeConfigFile::SetForceAspect(g_forceAspect);
++        }
++        ImGui::TextDisabled("Keep the current aspect ratio with black bars when the window has another shape.");
+     }
+-    ImGui::TextDisabled("Keep the current aspect ratio with black bars when the window has another shape.");
+     ImGui::Separator();
+     struct EffectFlag {
+         const char* label;
+@@ -1172,6 +1259,9 @@ void DrawGraphicsSettings() {
+     }};
+ 
+     for (const auto& effect : kEffectFlags) {
++        if (foreignGame) {
++            break;
++        }
+         bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
+         if (ImGui::Checkbox(effect.label, &disabled)) {
+             if (disabled) {
+@@ -1183,8 +1273,10 @@ void DrawGraphicsSettings() {
+             RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
+         }
+     }
+-    ImGui::TextDisabled("Applied when the next scene renderer is created.");
+-    ImGui::Separator();
++    if (!foreignGame) {
++        ImGui::TextDisabled("Applied when the next scene renderer is created.");
++        ImGui::Separator();
++    }
+     static constexpr const char* kDisplayModes[] = {
+         "Windowed",
+         "Borderless fullscreen",
+@@ -1205,13 +1297,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -2743,7 +2952,7 @@ index 6c2083a..358eeff 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1286,7 +1347,8 @@ void DrawGraphicsSettings() {
+@@ -1286,7 +1378,8 @@ void DrawGraphicsSettings() {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
      ImGui::Separator();
@@ -2753,7 +2962,7 @@ index 6c2083a..358eeff 100644
  }
  
  void DrawFpsOverlay() {
-@@ -1663,6 +1725,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1663,6 +1756,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
              CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED
                                                                    : static_cast<uint32_t>(PAD_KEY_INVALID));
          }
@@ -2764,7 +2973,7 @@ index 6c2083a..358eeff 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1798,12 @@ void Draw() noexcept {
+@@ -1732,6 +1829,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
