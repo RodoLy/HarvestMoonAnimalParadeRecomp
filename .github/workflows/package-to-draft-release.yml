@@ -36,7 +36,7 @@ jobs:
       - name: Attach it to a draft release
         run: |
           # An older run keeps its zip inside a folder named after the artifact; a newer one is the zip itself.
-          find package -name '*.zip' -ls
-          gh release create "package-$RUN_ID" $(find package -name '*.zip') --repo "$GITHUB_REPOSITORY" --draft \
+          find package -type f -name '*.zip' -ls
+          gh release create "package-$RUN_ID" $(find package -type f -name '*.zip') --repo "$GITHUB_REPOSITORY" --draft \
             --title "Package from run $RUN_ID" \
             --notes "Test package built by run $RUN_ID. It holds no game data. / Paquete de prueba de la corrida $RUN_ID. No contiene datos del juego."
