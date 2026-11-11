@@ -15,6 +15,7 @@
 0x8016ECCC  0x80279580  GXTokenInterruptHandler                         name
 0x8016ED94  0x80279660  GXFinishInterruptHandler                        name
 0x8016ED50  0x80279610  GXSetDrawDoneCallback (only Mario Kart Wii's EGG code calls it from WiiCompiled)  name
+0x8019AA60  0x8025EE90  C_MTXPerspective (wide picture builds 3D cameras wider)  name
 
 # ---------------------------------------------------------------- GXInit.c, GXFifo.c, GXDisplayList.c (.bss)
 0x80343740  0x80629300  the FIFO object GXInit sets up                  GXInit
