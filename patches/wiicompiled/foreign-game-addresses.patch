@@ -2300,10 +2300,18 @@ index cd236a9..f7eeb84 100644
  // busy loops (GX drawing, the scheduler's idle spin) to keep VBlank ticking.
  void VI_HLE_PollRetrace(CpuContext* ctx) {
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
-index 56bec9f..5ebd8fa 100644
+index 56bec9f..5295ebb 100644
 --- a/runtime/src/main.cpp
 +++ b/runtime/src/main.cpp
-@@ -53,10 +53,44 @@
+@@ -16,6 +16,7 @@
+ #include <limits>
+ #include <sstream>
+ #include <stdexcept>
++#include <cwctype>
+ #include <string>
+ #include <string_view>
+ #include <thread>
+@@ -53,10 +54,70 @@
  #else
  #include <ucontext.h>
  #endif
@@ -2318,13 +2326,31 @@ index 56bec9f..5ebd8fa 100644
 +// True when the PC has a Qualcomm GPU (the Adreno of Snapdragon X laptops). Direct3D 12 on that GPU
 +// shows the picture split down the middle and the character blinking out for a frame, while Vulkan
 +// draws it correctly, so "auto" picks Vulkan there. dxgi.dll is loaded by hand so this adds no link.
-+static bool HasQualcommGpu() {
-+    using CreateFactory1Fn = HRESULT(WINAPI*)(REFIID, void**);
-+    HMODULE dxgi = LoadLibraryA("dxgi.dll");
-+    if (dxgi == nullptr) {
++//
++// An x64 build running under emulation on a Windows ARM laptop can see the adapter with a different
++// vendor id, so the adapter name is checked as well, and so is the host processor: a Windows on ARM
++// PC is a Snapdragon machine.
++static bool IsWindowsOnArmHost() {
++    using IsWow64Process2Fn = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
++    HMODULE kernel = GetModuleHandleA("kernel32.dll");
++    const auto isWow64Process2 =
++        kernel != nullptr ? reinterpret_cast<IsWow64Process2Fn>(GetProcAddress(kernel, "IsWow64Process2")) : nullptr;
++    if (isWow64Process2 == nullptr) {
 +        return false;
 +    }
-+    bool found = false;
++    USHORT processMachine = 0;
++    USHORT nativeMachine = 0;
++    constexpr USHORT kMachineArm64 = 0xAA64;
++    return isWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine) && nativeMachine == kMachineArm64;
++}
++
++static bool HasQualcommGpu() {
++    using CreateFactory1Fn = HRESULT(WINAPI*)(REFIID, void**);
++    bool found = IsWindowsOnArmHost();
++    HMODULE dxgi = LoadLibraryA("dxgi.dll");
++    if (dxgi == nullptr) {
++        return found;
++    }
 +    const auto createFactory = reinterpret_cast<CreateFactory1Fn>(GetProcAddress(dxgi, "CreateDXGIFactory1"));
 +    IDXGIFactory1* factory = nullptr;
 +    if (createFactory != nullptr && SUCCEEDED(createFactory(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
@@ -2332,8 +2358,16 @@ index 56bec9f..5ebd8fa 100644
 +        IDXGIAdapter1* adapter = nullptr;
 +        for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
 +            DXGI_ADAPTER_DESC1 desc{};
-+            if (SUCCEEDED(adapter->GetDesc1(&desc)) && desc.VendorId == kQualcommVendorId) {
-+                found = true;
++            if (SUCCEEDED(adapter->GetDesc1(&desc))) {
++                std::wstring name(desc.Description);
++                for (wchar_t& ch : name) {
++                    ch = static_cast<wchar_t>(towlower(ch));
++                }
++                const bool byName = name.find(L"adreno") != std::wstring::npos ||
++                                    name.find(L"qualcomm") != std::wstring::npos;
++                if (desc.VendorId == kQualcommVendorId || byName) {
++                    found = true;
++                }
 +            }
 +            adapter->Release();
 +            adapter = nullptr;
@@ -2348,7 +2382,7 @@ index 56bec9f..5ebd8fa 100644
  #include "abi_bridge.h"
  #include "audio_backend.h"
  #include "boot_race.h"
-@@ -868,10 +902,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
+@@ -868,10 +929,13 @@ void RuntimeAuroraLogCallback(AuroraLogLevel level, const char* module,
  }
  
  const TranslatedFunctionInfo* ResolveEntry() {
@@ -2364,7 +2398,7 @@ index 56bec9f..5ebd8fa 100644
          throw std::runtime_error(oss.str());
      }
      return entry;
-@@ -978,6 +1015,20 @@ void ReportStructuredException(EXCEPTION_POINTERS* info) {
+@@ -978,6 +1042,20 @@ void ReportStructuredException(EXCEPTION_POINTERS* info) {
      const auto faultAddress = reinterpret_cast<uintptr_t>(record->ExceptionAddress);
      std::cerr << std::hex << std::uppercase;
      RT_LOG(RT_TAG_RUNTIME) << "Fault address: 0x" << faultAddress << std::dec << std::nouppercase << std::endl;
@@ -2385,7 +2419,7 @@ index 56bec9f..5ebd8fa 100644
  
      if (code == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
          const auto accessType = record->ExceptionInformation[0];
-@@ -1457,7 +1508,14 @@ int RuntimeMain(int argc, char** argv) {
+@@ -1457,7 +1535,14 @@ int RuntimeMain(int argc, char** argv) {
              return "unknown";
          };
  
