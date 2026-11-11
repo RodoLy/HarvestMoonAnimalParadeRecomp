@@ -1,0 +1,138 @@
+diff --git a/include/aurora/gfx.h b/include/aurora/gfx.h
+index 8422b2a..6da8641 100644
+--- a/include/aurora/gfx.h
++++ b/include/aurora/gfx.h
+@@ -68,9 +68,12 @@ typedef struct {
+ 
+ void aurora_get_frame_interpolation_diagnostics(AuroraFrameInterpolationDiagnostics* diagnostics);
+ 
+-// Generates transform-interpolated perspective frames between consecutive 60 Hz logical frames.
+-// Supported targets are 0 (off), 120, 180 and 240. Guest simulation and VI timing are unchanged.
++// Generates transform-interpolated perspective frames between consecutive logical frames.
++// Supported targets are 0 (off), 60, 120, 180 and 240. Guest simulation and VI timing are unchanged.
+ void aurora_set_frame_interpolation_fps(uint32_t targetFps);
++// How many 60 Hz retraces one logical frame lasts: 1 for a 60 FPS game (the default), 2 for a 30 FPS
++// game. The present schedule must then span that many retraces per frame.
++void aurora_set_frame_interpolation_guest_period(uint32_t retracesPerFrame);
+ uint32_t aurora_get_frame_interpolation_fps();
+ 
+ // When enabled, draws whose pipeline is still compiling are skipped instead of stalling.
+diff --git a/lib/gfx/presentation.cpp b/lib/gfx/presentation.cpp
+index f5550df..8eeeda4 100644
+--- a/lib/gfx/presentation.cpp
++++ b/lib/gfx/presentation.cpp
+@@ -286,6 +286,10 @@ void aurora_set_guest_write_hooks(AuroraGuestWriteGenerationCallback generation,
+ 
+ void aurora_set_frame_interpolation_fps(uint32_t targetFps) { aurora::gx::set_frame_interpolation_fps(targetFps); }
+ 
++void aurora_set_frame_interpolation_guest_period(uint32_t retracesPerFrame) {
++  aurora::gx::set_guest_retraces_per_frame(retracesPerFrame);
++}
++
+ uint32_t aurora_get_frame_interpolation_fps() { return aurora::gx::frame_interpolation_fps(); }
+ 
+ void aurora_get_frame_interpolation_diagnostics(AuroraFrameInterpolationDiagnostics* diagnostics) {
+diff --git a/lib/gx/frame_interpolation.cpp b/lib/gx/frame_interpolation.cpp
+index bd05bac..23bc675 100644
+--- a/lib/gx/frame_interpolation.cpp
++++ b/lib/gx/frame_interpolation.cpp
+@@ -27,6 +27,7 @@
+ namespace aurora::gx {
+ namespace detail {
+ std::atomic_uint32_t g_frameInterpolationFps{0};
++std::atomic_uint32_t g_guestRetracesPerFrame{1};
+ } // namespace detail
+ 
+ thread_local int g_interpolationEncodeSlot = -1;
+@@ -276,12 +277,19 @@ constexpr uint32_t kPacingWindowFrames = 60; // ~1 second of guest frames
+ constexpr uint32_t kPacingReducePercent = 75;
+ constexpr uint32_t kPacingRestorePercent = 25;
+ 
++// Slots inserted between two guest frames. One guest frame lasts `retraces` 60 Hz retraces, so the
++// target frame rate shows targetFps * retraces / 60 frames in that time, one of them the guest's own.
++uint32_t slots_for_target(uint32_t targetFps, uint32_t retraces) noexcept {
++  const uint32_t framesShown = targetFps * retraces / 60;
++  return framesShown > 1 ? std::min(framesShown - 1, MaxInterpolatedFrames) : 0;
++}
++
+ uint32_t maximum_interpolation_samples() noexcept {
+   const uint32_t targetFps = frame_interpolation_fps();
+   if (targetFps == 0) {
+     return 0;
+   }
+-  return std::min(targetFps / 60 - 1, MaxInterpolatedFrames);
++  return slots_for_target(targetFps, detail::g_guestRetracesPerFrame.load(std::memory_order_acquire));
+ }
+ 
+ constexpr float kMinimumScale = 1.0e-5f;
+@@ -729,13 +737,12 @@ float snapshot_match_distance_squared(const FrameTransformEntry& previousEntry,
+ }
+ 
+ void set_frame_interpolation_fps(uint32_t targetFps) noexcept {
+-  if (targetFps != 120 && targetFps != 180 && targetFps != 240) {
++  if (targetFps != 60 && targetFps != 120 && targetFps != 180 && targetFps != 240) {
+     targetFps = 0;
+   }
+   detail::g_frameInterpolationFps.store(targetFps, std::memory_order_release);
+   // Start at the configured quality; the controller only ever backs off from here.
+-  s_interpolationSampleTarget.store(targetFps == 0 ? 0u : std::min(targetFps / 60 - 1, MaxInterpolatedFrames),
+-                                    std::memory_order_release);
++  s_interpolationSampleTarget.store(maximum_interpolation_samples(), std::memory_order_release);
+   s_dropInterpolationAtSeal.store(false, std::memory_order_release);
+   s_pacingWindowFrames.store(0, std::memory_order_release);
+   s_pacingWindowMisses.store(0, std::memory_order_release);
+@@ -747,6 +754,18 @@ void set_frame_interpolation_fps(uint32_t targetFps) noexcept {
+   s_diagLateSealDrops.store(0, std::memory_order_relaxed);
+ }
+ 
++void set_guest_retraces_per_frame(uint32_t retraces) noexcept {
++  retraces = std::clamp(retraces, 1u, 2u);
++  if (detail::g_guestRetracesPerFrame.exchange(retraces, std::memory_order_acq_rel) == retraces) {
++    return;
++  }
++  // The number of slots that fit changed with it; start from the new maximum and let the pacing
++  // controller back off if the machine cannot keep up.
++  s_interpolationSampleTarget.store(maximum_interpolation_samples(), std::memory_order_release);
++  s_pacingWindowFrames.store(0, std::memory_order_release);
++  s_pacingWindowMisses.store(0, std::memory_order_release);
++}
++
+ void report_producer_paced(bool paced) noexcept {
+   const uint32_t maximumSamples = maximum_interpolation_samples();
+   if (maximumSamples == 0) {
+diff --git a/lib/gx/frame_interpolation.hpp b/lib/gx/frame_interpolation.hpp
+index 4f4c343..83cf24b 100644
+--- a/lib/gx/frame_interpolation.hpp
++++ b/lib/gx/frame_interpolation.hpp
+@@ -9,7 +9,8 @@
+ // Frame interpolation: generates intermediate presentation frames between two consecutive 60 Hz
+ // guest frames by re-staging each perspective draw's uniform block with interpolated transforms.
+ namespace aurora::gx {
+-constexpr uint32_t MaxInterpolatedFrames = 3;
++// 5 slots lets a 30 Hz guest reach 180 FPS (30 * (5 + 1)); a 60 Hz guest never needs more than 3.
++constexpr uint32_t MaxInterpolatedFrames = 5;
+ 
+ // Identifies a draw across frames. `combined` includes the geometry signature and is exact, while
+ // `pipeline`/`texture` is the material-only fallback for meshes whose vertex data changes.
+@@ -39,15 +40,20 @@ namespace detail {
+ // Defined in frame_interpolation.cpp, exposed so the early-outs below stay inline: the shipped
+ // build compiles shards without LTO, so a cross-TU call would land on every draw in the frame.
+ extern std::atomic_uint32_t g_frameInterpolationFps;
++// How many 60 Hz retraces one guest frame lasts: 1 for a 60 FPS game, 2 for a 30 FPS game.
++extern std::atomic_uint32_t g_guestRetracesPerFrame;
+ } // namespace detail
+ 
+-// 0 when interpolation is disabled; otherwise the configured target (120/180/240).
++// 0 when interpolation is disabled; otherwise the configured target (60/120/180/240).
+ inline uint32_t frame_interpolation_fps() noexcept {
+   return detail::g_frameInterpolationFps.load(std::memory_order_acquire);
+ }
+ inline bool frame_interpolation_active() noexcept { return frame_interpolation_fps() != 0; }
+ 
+ void set_frame_interpolation_fps(uint32_t targetFps) noexcept;
++// Tells the interpolator how long one guest frame lasts, in retraces (1 or 2). The number of
++// inserted slots follows from it: a 30 FPS game needs three to reach 120 FPS, a 60 FPS game one.
++void set_guest_retraces_per_frame(uint32_t retraces) noexcept;
+ 
+ // Interpolated slot being encoded on this thread, or -1 for the native frame.
+ extern thread_local int g_interpolationEncodeSlot;
