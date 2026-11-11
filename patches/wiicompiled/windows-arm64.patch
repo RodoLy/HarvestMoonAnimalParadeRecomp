@@ -1,0 +1,186 @@
+diff --git a/Launcher/LocalBuild.ps1 b/Launcher/LocalBuild.ps1
+index 5969cbe..e13fcdc 100644
+--- a/Launcher/LocalBuild.ps1
++++ b/Launcher/LocalBuild.ps1
+@@ -107,9 +107,11 @@ $toolchain = Get-MkwBuildSafePath $Toolkit 'toolchain' 'CMake\bin\cmake.exe'
+ $cmake = Join-Path $toolchain 'CMake\bin\cmake.exe'
+ $ninja = Join-Path $toolchain 'Ninja\ninja.exe'
+ $toolchainBin = Join-Path $toolchain 'llvm-mingw\bin'
+-$cc = Join-Path $toolchainBin 'x86_64-w64-mingw32-clang.exe'
+-$cxx = Join-Path $toolchainBin 'x86_64-w64-mingw32-clang++.exe'
+-$windres = Join-Path $toolchainBin 'x86_64-w64-mingw32-windres.exe'
++$env:MKW_TARGET_PROCESSOR = Get-MkwToolchainProcessor $toolchainBin
++$triple = "$($env:MKW_TARGET_PROCESSOR)-w64-mingw32"
++$cc = Join-Path $toolchainBin "$triple-clang.exe"
++$cxx = Join-Path $toolchainBin "$triple-clang++.exe"
++$windres = Join-Path $toolchainBin "$triple-windres.exe"
+ $assets = Join-Path $Workspace 'Assets'
+ $generated = Join-Path $Workspace 'generated'
+ $functions = Join-Path $generated 'functions'
+diff --git a/Launcher/NativeBuildFlags.ps1 b/Launcher/NativeBuildFlags.ps1
+index 9cf4318..38c3d0f 100644
+--- a/Launcher/NativeBuildFlags.ps1
++++ b/Launcher/NativeBuildFlags.ps1
+@@ -205,6 +205,29 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments, [string]$Descri
+     if ($exitCode -ne 0) { throw "$Description failed with exit code $exitCode." }
+ }
+ 
++function Get-MkwToolchainProcessor([string]$ToolchainBin) {
++    <#
++    The processor the portable llvm-mingw runs on, and so the one the game is built for: 'aarch64' for the
++    Windows on ARM toolkit, 'x86_64' otherwise. Read from the machine field of the compiler's PE header,
++    because both llvm-mingw packages carry cross compilers for every target.
++    #>
++    $clang = Join-Path $ToolchainBin 'clang-22.exe'
++    $stream = [IO.File]::OpenRead($clang)
++    try {
++        $header = New-Object byte[] 4096
++        [void]$stream.Read($header, 0, $header.Length)
++    } finally { $stream.Dispose() }
++    $machine = [BitConverter]::ToUInt16($header, [BitConverter]::ToInt32($header, 0x3C) + 4)
++    if ($machine -eq 0xAA64) { return 'aarch64' }
++    return 'x86_64'
++}
++
++function Get-MkwTargetProcessor {
++    # Set by the scripts that pick a toolchain, before any flags are built.
++    if ($env:MKW_TARGET_PROCESSOR) { return $env:MKW_TARGET_PROCESSOR }
++    return 'x86_64'
++}
++
+ function Get-MkwNativeFixedConfigureFlags {
+     <#
+     The path-independent half of the configure command line, identical on every machine, which is
+@@ -213,7 +236,7 @@ function Get-MkwNativeFixedConfigureFlags {
+     #>
+     return @(
+         '-DCMAKE_BUILD_TYPE=Release',
+-        '-DCMAKE_SYSTEM_PROCESSOR=x86_64',
++        ('-DCMAKE_SYSTEM_PROCESSOR=' + (Get-MkwTargetProcessor)),
+         '-DAURORA_DAWN_PROVIDER=package', '-DAURORA_SDL3_PROVIDER=vendor',
+         '-DCMAKE_POLICY_DEFAULT_CMP0168=NEW', '-DFETCHCONTENT_FULLY_DISCONNECTED=ON',
+         '-DAWK:FILEPATH='
+diff --git a/Launcher/Prepare-Dependencies.ps1 b/Launcher/Prepare-Dependencies.ps1
+index 227f974..aae199d 100644
+--- a/Launcher/Prepare-Dependencies.ps1
++++ b/Launcher/Prepare-Dependencies.ps1
+@@ -30,6 +30,14 @@ if (-not (Test-Path -LiteralPath $auroraCMake -PathType Leaf)) {
+ # Name = directory under the destination; FetchContent maps it back through
+ # FETCHCONTENT_SOURCE_DIR_<UPPERCASE NAME> (NativeBuildFlags.ps1), so the names are the declared
+ # FetchContent names, not the upstream project names.
++# MKW_PACKAGE_ARCH=arm64 takes the Windows on ARM build of the prebuilt Dawn package.
++$arm64 = $env:MKW_PACKAGE_ARCH -eq 'arm64'
++# aurora pins the digest of the x64 package only; the ARM64 one is pinned by this script alone.
++$dawnPins = @(@{ File = $auroraVersions; Text = '_aurora_dependency_version(AURORA_DAWN_VERSION "v20260807.225922"' })
++if (-not $arm64) {
++    $dawnPins += @{ File = $auroraDawn; Text = 'SHA256=42a7a295c87b2e8a36312e2f84a5823aac63325e8e1d271bc7ced6f83bfb075f' }
++}
++
+ $packages = @(
+     [pscustomobject]@{
+         Name = 'SDL'; File = 'SDL3-3.4.10.tar.gz'
+@@ -45,11 +53,11 @@ $packages = @(
+         Pins = @(@{ File = $auroraExtern; Text = 'https://github.com/abseil/abseil-cpp/archive/refs/tags/20240722.0.tar.gz' })
+     },
+     [pscustomobject]@{
+-        Name = 'dawn_prebuilt'; File = 'dawn-v20260807.225922-windows-amd64.tar.gz'
+-        Sha256 = '42a7a295c87b2e8a36312e2f84a5823aac63325e8e1d271bc7ced6f83bfb075f'
+-        Uris = @('https://github.com/encounter/dawn/releases/download/v20260807.225922/dawn-windows-amd64.tar.gz')
+-        Pins = @(@{ File = $auroraVersions; Text = '_aurora_dependency_version(AURORA_DAWN_VERSION "v20260807.225922"' },
+-                 @{ File = $auroraDawn; Text = 'SHA256=42a7a295c87b2e8a36312e2f84a5823aac63325e8e1d271bc7ced6f83bfb075f' })
++        Name = 'dawn_prebuilt'
++        File = if ($arm64) { 'dawn-v20260807.225922-windows-arm64.tar.gz' } else { 'dawn-v20260807.225922-windows-amd64.tar.gz' }
++        Sha256 = if ($arm64) { '764e7d9a12e3c8743211087dd184cb76342cbba4946fb81e89d8136560df5d89' } else { '42a7a295c87b2e8a36312e2f84a5823aac63325e8e1d271bc7ced6f83bfb075f' }
++        Uris = @(if ($arm64) { 'https://github.com/encounter/dawn/releases/download/v20260807.225922/dawn-windows-arm64.tar.gz' } else { 'https://github.com/encounter/dawn/releases/download/v20260807.225922/dawn-windows-amd64.tar.gz' })
++        Pins = $dawnPins
+     },
+     [pscustomobject]@{
+         Name = 'fmt'; File = 'fmt-12.1.0.tar.gz'
+diff --git a/Launcher/Prepare-NativePrebuilt.ps1 b/Launcher/Prepare-NativePrebuilt.ps1
+index 4f2616f..db1b4b8 100644
+--- a/Launcher/Prepare-NativePrebuilt.ps1
++++ b/Launcher/Prepare-NativePrebuilt.ps1
+@@ -47,9 +47,11 @@ $package = Full $OutputDirectory
+ $toolchainBin = Join-Path $portableTools 'llvm-mingw\bin'
+ $cmake = Join-Path $portableTools 'CMake\bin\cmake.exe'
+ $ninja = Join-Path $portableTools 'Ninja\ninja.exe'
+-$cc = Join-Path $toolchainBin 'x86_64-w64-mingw32-clang.exe'
+-$cxx = Join-Path $toolchainBin 'x86_64-w64-mingw32-clang++.exe'
+-$windres = Join-Path $toolchainBin 'x86_64-w64-mingw32-windres.exe'
++$env:MKW_TARGET_PROCESSOR = Get-MkwToolchainProcessor $toolchainBin
++$triple = "$($env:MKW_TARGET_PROCESSOR)-w64-mingw32"
++$cc = Join-Path $toolchainBin "$triple-clang.exe"
++$cxx = Join-Path $toolchainBin "$triple-clang++.exe"
++$windres = Join-Path $toolchainBin "$triple-windres.exe"
+ $clangBinary = Join-Path $toolchainBin 'clang-22.exe'
+ $runtimeSource = Join-Path $repoRoot 'runtime'
+ $auroraSource = Join-Path $repoRoot 'aurora-main'
+diff --git a/Launcher/Prepare-PortableTools.ps1 b/Launcher/Prepare-PortableTools.ps1
+index 30dda2a..9ef91f4 100644
+--- a/Launcher/Prepare-PortableTools.ps1
++++ b/Launcher/Prepare-PortableTools.ps1
+@@ -4,7 +4,10 @@ param([string]$Destination)
+ $ErrorActionPreference = 'Stop'
+ Set-StrictMode -Version 3.0
+ 
+-$packages = @(
++# MKW_PACKAGE_ARCH=arm64 prepares the toolkit that runs natively on Windows on ARM; anything else is x64.
++$arm64 = $env:MKW_PACKAGE_ARCH -eq 'arm64'
++
++$x64Packages = @(
+     [pscustomobject]@{
+         Name = 'llvm-mingw'; File = 'llvm-mingw-20260616-ucrt-x86_64.zip'
+         Uri = 'https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-x86_64.zip'
+@@ -25,6 +28,28 @@ $packages = @(
+     }
+ )
+ 
++$arm64Packages = @(
++    [pscustomobject]@{
++        Name = 'llvm-mingw'; File = 'llvm-mingw-20260616-ucrt-aarch64.zip'
++        Uri = 'https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-aarch64.zip'
++        Sha256 = '312593669435bd0bfc1a43ac3fba23c8b27e0610bade88b2738e5a01702a99ba'
++        Root = 'llvm-mingw-20260616-ucrt-aarch64'
++    },
++    [pscustomobject]@{
++        Name = 'CMake'; File = 'cmake-4.3.3-windows-arm64.zip'
++        Uri = 'https://github.com/Kitware/CMake/releases/download/v4.3.3/cmake-4.3.3-windows-arm64.zip'
++        Sha256 = 'db6e902b5ba6a08d0abed136763c4bd95adda17e882d659c0f5d14fe158f7395'
++        Root = 'cmake-4.3.3-windows-arm64'
++    },
++    [pscustomobject]@{
++        Name = 'Ninja'; File = 'ninja-winarm64-1.13.2.zip'
++        Uri = 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-winarm64.zip'
++        Sha256 = 'e52f0bdef9dfb1003229dbd6508a508c4073fd017247002adc66e5e806cb0391'
++        Root = $null
++    }
++)
++$packages = if ($arm64) { $arm64Packages } else { $x64Packages }
++
+ if (-not $Destination) { $Destination = Join-Path $PSScriptRoot 'artifacts\portable-tools' }
+ $Destination = [IO.Path]::GetFullPath($Destination)
+ $downloads = Join-Path $PSScriptRoot 'artifacts\downloads'
+diff --git a/Launcher/Test-Recompilation.ps1 b/Launcher/Test-Recompilation.ps1
+index 6d06cf8..f553a02 100644
+--- a/Launcher/Test-Recompilation.ps1
++++ b/Launcher/Test-Recompilation.ps1
+@@ -129,14 +129,16 @@ foreach ($address in @($entry)) {
+ Invoke-Checked $dotnet @($translator, 'generate-data-init', '--project', $manifest) 'Generating synthetic data and runtime configuration'
+ Invoke-Checked $dotnet @($translator, 'emit-build-shards', '--project', $manifest) 'Emitting the production build graph'
+ 
++$env:MKW_TARGET_PROCESSOR = Get-MkwToolchainProcessor $compilerBin
++$triple = "$($env:MKW_TARGET_PROCESSOR)-w64-mingw32"
+ $nativeBuild = Join-Path $stage 'native-build'
+ $oldPath = $env:PATH
+ try {
+     $env:PATH = Get-MkwToolchainPath $portableTools
+     $configure = Get-MkwNativeConfigureArguments -SourceDirectory (Join-Path $stage 'runtime') -BuildDirectory $nativeBuild `
+-        -Ninja $ninja -CCompiler (Join-Path $compilerBin 'x86_64-w64-mingw32-clang.exe') `
+-        -CxxCompiler (Join-Path $compilerBin 'x86_64-w64-mingw32-clang++.exe') `
+-        -ResourceCompiler (Join-Path $compilerBin 'x86_64-w64-mingw32-windres.exe') `
++        -Ninja $ninja -CCompiler (Join-Path $compilerBin "$triple-clang.exe") `
++        -CxxCompiler (Join-Path $compilerBin "$triple-clang++.exe") `
++        -ResourceCompiler (Join-Path $compilerBin "$triple-windres.exe") `
+         -DependenciesDirectory $dependencies -AdditionalArguments @('-DMKW_BUILD_PRODUCTS=ON', "-DMKW_X86_CPU_PROFILE=$X86CpuProfile")
+     Invoke-Checked $cmake $configure 'Configuring the production Windows runtime' `
+         -WaitForProcessTree $false

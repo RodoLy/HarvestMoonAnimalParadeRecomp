@@ -1,3 +1,25 @@
+diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
+index f0d4fd4..466fb7c 100644
+--- a/runtime/CMakeLists.txt
++++ b/runtime/CMakeLists.txt
+@@ -26,7 +26,7 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+     set(CMAKE_SYSTEM_PROCESSOR "${_mkw_osx_arch}")
+ endif()
+ 
+-if(WIN32 AND MINGW AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64)$")
++if(WIN32 AND MINGW AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|aarch64|arm64|ARM64)$")
+     set(MKW_PLATFORM_WINDOWS TRUE)
+ elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm64|ARM64)$")
+     set(MKW_PLATFORM_MACOS TRUE)
+@@ -39,7 +39,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(
+     set(MKW_PLATFORM_LINUX TRUE)
+ else()
+     message(FATAL_ERROR
+-        "WiiCompiled supports 64-bit LLVM-MinGW Clang on Windows, native Linux x86_64/aarch64, or Apple Clang on macOS x86_64/arm64")
++        "WiiCompiled supports 64-bit LLVM-MinGW Clang on Windows (x86_64 or ARM64), native Linux x86_64/aarch64, or Apple Clang on macOS x86_64/arm64")
+ endif()
+ 
+ if(MKW_PLATFORM_WINDOWS)
 diff --git a/runtime/cmake/PlatformTests.cmake b/runtime/cmake/PlatformTests.cmake
 index 1a31b82..98b6d72 100644
 --- a/runtime/cmake/PlatformTests.cmake
@@ -228,6 +250,19 @@ index 70e2f2b..e00b23c 100644
          g_currentCpuContext = previous_;
          if (previous_ != nullptr)
              MkwApplyHostNiMode(previous_->fpscr);
+diff --git a/runtime/include/guest_abi/flat_memory.h b/runtime/include/guest_abi/flat_memory.h
+index a2c6130..504c695 100644
+--- a/runtime/include/guest_abi/flat_memory.h
++++ b/runtime/include/guest_abi/flat_memory.h
+@@ -10,7 +10,7 @@ namespace GuestFlat {
+ // of a global.
+ inline constexpr uint64_t kGuestSpaceSize = 0x1'0000'0000ull;
+ inline constexpr size_t kGuestPageSize = 0x1000;
+-#if defined(__x86_64__)
++#if defined(__x86_64__) || (defined(__aarch64__) && defined(_WIN32))
+ // 16 TiB: clear of the Windows ASan shadow (32 TiB) and of the usual image/heap
+ // placement.
+ inline constexpr uintptr_t kFixedFlatGuestBase = 0x0000'1000'0000'0000ull;
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
 index 1836717..728eb0a 100644
 --- a/runtime/include/guest_abi/guest_region.h
