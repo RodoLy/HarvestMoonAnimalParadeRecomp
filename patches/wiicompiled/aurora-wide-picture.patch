@@ -1,0 +1,292 @@
+diff --git a/include/dolphin/gx/GXAurora.h b/include/dolphin/gx/GXAurora.h
+index 3f6a13a..36921bb 100644
+--- a/include/dolphin/gx/GXAurora.h
++++ b/include/dolphin/gx/GXAurora.h
+@@ -169,6 +169,17 @@ typedef enum _AuroraViewportPolicy {
+  */
+ void AuroraSetViewportPolicy(AuroraViewportPolicy policy);
+ 
++/**
++ * Wide picture, for a game that only knows how to draw a 4:3 picture. With AURORA_VIEWPORT_STRETCH the
++ * frame takes the shape of the window, which stretches that picture sideways. Wide picture undoes the
++ * stretch: the 3D scene shows more to the left and right instead (the camera opens up, nothing gets
++ * fatter), and what the game draws flat on the screen - its clock, its text boxes - keeps its shape in
++ * the middle. Draws that cover the whole frame, like a fade to black, still reach both sides.
++ *
++ * gameAspect is the shape the game draws its picture for (4.0f / 3.0f); 0 turns wide picture off.
++ */
++void AuroraSetWidePicture(float gameAspect);
++
+ /**
+  * Retrieves the current content framebuffer size.
+  */
+diff --git a/lib/dolphin/gx/GXAurora.cpp b/lib/dolphin/gx/GXAurora.cpp
+index 0317ace..2375398 100644
+--- a/lib/dolphin/gx/GXAurora.cpp
++++ b/lib/dolphin/gx/GXAurora.cpp
+@@ -48,6 +48,8 @@ void GXInsertDebugMarker(const char* label) {
+ 
+ void AuroraSetViewportPolicy(AuroraViewportPolicy policy) { aurora::gx::set_viewport_policy(policy); }
+ 
++void AuroraSetWidePicture(float gameAspect) { aurora::gx::set_wide_picture(gameAspect); }
++
+ void AuroraGetSurfaceSize(u32* width, u32* height) {
+   const auto windowSize = aurora::window::get_window_size();
+   if (width != nullptr) {
+diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
+index f367955..a916d25 100644
+--- a/lib/gx/command_processor.cpp
++++ b/lib/gx/command_processor.cpp
+@@ -17,6 +17,8 @@
+ #include <algorithm>
+ #include <cmath>
+ #include <cstdint>
++#include <cstring>
++#include <limits>
+ #include <span>
+ #include <vector>
+ 
+@@ -454,6 +456,85 @@ static void handle_draw_overrun(GXVtxFmt fmt, size_t totalVtxBytes, ByteReader&
+ 
+ // Vertices a primitive actually uses: incomplete trailing primitives are never drawn, so they
+ // cannot join a later merged draw either.
++// One component of a vertex position, as the game stored it: big-endian in the command stream,
++// either order in an array, and a fixed-point integer unless it is a float.
++static float read_position_component(const u8* data, GXCompType type, u8 frac, bool littleEndian) noexcept {
++  const auto read16 = [&]() -> u16 {
++    return littleEndian ? static_cast<u16>(data[0] | (data[1] << 8)) : static_cast<u16>((data[0] << 8) | data[1]);
++  };
++  const float scale = 1.f / static_cast<float>(1u << (frac & 31u));
++  switch (type) {
++  case GX_U8:
++    return static_cast<float>(data[0]) * scale;
++  case GX_S8:
++    return static_cast<float>(static_cast<s8>(data[0])) * scale;
++  case GX_U16:
++    return static_cast<float>(read16()) * scale;
++  case GX_S16:
++    return static_cast<float>(static_cast<s16>(read16())) * scale;
++  default: {
++    u32 bits = littleEndian ? static_cast<u32>(data[0] | (data[1] << 8) | (data[2] << 16) | (static_cast<u32>(data[3]) << 24))
++                            : static_cast<u32>((static_cast<u32>(data[0]) << 24) | (data[1] << 16) | (data[2] << 8) | data[3]);
++    float value;
++    std::memcpy(&value, &bits, sizeof(value));
++    return value;
++  }
++  }
++}
++
++// Wide picture draws the game's 4:3 frame in the middle of a wider one (see wide_picture_factor).
++// That suits what a game draws flat on the screen - a clock, a text box - but not a draw that covers
++// the whole frame: a fade to black, or the scene drawn back from a copy, has to reach the sides too.
++// This tells the two apart by where the vertices of an orthographic draw land across the frame.
++static bool ortho_draw_fills_width(const u8* vertices, u16 vtxCount, u32 vtxStride, GXVtxFmt fmt) noexcept {
++  const auto& state = g_gxState;
++  const GXAttrType positionSource = state.vtxDesc[GX_VA_POS];
++  if (positionSource == GX_NONE || vtxCount == 0 || vtxStride == 0) {
++    return false;
++  }
++  // The matrix indices come first in a vertex, one byte each, and the position right after them.
++  u32 positionOffset = 0;
++  for (int i = GX_VA_PNMTXIDX; i < GX_VA_POS; ++i) {
++    positionOffset += state.vtxDesc[i] != GX_NONE ? 1 : 0;
++  }
++  const auto& positionFormat = state.vtxFmts[fmt].attrs[GX_VA_POS];
++  const u32 components = positionFormat.cnt == GX_POS_XY ? 2 : 3;
++  const u32 componentSize = comp_type_size(GX_VA_POS, positionFormat.type);
++  const bool indexed = positionSource == GX_INDEX8 || positionSource == GX_INDEX16;
++  const bool matrixPerVertex = state.vtxDesc[GX_VA_PNMTXIDX] == GX_DIRECT;
++  const auto& array = state.arrays[GX_VA_POS];
++
++  float leftmost = std::numeric_limits<float>::infinity();
++  float rightmost = -std::numeric_limits<float>::infinity();
++  for (u16 i = 0; i < vtxCount; ++i) {
++    const u8* vertex = vertices + static_cast<size_t>(i) * vtxStride;
++    const u8* source = vertex + positionOffset;
++    bool littleEndian = false;
++    if (indexed) {
++      const u32 index = positionSource == GX_INDEX8 ? source[0] : static_cast<u32>((source[0] << 8) | source[1]);
++      const size_t start = static_cast<size_t>(index) * array.stride;
++      if (array.data == nullptr || start + components * componentSize > array.size) {
++        return false;
++      }
++      source = static_cast<const u8*>(array.data) + start;
++      littleEndian = array.le;
++    }
++    float position[3] = {0.f, 0.f, 0.f};
++    for (u32 c = 0; c < components; ++c) {
++      position[c] =
++          read_position_component(source + c * componentSize, positionFormat.type, positionFormat.frac, littleEndian);
++    }
++    const u32 matrix = std::min<u32>(matrixPerVertex ? (vertex[0] & 0x3fu) / 3u : state.currentPnMtx, MaxPnMtx - 1);
++    const auto& row = state.pnMtx[matrix].pos.m0;
++    const float viewX = row[0] * position[0] + row[1] * position[1] + row[2] * position[2] + row[3];
++    // -1 is the left edge of the frame and 1 the right one.
++    const float frameX = state.proj.m0[0] * viewX + state.proj.m0[3];
++    leftmost = std::min(leftmost, frameX);
++    rightmost = std::max(rightmost, frameX);
++  }
++  return leftmost <= -WidePictureFullWidth && rightmost >= WidePictureFullWidth;
++}
++
+ static u16 usable_vertex_count(GXPrimitive prim, u16 vtxCount) noexcept {
+   switch (prim) {
+   case GX_QUADS:
+@@ -695,6 +776,17 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
+     return;
+   }
+ 
++  const auto vertexData = reader.take(totalVtxBytes);
++  // With wide picture, a flat draw that covers the whole frame is projected differently from one
++  // that does not, so a change from one kind to the other needs a new uniform block (and no merge).
++  if (g_gxState.projType == GX_ORTHOGRAPHIC && wide_picture_factor() > 1.f) {
++    const bool fillsWidth = ortho_draw_fills_width(vertexData.data(), vtxCount, vtxSize, fmt);
++    if (fillsWidth != g_gxState.orthoDrawFillsWidth) {
++      g_gxState.orthoDrawFillsWidth = fillsWidth;
++      g_gxState.dirty |= DirtyUniform;
++    }
++  }
++
+   const bool cleanState = g_gxState.dirty == 0 && fmt == sDrawCache.lastDrawFmt && sDrawCache.lineMode == 0 &&
+                           prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
+   auto* lastDraw = cleanState ? gfx::get_last_draw_command<DrawData>() : nullptr;
+@@ -702,7 +794,6 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
+                         u32(lastDraw->vtxCount) + vtxCount <= 0xffff;
+ 
+   // Push raw vertex data to buffer. Merged draws must remain contiguous with the previous range.
+-  const auto vertexData = reader.take(totalVtxBytes);
+   gfx::Range vertRange = gfx::push_verts(vertexData.data(), vertexData.size(), canMerge ? 0 : 4);
+ 
+   // Try to merge with previous draw call
+diff --git a/lib/gx/gx.cpp b/lib/gx/gx.cpp
+index e373bf0..bb87ff9 100644
+--- a/lib/gx/gx.cpp
++++ b/lib/gx/gx.cpp
+@@ -42,6 +42,8 @@ wgpu::BindGroupLayout sTextureBindGroupLayout;
+ wgpu::PipelineLayout sPipelineLayout;
+ 
+ std::atomic<int> sPendingViewportPolicy{-1};
++// Below zero while there is nothing new to apply.
++std::atomic<float> sPendingWideAspect{-1.f};
+ 
+ template <typename T>
+ T round_away_from_zero(float value) noexcept {
+@@ -260,6 +262,34 @@ void update() noexcept {
+     window::set_force_aspect_16_9(policy == AURORA_VIEWPORT_16_9);
+     window::set_present_surface_fill(policy == AURORA_VIEWPORT_STRETCH);
+   }
++  if (const float pending = sPendingWideAspect.exchange(-1.f, std::memory_order_acq_rel); pending >= 0.f) {
++    g_gxState.wideGameAspect = pending;
++    g_gxState.dirty |= DirtyUniform;
++  }
++}
++
++void set_wide_picture(float gameAspect) noexcept {
++  sPendingWideAspect.store(gameAspect > 0.f ? gameAspect : 0.f, std::memory_order_release);
++}
++
++float wide_picture_factor() noexcept {
++  const float gameAspect = g_gxState.wideGameAspect;
++  if (!(gameAspect > 0.f) || gfx::is_offscreen()) {
++    return 1.f;
++  }
++  const auto [fbWidth, fbHeight] = vi::configured_fb_size();
++  if (std::abs(g_gxState.logicalViewport.width) < static_cast<float>(fbWidth) * WidePictureFullWidth) {
++    return 1.f;
++  }
++  const auto [targetWidth, targetHeight] = gfx::get_render_target_size();
++  if (targetWidth == 0 || targetHeight == 0) {
++    return 1.f;
++  }
++  // The picture is shown at the game's aspect times the correction VI applies for the active region.
++  const float shownAspect = gameAspect * vi::present_aspect_correction();
++  const float factor = (static_cast<float>(targetWidth) / static_cast<float>(targetHeight)) / shownAspect;
++  // A frame that is barely wider is left alone rather than nudged by a pixel.
++  return factor > 1.01f ? factor : 1.f;
+ }
+ 
+ Vec2<uint32_t> logical_fb_size() noexcept {
+@@ -303,10 +333,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
+   const float scaleX = static_cast<float>(targetWidth) / static_cast<float>(logicalFbWidth);
+   const float scaleY = static_cast<float>(targetHeight) / static_cast<float>(logicalFbHeight);
+ 
+-  const float left = static_cast<float>(logicalScissor.x) * scaleX;
++  float left = static_cast<float>(logicalScissor.x) * scaleX;
+   const float top = static_cast<float>(logicalScissor.y) * scaleY;
+-  const float right = static_cast<float>(logicalScissor.x + logicalScissor.width) * scaleX;
++  float right = static_cast<float>(logicalScissor.x + logicalScissor.width) * scaleX;
+   const float bottom = static_cast<float>(logicalScissor.y + logicalScissor.height) * scaleY;
++  // Wide picture keeps the game's own frame in the middle of a wider one, so a scissor that does not
++  // span the frame moves towards the middle together with what it clips.
++  if (const float wide = wide_picture_factor();
++      wide > 1.f && static_cast<float>(logicalScissor.width) < static_cast<float>(logicalFbWidth) * WidePictureFullWidth) {
++    const float middle = static_cast<float>(targetWidth) * 0.5f;
++    left = middle + (left - middle) / wide;
++    right = middle + (right - middle) / wide;
++  }
+ 
+   const auto mappedLeft = std::clamp(static_cast<int32_t>(std::floor(left)), 0, static_cast<int32_t>(targetWidth));
+   const auto mappedTop = std::clamp(static_cast<int32_t>(std::floor(top)), 0, static_cast<int32_t>(targetHeight));
+@@ -433,7 +471,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
+   }
+   g_gxState.logicalViewport = viewport;
+   set_render_viewport(mapped_render_viewport());
+-  if (has_scissor_offset()) {
++  // With wide picture the scissor depends on whether the viewport is the whole frame.
++  if (has_scissor_offset() || g_gxState.wideGameAspect > 0.f) {
+     set_render_scissor(mapped_render_scissor());
+   }
+ }
+diff --git a/lib/gx/gx.hpp b/lib/gx/gx.hpp
+index 02be26a..559dd5c 100644
+--- a/lib/gx/gx.hpp
++++ b/lib/gx/gx.hpp
+@@ -406,6 +406,10 @@ struct GXState {
+ 
+   // View state
+   AuroraViewportPolicy viewportPolicy = AURORA_VIEWPORT_FIT;
++  // Wide picture (AuroraSetWidePicture): the shape the game draws for, or 0 when it is off.
++  float wideGameAspect = 0.f;
++  // Whether the orthographic draw being submitted covers the whole width of the frame.
++  bool orthoDrawFillsWidth = false;
+   gfx::Viewport logicalViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
+   gfx::Viewport renderViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
+   gfx::ClipRect logicalScissor{0, 0, 640, 480};
+@@ -455,6 +459,13 @@ void initialize() noexcept;
+ void shutdown() noexcept;
+ void update() noexcept;
+ void set_viewport_policy(AuroraViewportPolicy policy) noexcept;
++void set_wide_picture(float gameAspect) noexcept;
++// How many times wider than the game's own picture the frame being drawn is. It is 1 when wide
++// picture is off, when the frame is not wider, and while the game draws into a small part of the
++// frame: that is a shadow or a reflection it will read back as a texture, not a part of the picture.
++float wide_picture_factor() noexcept;
++// The share of the frame's width a viewport, a scissor or a draw must span to count as the whole frame.
++inline constexpr float WidePictureFullWidth = 0.97f;
+ void clear_static_texture_cache() noexcept;
+ void clear_copy_texture_cache() noexcept;
+ void evict_copy_texture(const void* dest) noexcept;
+diff --git a/lib/gx/shader_info.cpp b/lib/gx/shader_info.cpp
+index f5df625..47204b1 100644
+--- a/lib/gx/shader_info.cpp
++++ b/lib/gx/shader_info.cpp
+@@ -436,6 +436,19 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
+     }
+   }
+   auto proj = g_gxState.proj;
++  // Wide picture: the frame is `wide` times wider than the picture the game draws for, so every
++  // horizontal position is brought back by that much around the middle. A perspective scene then
++  // simply shows more at the sides. A flat draw keeps its shape in the middle, unless it covers the
++  // whole frame (a fade, the scene drawn back from a copy), which must still reach both sides.
++  if (const float wide = wide_picture_factor(); wide > 1.f) {
++    if (g_gxState.projType == GX_PERSPECTIVE) {
++      proj.m0[0] /= wide;
++      proj.m0[2] /= wide;
++    } else if (!g_gxState.orthoDrawFillsWidth) {
++      proj.m0[0] /= wide;
++      proj.m0[3] /= wide;
++    }
++  }
+   if constexpr (UseReversedZ) {
+     proj.m2 = proj.m2 * Vec4{-1.f, -1.f, -1.f, -1.f};
+   } else {

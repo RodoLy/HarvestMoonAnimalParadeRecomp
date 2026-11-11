@@ -88,7 +88,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
           }
           # aurora is a submodule, so its patches apply inside it.
-          foreach ($patch in 'aurora-storage-buffer', 'aurora-overrun-layout', 'aurora-interpolation-30fps') {
+          foreach ($patch in 'aurora-storage-buffer', 'aurora-overrun-layout', 'aurora-interpolation-30fps', 'aurora-wide-picture') {
             git -C (Join-Path $env:WIICOMPILED 'aurora-main') apply --verbose "$env:GITHUB_WORKSPACE\patches\wiicompiled\$patch.patch"
             if ($LASTEXITCODE -ne 0) { throw "$patch.patch does not apply." }
           }
