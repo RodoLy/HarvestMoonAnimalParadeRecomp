@@ -2221,7 +2221,7 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
-index 54e15fa..8758fc8 100644
+index 54e15fa..b9eb3df 100644
 --- a/runtime/src/hle/gx/gx_transform.cpp
 +++ b/runtime/src/hle/gx/gx_transform.cpp
 @@ -1,6 +1,10 @@
@@ -2255,7 +2255,7 @@ index 54e15fa..8758fc8 100644
      GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
  }
  PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
-@@ -112,9 +122,39 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+@@ -112,9 +122,59 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
  // Projection
  // ============================================================================
  
@@ -2264,8 +2264,28 @@ index 54e15fa..8758fc8 100644
 +// Doing it here rather than when the matrix reaches the GPU keeps every other use of the camera in
 +// step with it: the game projects the shadow under a character from the same matrix, and a shadow
 +// built for one camera and drawn with another lands far from its feet.
++// The game's 3D camera (fn_803060BC in Animal Parade) builds its projection into the camera object,
++// 0x5C bytes in, from the aspect it keeps 0xE8 bytes in. The same object is what the game asks to
++// decide which things are on screen, so the wide aspect is written back there too: otherwise the
++// sides of a wide picture stay empty until the player walks closer.
++constexpr uint32_t kCameraAspectFromMatrix = 0xE8 - 0x5C;
++
++// The aspect last handed out, so that a camera reusing it next frame is not widened twice.
++static float g_lastWideAspect = 0.0f;
++
 +extern "C" void MTX__C_MTXPerspective_8019aa60(uint32_t ma, float fovY, float aspect, float n, float f) {
-+    aspect *= WidePictureAspectScale(aspect);
++    if (aspect != g_lastWideAspect) {
++        if (const float scale = WidePictureAspectScale(aspect); scale > 1.0f) {
++            // Only when the camera object holds exactly this aspect: then ma is that object's matrix.
++            auto* aspectField = static_cast<uint8_t*>(GuestToHostPtr(ma + kCameraAspectFromMatrix, 4));
++            const bool fromCamera = aspectField != nullptr && BigEndian::ReadFloat32(aspectField) == aspect;
++            aspect *= scale;
++            g_lastWideAspect = aspect;
++            if (fromCamera) {
++                BigEndian::WriteFloat32(aspectField, aspect);
++            }
++        }
++    }
 +    // As in the SDK: fovY is the whole vertical angle, in degrees.
 +    const float cot = 1.0f / std::tan(fovY * 0.5f * 3.14159265358979f / 180.0f);
 +    const float depth = 1.0f / (f - n);
