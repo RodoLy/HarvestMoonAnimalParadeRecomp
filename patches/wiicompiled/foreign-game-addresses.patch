@@ -2221,7 +2221,7 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
-index 54e15fa..8960b88 100644
+index 54e15fa..0eab371 100644
 --- a/runtime/src/hle/gx/gx_transform.cpp
 +++ b/runtime/src/hle/gx/gx_transform.cpp
 @@ -1,6 +1,10 @@
@@ -2255,7 +2255,7 @@ index 54e15fa..8960b88 100644
      GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
  }
  PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
-@@ -112,9 +122,70 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+@@ -112,9 +122,80 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
  // Projection
  // ============================================================================
  
@@ -2274,29 +2274,39 @@ index 54e15fa..8960b88 100644
 +// tan(fovy / 2) * aspect), so it has to be the wide one as well. Going back from the matrix:
 +constexpr int32_t kGameCameraAspectFromMatrix = 0x1AC - 0x1CC - 0x5C;
 +
-+// The aspect last handed out, so that a camera reusing it next frame is not widened twice.
-+static float g_lastWideAspect = 0.0f;
++// The aspect the game asked for last time and the one handed out for it. A camera that comes back
++// with the handed-out value still means the one it asked for: that is how it is not widened twice,
++// and how it gets its own shape back when wide picture is turned off or the window changes shape.
++static float g_lastRequestedAspect = 0.0f;
++static float g_lastHandedOutAspect = 0.0f;
++
++// Writes the aspect into a field of the game's camera, but only while that field still holds the
++// value the camera passed in: then it is that camera's field and not some other memory.
++static void ReplaceCameraAspect(uint32_t address, float passedIn, float replacement) {
++    auto* field = static_cast<uint8_t*>(GuestToHostPtr(address, 4));
++    if (field != nullptr && BigEndian::ReadFloat32(field) == passedIn) {
++        BigEndian::WriteFloat32(field, replacement);
++    }
++}
 +
 +extern "C" void MTX__C_MTXPerspective_8019aa60(uint32_t ma, float fovY, float aspect, float n, float f) {
-+    if (aspect != g_lastWideAspect) {
-+        if (const float scale = WidePictureAspectScale(aspect); scale > 1.0f) {
-+            // Only when the camera object holds exactly this aspect: then ma is that object's matrix.
-+            auto* aspectField = static_cast<uint8_t*>(GuestToHostPtr(ma + kCameraAspectFromMatrix, 4));
-+            const bool fromCamera = aspectField != nullptr && BigEndian::ReadFloat32(aspectField) == aspect;
-+            const float requested = aspect;
-+            aspect *= scale;
-+            g_lastWideAspect = aspect;
-+            if (fromCamera) {
-+                BigEndian::WriteFloat32(aspectField, aspect);
-+                // The game's camera keeps the wide value from now on and hands it down every frame;
-+                // it is only touched while it still holds the value it handed down this time.
-+                auto* gameAspect = static_cast<uint8_t*>(GuestToHostPtr(ma + static_cast<uint32_t>(kGameCameraAspectFromMatrix), 4));
-+                if (gameAspect != nullptr && BigEndian::ReadFloat32(gameAspect) == requested) {
-+                    BigEndian::WriteFloat32(gameAspect, aspect);
-+                }
-+            }
++    // Only the camera object that holds exactly this aspect: then ma is that object's matrix. Other
++    // callers (a cut-scene, a model drawn in a menu) are widened too but leave nothing behind.
++    auto* aspectField = static_cast<uint8_t*>(GuestToHostPtr(ma + kCameraAspectFromMatrix, 4));
++    const bool fromCamera = aspectField != nullptr && BigEndian::ReadFloat32(aspectField) == aspect;
++    const bool handedOut = fromCamera && g_lastHandedOutAspect != 0.0f && aspect == g_lastHandedOutAspect;
++    const float requested = handedOut ? g_lastRequestedAspect : aspect;
++    const float wanted = requested * WidePictureAspectScale(requested);
++    if (fromCamera) {
++        if (wanted != aspect) {
++            BigEndian::WriteFloat32(aspectField, wanted);
++            // The game's camera keeps the value from now on and hands it down every frame.
++            ReplaceCameraAspect(ma + static_cast<uint32_t>(kGameCameraAspectFromMatrix), aspect, wanted);
 +        }
++        g_lastRequestedAspect = requested;
++        g_lastHandedOutAspect = wanted != requested ? wanted : 0.0f;
 +    }
++    aspect = wanted;
 +    // As in the SDK: fovY is the whole vertical angle, in degrees.
 +    const float cot = 1.0f / std::tan(fovY * 0.5f * 3.14159265358979f / 180.0f);
 +    const float depth = 1.0f / (f - n);
