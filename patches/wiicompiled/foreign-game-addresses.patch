@@ -2221,7 +2221,7 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
-index 54e15fa..b9eb3df 100644
+index 54e15fa..8960b88 100644
 --- a/runtime/src/hle/gx/gx_transform.cpp
 +++ b/runtime/src/hle/gx/gx_transform.cpp
 @@ -1,6 +1,10 @@
@@ -2255,7 +2255,7 @@ index 54e15fa..b9eb3df 100644
      GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
  }
  PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
-@@ -112,9 +122,59 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+@@ -112,9 +122,70 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
  // Projection
  // ============================================================================
  
@@ -2269,6 +2269,10 @@ index 54e15fa..b9eb3df 100644
 +// decide which things are on screen, so the wide aspect is written back there too: otherwise the
 +// sides of a wide picture stay empty until the player walks closer.
 +constexpr uint32_t kCameraAspectFromMatrix = 0xE8 - 0x5C;
++// That camera object sits 0x1CC bytes into the game's own camera, which keeps the aspect it hands
++// down 0x1AC bytes in. The game also builds the frustum it culls with from that one (fn_80064638:
++// tan(fovy / 2) * aspect), so it has to be the wide one as well. Going back from the matrix:
++constexpr int32_t kGameCameraAspectFromMatrix = 0x1AC - 0x1CC - 0x5C;
 +
 +// The aspect last handed out, so that a camera reusing it next frame is not widened twice.
 +static float g_lastWideAspect = 0.0f;
@@ -2279,10 +2283,17 @@ index 54e15fa..b9eb3df 100644
 +            // Only when the camera object holds exactly this aspect: then ma is that object's matrix.
 +            auto* aspectField = static_cast<uint8_t*>(GuestToHostPtr(ma + kCameraAspectFromMatrix, 4));
 +            const bool fromCamera = aspectField != nullptr && BigEndian::ReadFloat32(aspectField) == aspect;
++            const float requested = aspect;
 +            aspect *= scale;
 +            g_lastWideAspect = aspect;
 +            if (fromCamera) {
 +                BigEndian::WriteFloat32(aspectField, aspect);
++                // The game's camera keeps the wide value from now on and hands it down every frame;
++                // it is only touched while it still holds the value it handed down this time.
++                auto* gameAspect = static_cast<uint8_t*>(GuestToHostPtr(ma + static_cast<uint32_t>(kGameCameraAspectFromMatrix), 4));
++                if (gameAspect != nullptr && BigEndian::ReadFloat32(gameAspect) == requested) {
++                    BigEndian::WriteFloat32(gameAspect, aspect);
++                }
 +            }
 +        }
 +    }
