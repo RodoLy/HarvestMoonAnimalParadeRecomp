@@ -445,10 +445,14 @@ protocolo sin juego.
   Pasaba con Direct3D 12 en una GPU Adreno (Snapdragon X) con
   `resolution_multiplier = 3`, y con `graphics_api = "vulkan"` desaparece. El
   juego dibuja lo mismo en los fotogramas buenos y en los malos, así que la
-  diferencia está en cómo Direct3D 12 ordena las copias de la imagen. Hasta
-  encontrar la causa, con `graphics_api = "auto"` el runtime elige Vulkan si
-  hay una GPU Qualcomm (`HasQualcommGpu` en `main.cpp`); poner
-  `graphics_api = "d3d12"` en `UserData/Config.toml` lo fuerza de nuevo. También
+  diferencia está en cómo Direct3D 12 ordena las copias de la imagen. **La
+  causa era el controlador gráfico:** con el controlador de Adreno de 2023
+  fallaba, y con el de septiembre de 2026 (Snapdragon Control Panel) Direct3D 12
+  dibuja bien a 3x. Con ese controlador, en cambio, Vulkan no arranca
+  (`vkQueueSubmit failed`) y en esta GPU solo obtiene el modo de compatibilidad
+  de Dawn. Por eso `graphics_api = "auto"` usa Direct3D 12 y, si hay una GPU
+  Qualcomm (`HasQualcommGpu` en `main.cpp`), el registro recomienda actualizar
+  el controlador o poner `graphics_api = "vulkan"`. También
   se puede elegir en el menú F10, pestaña Graphics, con «Graphics API (next
   launch)»: Automatic, Vulkan o Direct3D 12 (se guarda y se aplica al reiniciar).
   Se descartaron, probando en esa GPU con Direct3D 12 a 3x: dibujar las copias de
@@ -911,10 +915,14 @@ protocol without a game.
   mailbox.** It happened with Direct3D 12 on an Adreno GPU (Snapdragon X) with
   `resolution_multiplier = 3`, and goes away with `graphics_api = "vulkan"`.
   The game draws the same in good and bad frames, so the difference is in how
-  Direct3D 12 orders the image copies. Until the cause is found, with
-  `graphics_api = "auto"` the runtime picks Vulkan when there is a Qualcomm
-  GPU (`HasQualcommGpu` in `main.cpp`); `graphics_api = "d3d12"` in
-  `UserData/Config.toml` forces Direct3D 12 again. It can also be chosen in the
+  Direct3D 12 orders the image copies. **The cause was the graphics driver:**
+  it failed with the 2023 Adreno driver, and with the September 2026 one
+  (Snapdragon Control Panel) Direct3D 12 draws right at 3x. With that driver,
+  on the other hand, Vulkan does not start (`vkQueueSubmit failed`), and on this
+  GPU it only gets Dawn's compatibility mode. So `graphics_api = "auto"` uses
+  Direct3D 12, and when there is a Qualcomm GPU (`HasQualcommGpu` in
+  `main.cpp`) the log advises updating the driver or setting
+  `graphics_api = "vulkan"`. It can also be chosen in the
   F10 menu, Graphics tab, with "Graphics API (next launch)": Automatic, Vulkan or
   Direct3D 12 (saved, and applied after a restart).
   These were ruled out, testing on that GPU with Direct3D 12 at 3x: drawing the
