@@ -706,10 +706,10 @@ index 55fe416..99fc9ef 100644
          RT_LOG(RT_TAG_RUNTIME) << "ERROR: Attempted to register function after registry was finalized: 0x"
 diff --git a/runtime/src/cheats.cpp b/runtime/src/cheats.cpp
 new file mode 100644
-index 0000000..fd73027
+index 0000000..7020246
 --- /dev/null
 +++ b/runtime/src/cheats.cpp
-@@ -0,0 +1,396 @@
+@@ -0,0 +1,393 @@
 +// Cheats in Dolphin's file format. The guide to the file is in cheats.h.
 +
 +#include "cheats.h"
@@ -946,9 +946,6 @@ index 0000000..fd73027
 +    "[ActionReplay]\n"
 +    "\n"
 +    "[OnFrame]\n"
-+    "$Run faster (1.5x)\n"
-+    "*The top running speed, a constant the game keeps at 5.2, raised to 7.8.\n"
-+    "0x806B5994:dword:0x40F9999A\n"
 +    "$Show the game's debug overlay (FPS and scene name)\n"
 +    "*A switch the developers left in the game.\n"
 +    "0x806B3B8C:dword:0x00000001\n";
