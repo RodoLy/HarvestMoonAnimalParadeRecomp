@@ -2826,7 +2826,7 @@ index cd236a9..9d132cd 100644
          // Retrace-context presents (VI black, boot) have no display period of
          // their own to subdivide; present as soon as the frame is ready. The
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
-index 56bec9f..5295ebb 100644
+index 56bec9f..bf8161e 100644
 --- a/runtime/src/main.cpp
 +++ b/runtime/src/main.cpp
 @@ -16,6 +16,7 @@
@@ -2945,17 +2945,22 @@ index 56bec9f..5295ebb 100644
  
      if (code == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
          const auto accessType = record->ExceptionInformation[0];
-@@ -1457,7 +1535,14 @@ int RuntimeMain(int argc, char** argv) {
+@@ -1457,7 +1535,19 @@ int RuntimeMain(int argc, char** argv) {
              return "unknown";
          };
  
 -        const std::string backend = RuntimeConfigFile::GraphicsApi("auto");
 +        std::string backend = RuntimeConfigFile::GraphicsApi("auto");
 +#if defined(_WIN32)
++        // Adreno GPUs (Snapdragon X laptops): with the Adreno drivers of 2023, Direct3D 12 split the
++        // picture and made things blink at high resolutions, while Vulkan drew it right. The drivers
++        // Qualcomm has published since fix Direct3D 12, and Vulkan on this GPU only gets Dawn's
++        // reduced compatibility mode (and fails to start with the 2026 driver). So "auto" stays on
++        // Direct3D 12, and the log says what to do if the picture looks wrong.
 +        if (backend == "auto" && HasQualcommGpu()) {
-+            backend = "vulkan";
-+            RT_LOG(RT_TAG_RUNTIME) << "Qualcomm GPU found: graphics_api auto uses Vulkan "
-+                                      "(set graphics_api = \"d3d12\" to force Direct3D 12)";
++            RT_LOG(RT_TAG_RUNTIME) << "Qualcomm GPU found: graphics_api auto uses Direct3D 12. If the picture "
++                                      "splits or blinks, update the Adreno graphics driver (Snapdragon Control "
++                                      "Panel) or set graphics_api = \"vulkan\"";
 +        }
 +#endif
          for (const auto& entry : kGraphicsBackends) {
@@ -2985,7 +2990,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..287da38 100644
+index 6c2083a..305107b 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -3080,8 +3085,8 @@ index 6c2083a..287da38 100644
 -            RuntimeConfigFile::SetWidescreen(true);
 +// Lets the player pick the graphics API for the next launch. The backend is
 +// created before the first frame, so the choice is saved to Config.toml and
-+// applied after a restart. "Automatic" picks Vulkan on Qualcomm (Adreno) GPUs,
-+// where Direct3D 12 can show a split or flashing picture at high resolutions.
++// applied after a restart. "Automatic" is Direct3D 12 on Windows; an Adreno GPU with an
++// old driver may draw better with Vulkan (see the graphics backend choice in main.cpp).
 +void DrawGraphicsApiChoice() {
 +    struct Choice {
 +        const char* label;
