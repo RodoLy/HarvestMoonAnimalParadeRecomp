@@ -232,65 +232,6 @@ index 0000000..12f6789
 +RemoteHost& RemoteHostForThisGame();
 +
 +} // namespace Bluetooth
-diff --git a/runtime/include/cheats.h b/runtime/include/cheats.h
-new file mode 100644
-index 0000000..d0cb70b
---- /dev/null
-+++ b/runtime/include/cheats.h
-@@ -0,0 +1,53 @@
-+#pragma once
-+
-+// Cheats, read from a file in Dolphin's format: UserData/Cheats/<game id>.ini, for example
-+// UserData/Cheats/RBIEE9.ini. The F10 menu lists them, one checkbox each.
-+//
-+// The file has the same sections Dolphin uses, so codes written for Dolphin can be pasted in:
-+//
-+//   [Gecko]                  a code is a "$Name" line followed by its lines, "XXXXXXXX YYYYYYYY"
-+//   [Gecko_Enabled]          the "$Name" lines of the Gecko codes that are on
-+//   [ActionReplay]           decrypted Action Replay codes, written the same way
-+//   [ActionReplay_Enabled]
-+//   [OnFrame]                patches: "$Name", then lines like "0x806B3B8C:dword:0x00000001"
-+//   [OnFrame_Enabled]
-+//
-+// Every code that is on is applied once per frame, as in Dolphin. Lines starting with "*" are
-+// notes and are shown under the code's name.
-+//
-+// What works: codes that write values into the game's memory (money, stamina, items, a flag).
-+// What does not: codes that change the game's instructions (Gecko C0/C2 codes, or any write into
-+// the game's code). The game no longer runs from those instructions - it was translated into
-+// native code - so such a code would change nothing. They are listed, greyed out, with the reason.
-+
-+#include <cstddef>
-+#include <filesystem>
-+#include <string>
-+#include <vector>
-+
-+namespace Cheats {
-+
-+struct Code {
-+    std::string section;  // "Gecko", "ActionReplay" or "OnFrame"
-+    std::string name;
-+    std::string notes;     // the "*" lines, joined
-+    bool enabled = false;
-+    bool supported = true;
-+    std::string whyNot;    // why an unsupported code cannot work here
-+};
-+
-+// Reads (or, the first time, creates) the cheat file for the running game.
-+void Load();
-+
-+// Applies every enabled code. Called once per frame from the guest thread.
-+void ApplyFrame();
-+
-+// A copy of the list, for the menu.
-+std::vector<Code> List();
-+
-+// Turns a code on or off and writes the choice back to the file's *_Enabled sections.
-+void SetEnabled(size_t index, bool enabled);
-+
-+std::filesystem::path FilePath();
-+
-+} // namespace Cheats
 diff --git a/runtime/include/guest_abi/cpu_context.h b/runtime/include/guest_abi/cpu_context.h
 index 70e2f2b..e00b23c 100644
 --- a/runtime/include/guest_abi/cpu_context.h
@@ -704,405 +645,6 @@ index 55fe416..99fc9ef 100644
      std::lock_guard<std::mutex> lock(RegistryMutex());
      if (RegistryFrozen().load(std::memory_order_acquire)) {
          RT_LOG(RT_TAG_RUNTIME) << "ERROR: Attempted to register function after registry was finalized: 0x"
-diff --git a/runtime/src/cheats.cpp b/runtime/src/cheats.cpp
-new file mode 100644
-index 0000000..7020246
---- /dev/null
-+++ b/runtime/src/cheats.cpp
-@@ -0,0 +1,393 @@
-+// Cheats in Dolphin's file format. The guide to the file is in cheats.h.
-+
-+#include "cheats.h"
-+
-+#include "guest_abi/guest_region.h"
-+#include "guest_abi/memory.h"
-+#include "runtime_config.h"
-+#include "runtime_log.h"
-+
-+#include <array>
-+#include <cctype>
-+#include <cstdint>
-+#include <fstream>
-+#include <mutex>
-+#include <optional>
-+#include <sstream>
-+
-+namespace Cheats {
-+namespace {
-+
-+// One memory write a code makes every frame.
-+struct Write {
-+    uint32_t address;
-+    uint32_t value;
-+    uint8_t size;   // 1, 2 or 4 bytes
-+    uint32_t count; // how many in a row (Gecko and Action Replay can fill several)
-+};
-+
-+struct LoadedCode {
-+    Code code;
-+    std::vector<Write> writes;
-+};
-+
-+std::mutex g_mutex;
-+std::vector<LoadedCode> g_codes;
-+std::filesystem::path g_path;
-+
-+constexpr std::array<const char*, 3> kSections{"Gecko", "ActionReplay", "OnFrame"};
-+
-+std::string Trim(const std::string& text) {
-+    const size_t first = text.find_first_not_of(" \t\r\n");
-+    if (first == std::string::npos) {
-+        return {};
-+    }
-+    const size_t last = text.find_last_not_of(" \t\r\n");
-+    return text.substr(first, last - first + 1);
-+}
-+
-+std::optional<uint32_t> ParseHex(std::string text) {
-+    text = Trim(text);
-+    if (text.rfind("0x", 0) == 0 || text.rfind("0X", 0) == 0) {
-+        text = text.substr(2);
-+    }
-+    if (text.empty() || text.size() > 8) {
-+        return std::nullopt;
-+    }
-+    uint32_t value = 0;
-+    for (const char c : text) {
-+        if (!std::isxdigit(static_cast<unsigned char>(c))) {
-+            return std::nullopt;
-+        }
-+        value = value * 16 + static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c))
-+                                                       ? c - '0'
-+                                                       : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
-+    }
-+    return value;
-+}
-+
-+// The ranges of the game's code, read from main.dol. A write there would change instructions the
-+// game no longer runs (it was translated into native code), so a code that makes one is marked as
-+// not working here instead of silently doing nothing.
-+struct CodeRange {
-+    uint32_t first;
-+    uint32_t end;
-+};
-+
-+std::vector<CodeRange> ReadCodeRanges() {
-+    std::vector<CodeRange> ranges;
-+    const std::filesystem::path dvdRoot = RuntimeConfigFile::ResolvedDvdRoot();
-+    if (dvdRoot.empty()) {
-+        return ranges;
-+    }
-+    std::ifstream dol(dvdRoot / "sys" / "main.dol", std::ios::binary);
-+    std::array<uint8_t, 0xE4> header{};
-+    if (!dol.read(reinterpret_cast<char*>(header.data()), header.size())) {
-+        return ranges;
-+    }
-+    const auto be32 = [&](size_t offset) {
-+        return (static_cast<uint32_t>(header[offset]) << 24) | (static_cast<uint32_t>(header[offset + 1]) << 16) |
-+               (static_cast<uint32_t>(header[offset + 2]) << 8) | header[offset + 3];
-+    };
-+    // A DOL has room for seven code sections: their load addresses start at 0x48, sizes at 0x90.
-+    for (size_t i = 0; i < 7; ++i) {
-+        const uint32_t address = be32(0x48 + i * 4);
-+        const uint32_t size = be32(0x90 + i * 4);
-+        if (address != 0 && size != 0) {
-+            ranges.push_back({address, address + size});
-+        }
-+    }
-+    return ranges;
-+}
-+
-+bool InCode(const std::vector<CodeRange>& ranges, uint32_t address) {
-+    for (const CodeRange& range : ranges) {
-+        if (address >= range.first && address < range.end) {
-+            return true;
-+        }
-+    }
-+    return false;
-+}
-+
-+// A Gecko or decrypted Action Replay line that writes memory. Both write the same way for the
-+// three kinds handled here: 8 bits (repeated), 16 bits (repeated) and 32 bits.
-+std::optional<Write> ParseWriteLine(const std::string& section, uint32_t first, uint32_t second, std::string& whyNot) {
-+    const uint32_t address = 0x80000000u | (first & 0x01FFFFFFu);
-+    uint32_t kind = 0;
-+    if (section == "Gecko") {
-+        kind = (first >> 24) & 0xFEu;  // the lowest bit is the 0x81 half of memory, kept in the address
-+        if (kind != 0x00 && kind != 0x02 && kind != 0x04) {
-+            whyNot = kind == 0xC0 || kind == 0xC2 ? "adds instructions to the game, which no longer runs from them"
-+                                                  : "uses a Gecko code type that is not supported here";
-+            return std::nullopt;
-+        }
-+    } else {
-+        // Action Replay: the write size is in bits 25-26, and anything but a plain write in the
-+        // type bits above them (conditions, pointers, master codes) is not supported.
-+        if (first == 0 || ((first >> 27) & 0x1Fu) != 0) {
-+            whyNot = "uses an Action Replay code type that is not supported here (only plain writes)";
-+            return std::nullopt;
-+        }
-+        kind = ((first >> 25) & 0x3u) * 2;  // 0, 2 or 4, as in Gecko
-+        if (kind > 4) {
-+            whyNot = "uses an Action Replay write size that does not exist";
-+            return std::nullopt;
-+        }
-+    }
-+    switch (kind) {
-+    case 0x00:
-+        return Write{address, second & 0xFFu, 1, (second >> 16) + 1};
-+    case 0x02:
-+        return Write{address, second & 0xFFFFu, 2, (second >> 16) + 1};
-+    default:
-+        return Write{address, second, 4, 1};
-+    }
-+}
-+
-+// An OnFrame patch line: "0x806B3B8C:dword:0x00000001".
-+std::optional<Write> ParsePatchLine(const std::string& line, std::string& whyNot) {
-+    const size_t firstColon = line.find(':');
-+    const size_t secondColon = line.find(':', firstColon + 1);
-+    if (firstColon == std::string::npos || secondColon == std::string::npos) {
-+        whyNot = "has a line that is not address:size:value";
-+        return std::nullopt;
-+    }
-+    const auto address = ParseHex(line.substr(0, firstColon));
-+    const std::string size = Trim(line.substr(firstColon + 1, secondColon - firstColon - 1));
-+    const auto value = ParseHex(line.substr(secondColon + 1));
-+    if (!address || !value) {
-+        whyNot = "has an address or a value that is not a hexadecimal number";
-+        return std::nullopt;
-+    }
-+    if (size == "byte") {
-+        return Write{*address, *value & 0xFFu, 1, 1};
-+    }
-+    if (size == "word") {
-+        return Write{*address, *value & 0xFFFFu, 2, 1};
-+    }
-+    if (size == "dword") {
-+        return Write{*address, *value, 4, 1};
-+    }
-+    whyNot = "uses a size other than byte, word or dword";
-+    return std::nullopt;
-+}
-+
-+void ParseCodeLine(LoadedCode& entry, const std::string& line, const std::vector<CodeRange>& codeRanges) {
-+    if (!entry.code.supported) {
-+        return;
-+    }
-+    std::optional<Write> write;
-+    if (entry.code.section == "OnFrame") {
-+        write = ParsePatchLine(line, entry.code.whyNot);
-+    } else {
-+        std::istringstream words(line);
-+        std::string first;
-+        std::string second;
-+        words >> first >> second;
-+        const auto a = ParseHex(first);
-+        const auto b = ParseHex(second);
-+        if (!a || !b || first.size() != 8 || second.size() != 8) {
-+            entry.code.whyNot = "has a line that is not two 8-digit hexadecimal numbers (encrypted codes are not "
-+                                "supported; paste the decrypted ones)";
-+        } else if (entry.code.section == "Gecko" && *a == 0xE0000000u) {
-+            return;  // "full terminator": ends the code, nothing to write
-+        } else {
-+            write = ParseWriteLine(entry.code.section, *a, *b, entry.code.whyNot);
-+        }
-+    }
-+    if (!write) {
-+        entry.code.supported = false;
-+        return;
-+    }
-+    if (InCode(codeRanges, write->address)) {
-+        entry.code.supported = false;
-+        entry.code.whyNot = "changes the game's instructions, which no longer run from memory";
-+        return;
-+    }
-+    entry.writes.push_back(*write);
-+}
-+
-+std::string SectionOf(const std::string& line) {
-+    if (line.size() >= 2 && line.front() == '[' && line.back() == ']') {
-+        return line.substr(1, line.size() - 2);
-+    }
-+    return {};
-+}
-+
-+const char* kTemplate =
-+    "# Cheats for this game, in Dolphin's format. Guide: runtime/include/cheats.h.\n"
-+    "# Trucos para este juego, en el formato de Dolphin. Guia: runtime/include/cheats.h.\n"
-+    "#\n"
-+    "# Paste Gecko codes under [Gecko] and decrypted Action Replay codes under [ActionReplay],\n"
-+    "# each one after a line \"$Name\". Turn them on in the F10 menu, under Cheats.\n"
-+    "# Pega codigos Gecko bajo [Gecko] y codigos Action Replay descifrados bajo [ActionReplay],\n"
-+    "# cada uno despues de una linea \"$Nombre\". Se activan en el menu F10, en Cheats.\n"
-+    "\n"
-+    "#\n"
-+    "# The codes below come with the game and start off. They are written for Animal Parade (RBIEE9)\n"
-+    "# and only change data, so they work in this native build.\n"
-+    "# Los codigos de abajo vienen con el juego y empiezan apagados. Son para Animal Parade (RBIEE9)\n"
-+    "# y solo cambian datos, asi que funcionan en esta version nativa.\n"
-+    "\n"
-+    "[Gecko]\n"
-+    "\n"
-+    "[ActionReplay]\n"
-+    "\n"
-+    "[OnFrame]\n"
-+    "$Show the game's debug overlay (FPS and scene name)\n"
-+    "*A switch the developers left in the game.\n"
-+    "0x806B3B8C:dword:0x00000001\n";
-+
-+} // namespace
-+
-+std::filesystem::path FilePath() {
-+    std::lock_guard<std::mutex> lock(g_mutex);
-+    return g_path;
-+}
-+
-+void Load() {
-+    const std::filesystem::path path =
-+        RuntimeConfigFile::ApplicationDataDirectory() / "Cheats" / (std::string(GuestRegion::CurrentFacts().gameId) + ".ini");
-+    std::error_code error;
-+    if (!std::filesystem::exists(path, error)) {
-+        std::filesystem::create_directories(path.parent_path(), error);
-+        std::ofstream(path) << kTemplate;
-+    }
-+
-+    const std::vector<CodeRange> codeRanges = ReadCodeRanges();
-+    std::vector<LoadedCode> codes;
-+    std::vector<std::pair<std::string, std::string>> enabledNames;  // section, name
-+
-+    std::ifstream file(path);
-+    std::string section;
-+    std::string rawLine;
-+    while (std::getline(file, rawLine)) {
-+        const std::string line = Trim(rawLine);
-+        if (line.empty() || line.front() == '#') {
-+            continue;
-+        }
-+        if (const std::string next = SectionOf(line); !next.empty()) {
-+            section = next;
-+            continue;
-+        }
-+        const bool enabledSection = section.size() > 8 && section.ends_with("_Enabled");
-+        if (enabledSection) {
-+            if (line.front() == '$') {
-+                enabledNames.emplace_back(section.substr(0, section.size() - 8), Trim(line.substr(1)));
-+            }
-+            continue;
-+        }
-+        bool codeSection = false;
-+        for (const char* known : kSections) {
-+            codeSection = codeSection || section == known;
-+        }
-+        if (!codeSection) {
-+            continue;
-+        }
-+        if (line.front() == '$') {
-+            codes.push_back({Code{section, Trim(line.substr(1))}, {}});
-+        } else if (!codes.empty() && codes.back().code.section == section) {
-+            if (line.front() == '*') {
-+                std::string& notes = codes.back().code.notes;
-+                notes += (notes.empty() ? "" : "\n") + Trim(line.substr(1));
-+            } else {
-+                ParseCodeLine(codes.back(), line, codeRanges);
-+            }
-+        }
-+    }
-+    for (LoadedCode& entry : codes) {
-+        for (const auto& [enabledSection, name] : enabledNames) {
-+            if (enabledSection == entry.code.section && name == entry.code.name) {
-+                entry.code.enabled = true;
-+            }
-+        }
-+    }
-+
-+    RT_LOG(RT_TAG_RUNTIME) << "cheats: " << codes.size() << " code(s) in " << path.string() << std::endl;
-+    std::lock_guard<std::mutex> lock(g_mutex);
-+    g_codes = std::move(codes);
-+    g_path = path;
-+}
-+
-+void ApplyFrame() {
-+    // The file is read the first time a frame ends, once the game and its disc are known.
-+    static std::once_flag s_loaded;
-+    std::call_once(s_loaded, Load);
-+    std::lock_guard<std::mutex> lock(g_mutex);
-+    for (const LoadedCode& entry : g_codes) {
-+        if (!entry.code.enabled || !entry.code.supported) {
-+            continue;
-+        }
-+        for (const Write& write : entry.writes) {
-+            for (uint32_t i = 0; i < write.count; ++i) {
-+                const uint32_t address = write.address + i * write.size;
-+                try {
-+                    if (write.size == 1) {
-+                        Memory::Write8(address, static_cast<uint8_t>(write.value));
-+                    } else if (write.size == 2) {
-+                        Memory::Write16(address, static_cast<uint16_t>(write.value));
-+                    } else {
-+                        Memory::Write32(address, write.value);
-+                    }
-+                } catch (const Memory::AccessViolation&) {
-+                    break;  // an address outside the console's memory: the rest of this row is too
-+                }
-+            }
-+        }
-+    }
-+}
-+
-+std::vector<Code> List() {
-+    std::lock_guard<std::mutex> lock(g_mutex);
-+    std::vector<Code> list;
-+    list.reserve(g_codes.size());
-+    for (const LoadedCode& entry : g_codes) {
-+        list.push_back(entry.code);
-+    }
-+    return list;
-+}
-+
-+void SetEnabled(size_t index, bool enabled) {
-+    std::lock_guard<std::mutex> lock(g_mutex);
-+    if (index >= g_codes.size()) {
-+        return;
-+    }
-+    g_codes[index].code.enabled = enabled;
-+
-+    // Rewrite the file keeping every line except the *_Enabled sections, then add those back with
-+    // the codes that are on now.
-+    std::ifstream in(g_path);
-+    std::ostringstream kept;
-+    std::string rawLine;
-+    bool skipping = false;
-+    while (std::getline(in, rawLine)) {
-+        const std::string section = SectionOf(Trim(rawLine));
-+        if (!section.empty()) {
-+            skipping = section.ends_with("_Enabled");
-+        }
-+        if (!skipping) {
-+            kept << rawLine << '\n';
-+        }
-+    }
-+    in.close();
-+    std::string text = kept.str();
-+    while (text.size() >= 2 && text.ends_with("\n\n")) {
-+        text.pop_back();
-+    }
-+    std::ofstream out(g_path, std::ios::trunc);
-+    out << text;
-+    for (const char* section : kSections) {
-+        bool header = false;
-+        for (const LoadedCode& entry : g_codes) {
-+            if (entry.code.enabled && entry.code.section == section) {
-+                if (!header) {
-+                    out << '\n' << '[' << section << "_Enabled]\n";
-+                    header = true;
-+                }
-+                out << '$' << entry.code.name << '\n';
-+            }
-+        }
-+    }
-+}
-+
-+} // namespace Cheats
 diff --git a/runtime/src/dynamic_aspect.cpp b/runtime/src/dynamic_aspect.cpp
 index 67f94fb..f8430b6 100644
 --- a/runtime/src/dynamic_aspect.cpp
@@ -3007,21 +2549,20 @@ index 6111b20..ade64f0 100644
      }
  
 diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
-index cd236a9..f1c1ef9 100644
+index cd236a9..9d132cd 100644
 --- a/runtime/src/hle/vi.cpp
 +++ b/runtime/src/hle/vi.cpp
-@@ -9,6 +9,10 @@
+@@ -9,6 +9,9 @@
  #include "platform/host_platform.h"
  #include "runtime_log.h"
  #include "perf_stats.h"
 +#include "runtime_config.h"
-+#include "cheats.h"
 +
 +#include <SDL3/SDL_keyboard.h>
  
  #include <dolphin/vi.h>
  
-@@ -20,6 +24,7 @@
+@@ -20,6 +23,7 @@
  #include <cstdio>
  #include <iostream>
  #include <mutex>
@@ -3029,7 +2570,7 @@ index cd236a9..f1c1ef9 100644
  #include <thread>
  
  #if defined(_WIN32)
-@@ -30,6 +35,7 @@
+@@ -30,6 +34,7 @@
  #endif
  
  #include <aurora/aurora.h>
@@ -3037,7 +2578,7 @@ index cd236a9..f1c1ef9 100644
  
  // Forward declaration for OSWakeupThread - used to wake threads on VI retrace queue
  extern "C" void OSWakeupThread_HLE_801aaaa4(CpuContext* ctx);
-@@ -149,7 +155,7 @@ const uint32_t kViNextFrameBufferHwAddr = MKW_GADDR(80350890);
+@@ -149,7 +154,7 @@ const uint32_t kViNextFrameBufferHwAddr = MKW_GADDR(80350890);
  const uint32_t kViRetraceQueueAddr      = MKW_GADDR(80386bc0); // Thread queue for VIWaitForRetrace
  
  // EGG::BaseSystem::sSystem pointer - must be non-null before post-retrace callback is valid
@@ -3046,7 +2587,7 @@ index cd236a9..f1c1ef9 100644
  
  std::chrono::microseconds IntervalForFormat(uint32_t tvFormat) {
      // NTSC-ish defaults to 60 Hz; PAL uses 50 Hz.
-@@ -213,6 +219,43 @@ void SleepPreciselyUntil(Clock::time_point deadline, bool finishWithSpin = false
+@@ -213,6 +218,43 @@ void SleepPreciselyUntil(Clock::time_point deadline, bool finishWithSpin = false
      }
  }
  
@@ -3090,7 +2631,7 @@ index cd236a9..f1c1ef9 100644
  void ViSetR3(CpuContext* ctx, uint32_t value)
  {
      if (ctx) {
-@@ -343,7 +386,8 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
+@@ -343,7 +385,8 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
          if (postCb) {
              // Guard: only invoke callback if sSystem is initialized
              // The callback dereferences sSystem which must be non-null
@@ -3100,7 +2641,7 @@ index cd236a9..f1c1ef9 100644
              if (sSystemPtr != 0) {
                  InvokeIndirectCpu(postCb, ctx);
              }
-@@ -391,7 +435,7 @@ bool AdvanceDueRetraces(CpuContext* ctx, int maxToProcess, bool serviceAurora)
+@@ -391,7 +434,7 @@ bool AdvanceDueRetraces(CpuContext* ctx, int maxToProcess, bool serviceAurora)
              if (!g_vi.initialized) {
                  return advancedAny;
              }
@@ -3109,7 +2650,7 @@ index cd236a9..f1c1ef9 100644
              if (now < target) {
                  return advancedAny;
              }
-@@ -415,15 +459,40 @@ void VI_HLE_ForceRetrace(CpuContext* ctx) {
+@@ -415,15 +458,40 @@ void VI_HLE_ForceRetrace(CpuContext* ctx) {
      {
          std::lock_guard<std::mutex> lock(g_viMutex);
          EnsureInitializedLocked();
@@ -3151,7 +2692,7 @@ index cd236a9..f1c1ef9 100644
  // Advance every retrace whose interval has already elapsed. Safe to call from
  // busy loops (GX drawing, the scheduler's idle spin) to keep VBlank ticking.
  void VI_HLE_PollRetrace(CpuContext* ctx) {
-@@ -460,7 +529,7 @@ void VI_HLE_WaitForNextRetracePoll() {
+@@ -460,7 +528,7 @@ void VI_HLE_WaitForNextRetracePoll() {
      {
          std::lock_guard<std::mutex> lock(g_viMutex);
          EnsureInitializedLocked();
@@ -3160,7 +2701,7 @@ index cd236a9..f1c1ef9 100644
      }
  
      const auto now = Clock::now();
-@@ -482,6 +551,95 @@ namespace {
+@@ -482,6 +550,95 @@ namespace {
  // already elapse while this frame was being produced?". Producer-thread only.
  uint32_t s_lastPacedRetraceCount = ~0u;
  
@@ -3256,7 +2797,7 @@ index cd236a9..f1c1ef9 100644
  // Last presentation anchor handed to Aurora, in nanoseconds on the VI retrace
  // grid. Guarantees consecutive sealed frames never share an anchor (see the
  // comment at the stamping site). Producer-thread only, like the memo above.
-@@ -533,14 +691,14 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
+@@ -533,14 +690,14 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
          {
              std::lock_guard<std::mutex> lock(g_viMutex);
              EnsureInitializedLocked();
@@ -3273,7 +2814,7 @@ index cd236a9..f1c1ef9 100644
                      .count());
          }
          // Hold the frame to its boundary only when no retrace elapsed during
-@@ -556,7 +714,9 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
+@@ -556,7 +713,9 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
          // cadence, and zero only happens when production outruns VI. "Kept up" means <=1 retrace
          // elapsed; 2+ means a boundary was missed, so Aurora seals that frame without its interpolated
          // slots (a windowed backstop lowers the slot target only under sustained overload).
@@ -3284,7 +2825,7 @@ index cd236a9..f1c1ef9 100644
          // Stamp the sealed frame's presentation schedule so Aurora paces interpolated slots against
          // this same VI timeline. Anchor to the NEXT retrace boundary, not the period just produced,
          // since slots anchored to the current period would already be expired by seal time. Encoding
-@@ -569,7 +729,8 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
+@@ -569,7 +728,8 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
              anchorNanos = s_lastPresentAnchorNanos + intervalNanos;
          }
          s_lastPresentAnchorNanos = anchorNanos;
@@ -3294,15 +2835,6 @@ index cd236a9..f1c1ef9 100644
      } else {
          // Retrace-context presents (VI black, boot) have no display period of
          // their own to subdivide; present as soon as the frame is ready. The
-@@ -580,6 +741,8 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
-     }
- 
-     EndAuroraFrame();
-+    // Between two frames of the game, like Dolphin applies its cheats.
-+    Cheats::ApplyFrame();
-     if (paceThisFrame) {
-         PaceToRetraceBoundary(paceDeadline);
-         std::lock_guard<std::mutex> lock(g_viMutex);
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
 index 56bec9f..bf8161e 100644
 --- a/runtime/src/main.cpp
@@ -3468,7 +3000,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..1cb1d08 100644
+index 6c2083a..305107b 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -3479,16 +3011,15 @@ index 6c2083a..1cb1d08 100644
  #include "gx_worker.h"
  #include "audio_backend.h"
  #include "aurora_events.h"
-@@ -9,6 +12,8 @@
+@@ -9,6 +12,7 @@
  #include "game_graphics_options.h"
  #include "music_attenuation.h"
  #include "runtime_config.h"
-+#include "cheats.h"
 +#include "hle_stubs.h"
  #include "runtime_log.h"
  #include "wiimote_host.h"
  
-@@ -92,10 +97,12 @@ bool g_audioMixWorker = RuntimeConfigFile::AudioMixWorkerEnabled(true);
+@@ -92,10 +96,12 @@ bool g_audioMixWorker = RuntimeConfigFile::AudioMixWorkerEnabled(true);
  bool g_attenuateMusicWhenMediaPlays = RuntimeConfigFile::AttenuateMusicWhenMediaPlays(false);
  int g_frameInterpolationMode = [] {
      switch (RuntimeConfigFile::FrameInterpolationFps(0)) {
@@ -3503,7 +3034,7 @@ index 6c2083a..1cb1d08 100644
      default:
          return 0;
      }
-@@ -182,7 +189,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
+@@ -182,7 +188,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
      {"3x", 3.0f}, {"4x", 4.0f}, {"6x", 6.0f}, {"8x", 8.0f},
  }};
  
@@ -3512,7 +3043,7 @@ index 6c2083a..1cb1d08 100644
  
  bool IsHighResolutionScale(float scale) {
      return std::fabs(scale - 6.0f) < 0.001f || std::fabs(scale - 8.0f) < 0.001f;
-@@ -1074,22 +1081,25 @@ void DrawAudioSettings() {
+@@ -1074,22 +1080,25 @@ void DrawAudioSettings() {
          AudioBackend::Instance().SetMasterVolume(volume);
          RuntimeConfigFile::SetAudioVolume(volume);
      }
@@ -3542,7 +3073,7 @@ index 6c2083a..1cb1d08 100644
          const float volume = static_cast<float>(g_voicesVolumePercent) / 100.0f;
          MusicAttenuation::SetVoicesVolume(volume);
          RuntimeConfigFile::SetVoicesVolume(volume);
-@@ -1114,6 +1124,9 @@ void DrawAudioSettings() {
+@@ -1114,6 +1123,9 @@ void DrawAudioSettings() {
              "Runs the AX/DSP voice mix off the game thread. Turn this off if you "
              "suspect an audio problem; the mix then runs inline as it used to.");
      }
@@ -3552,7 +3083,7 @@ index 6c2083a..1cb1d08 100644
      ImGui::Separator();
      if (ImGui::Checkbox("Mute game music while external media is playing",
                          &g_attenuateMusicWhenMediaPlays)) {
-@@ -1144,24 +1157,130 @@ void DrawAudioSettings() {
+@@ -1144,24 +1156,100 @@ void DrawAudioSettings() {
      }
  }
  
@@ -3624,36 +3155,6 @@ index 6c2083a..1cb1d08 100644
 +    }
 +}
 +
-+// The Cheats menu: one checkbox per code of UserData/Cheats/<game id>.ini (guide in cheats.h).
-+void DrawCheats() {
-+    const std::vector<Cheats::Code> codes = Cheats::List();
-+    ImGui::TextDisabled("%s", Cheats::FilePath().string().c_str());
-+    if (ImGui::Button("Reload the file")) {
-+        Cheats::Load();
-+    }
-+    ImGui::Separator();
-+    if (codes.empty()) {
-+        ImGui::TextDisabled("No cheats yet: paste Gecko or Action Replay codes into the file above,");
-+        ImGui::TextDisabled("then press Reload.");
-+        return;
-+    }
-+    for (size_t i = 0; i < codes.size(); ++i) {
-+        const Cheats::Code& code = codes[i];
-+        bool enabled = code.enabled;
-+        ImGui::BeginDisabled(!code.supported);
-+        const std::string label = code.name + "###cheat" + std::to_string(i);
-+        if (ImGui::Checkbox(label.c_str(), &enabled)) {
-+            Cheats::SetEnabled(i, enabled);
-+        }
-+        ImGui::EndDisabled();
-+        if (!code.supported) {
-+            ImGui::TextDisabled("    Does not work here: it %s.", code.whyNot.c_str());
-+        } else if (!code.notes.empty()) {
-+            ImGui::TextDisabled("    %s", code.notes.c_str());
-+        }
-+    }
-+}
-+
 +void DrawGraphicsSettings() {
 +    g_displayMode = static_cast<int>(aurora_get_display_mode());
 +    // The aspect, force-aspect and bloom settings below drive Mario Kart Wii's own screens and
@@ -3696,7 +3197,7 @@ index 6c2083a..1cb1d08 100644
      ImGui::Separator();
      struct EffectFlag {
          const char* label;
-@@ -1172,6 +1291,9 @@ void DrawGraphicsSettings() {
+@@ -1172,6 +1260,9 @@ void DrawGraphicsSettings() {
      }};
  
      for (const auto& effect : kEffectFlags) {
@@ -3706,7 +3207,7 @@ index 6c2083a..1cb1d08 100644
          bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
          if (ImGui::Checkbox(effect.label, &disabled)) {
              if (disabled) {
-@@ -1183,8 +1305,10 @@ void DrawGraphicsSettings() {
+@@ -1183,8 +1274,10 @@ void DrawGraphicsSettings() {
              RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
          }
      }
@@ -3719,7 +3220,7 @@ index 6c2083a..1cb1d08 100644
      static constexpr const char* kDisplayModes[] = {
          "Windowed",
          "Borderless fullscreen",
-@@ -1205,13 +1329,13 @@ void DrawGraphicsSettings() {
+@@ -1205,13 +1298,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -3736,14 +3237,15 @@ index 6c2083a..1cb1d08 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1285,8 +1409,23 @@ void DrawGraphicsSettings() {
+@@ -1285,8 +1378,23 @@ void DrawGraphicsSettings() {
      if (ImGui::Checkbox("Show FPS", &g_showFps)) {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
 +    // Fast-forward: makes the game's own waits go by sooner (see VI_HLE_SetFastLoading).
 +    static bool s_fastLoading = RuntimeConfigFile::FastLoading(true);
 +    static bool s_fastForwardKey = RuntimeConfigFile::FastForwardKey(true);
-+    ImGui::Separator();
+     ImGui::Separator();
+-    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
 +    if (ImGui::Checkbox("Fast loading", &s_fastLoading)) {
 +        VI_HLE_SetFastLoading(s_fastLoading);
 +        RuntimeConfigFile::SetFastLoading(s_fastLoading);
@@ -3754,26 +3256,13 @@ index 6c2083a..1cb1d08 100644
 +        RuntimeConfigFile::SetFastForwardKey(s_fastForwardKey);
 +    }
 +    ImGui::TextDisabled("While Tab is held the whole game runs up to four times faster.");
-     ImGui::Separator();
--    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
++    ImGui::Separator();
 +    ImGui::Text("Graphics API in use: %s", GraphicsApiDisplayName());
 +    DrawGraphicsApiChoice();
  }
  
  void DrawFpsOverlay() {
-@@ -1533,6 +1672,11 @@ void DrawTopBar() {
-         ImGui::EndMenu();
-     }
- 
-+    if (ImGui::BeginMenu("Cheats")) {
-+        DrawCheats();
-+        ImGui::EndMenu();
-+    }
-+
-     const ImGuiStyle& style = ImGui::GetStyle();
-     const float hideWidth = ImGui::CalcTextSize("Hide (F10)").x + style.FramePadding.x * 2.0f;
-     const float exitWidth = ImGui::CalcTextSize("X").x + style.FramePadding.x * 2.0f;
-@@ -1663,6 +1807,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1663,6 +1771,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
              CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED
                                                                    : static_cast<uint32_t>(PAD_KEY_INVALID));
          }
@@ -3784,7 +3273,7 @@ index 6c2083a..1cb1d08 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1880,12 @@ void Draw() noexcept {
+@@ -1732,6 +1844,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
