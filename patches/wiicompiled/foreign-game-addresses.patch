@@ -278,7 +278,7 @@ index a2c6130..504c695 100644
  // placement.
  inline constexpr uintptr_t kFixedFlatGuestBase = 0x0000'1000'0000'0000ull;
 diff --git a/runtime/include/guest_abi/guest_region.h b/runtime/include/guest_abi/guest_region.h
-index 1836717..728eb0a 100644
+index 1836717..1eb7b40 100644
 --- a/runtime/include/guest_abi/guest_region.h
 +++ b/runtime/include/guest_abi/guest_region.h
 @@ -9,6 +9,11 @@
@@ -448,7 +448,7 @@ index 1836717..728eb0a 100644
  struct Facts {
      const char* gameId;
      char letter;
-@@ -152,15 +235,60 @@ inline constexpr Facts kFacts[kCount] = {
+@@ -152,15 +235,77 @@ inline constexpr Facts kFacts[kCount] = {
      {"RMCP01", 'P', 0x524D4350u, 1u, 0x80399180u, "EUR", "RVL-001(EUR)", "LEH", "PAL", "EU"},
      {"RMCE01", 'E', 0x524D4345u, 0u, 0x80394E00u, "USA", "RVL-001(USA)", "LU", "NTSC", "US"},
      {"RMCJ01", 'J', 0x524D434Au, 0u, 0x80398B00u, "JPN", "RVL-001(JPN)", "LJ", "NTSC", "JP"},
@@ -480,6 +480,23 @@ index 1836717..728eb0a 100644
 +namespace GuestRegion {
 +
 +inline bool IsForeignGame() noexcept { return Current() == Id::ForeignGame; }
++
++// For FOREIGN_GAME_NATIVE: address while the foreign game gameId is running, otherwise 0, which the
++// registry skips.
++inline uint32_t ForeignGameAddress(const char* gameId, uint32_t address) noexcept {
++    const char* running = CurrentFacts().gameId;
++    if (!IsForeignGame() || running == nullptr) {
++        return 0;
++    }
++    for (size_t i = 0;; ++i) {
++        if (running[i] != gameId[i]) {
++            return 0;
++        }
++        if (running[i] == '\0') {
++            return address;
++        }
++    }
++}
 +
 +// An address looked up when it is read, not when the program starts: for constants at file scope
 +// that only Mario Kart Wii's own features use, which a foreign game never reaches.
@@ -535,7 +552,7 @@ index 0000000..15ca9df
 +
 +} // namespace HangWatch
 diff --git a/runtime/include/hle_stubs.h b/runtime/include/hle_stubs.h
-index e3ba175..49d9409 100644
+index e3ba175..6d77e31 100644
 --- a/runtime/include/hle_stubs.h
 +++ b/runtime/include/hle_stubs.h
 @@ -17,6 +17,13 @@ void VI_HLE_WaitForNextRetracePoll();
@@ -552,6 +569,20 @@ index e3ba175..49d9409 100644
  void VI_HLE_SetXfbReady(uint32_t xfbAddr); // Called by GXCopyDisp to signal EFB→XFB copy
  void Audio_HLE_Tick(CpuContext* ctx, uint32_t deltaMicros);
  void Audio_HLE_Poll(CpuContext* ctx);
+@@ -47,3 +54,13 @@ extern "C" void OS_HLE_EndDeferredGuestCallbacks();
+ #define PPC_NATIVE_OVERRIDE_VOID(addr_hex, name, arg_list, call_list) \
+     [[maybe_unused]] static void native_signature_##addr_hex arg_list { name call_list; } \
+     REGISTER_NATIVE_FUNCTION(0x##addr_hex, name)
++
++// A native for one foreign game's own code, which Mario Kart Wii does not have: addr_hex is that
++// game's address, not a PAL one, and the native is registered only while that game (game_id, for
++// example RBIEE9) is the one running. The game's project copies these lines into its natives.cpp
++// as PPC_NATIVE_OVERRIDE, so its translator leaves the address to the runtime.
++#define FOREIGN_GAME_NATIVE(game_id, addr_hex, name, ret_type, arg_list, call_list) \
++    [[maybe_unused]] static ret_type foreign_native_signature_##addr_hex arg_list { return name call_list; } \
++    static AbiTrampoline<decltype(name)> MKW_DETAIL_MAKE_UNIQUE(_abi_foreign_native_, __COUNTER__)( \
++        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
++        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
 index ea5a12b..d6b9144 100644
 --- a/runtime/include/runtime_config.h
@@ -1618,6 +1649,36 @@ index f8c4caa..f10c87e 100644
      Memory::Write32(outPtr + 4, CurrentTitleIdLo());
      return 0;
  }
+diff --git a/runtime/src/hle/foreign_game_natives.cpp b/runtime/src/hle/foreign_game_natives.cpp
+new file mode 100644
+index 0000000..be149bd
+--- /dev/null
++++ b/runtime/src/hle/foreign_game_natives.cpp
+@@ -0,0 +1,24 @@
++// Natives for a foreign game's own code - functions Mario Kart Wii does not have, so they cannot be
++// named by a PAL address. Each one names its game and that game's address (FOREIGN_GAME_NATIVE in
++// hle_stubs.h) and is registered only while that game is running.
++
++#include "hle_stubs.h"
++#include "runtime_config.h"
++
++#include <cstdint>
++#include <cstdio>
++
++// Harvest Moon: Animal Parade (USA), 0x8010FF04: the language the game's own text uses. The disc
++// has English, German, French, Spanish and Italian text, but the US build's function only ever
++// answers 1 (English); the game stores the answer while it starts and picks every message, talk,
++// event and menu file by it. Its numbers are the console's (1 English, 2 German, 3 French,
++// 4 Spanish, 5 Italian), so it now answers [console] language from Config.toml, as SCGetLanguage does.
++extern "C" uint32_t AnimalParadeTextLanguage_HLE()
++{
++    const uint32_t language = RuntimeConfigFile::ConsoleLanguageCode();
++    std::fprintf(stderr, "[animal-parade] text language -> %u (%s)\n", language,
++                 RuntimeConfigFile::Language().c_str());
++    return language;
++}
++
++FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
 diff --git a/runtime/src/hle/gx/gx_copy.cpp b/runtime/src/hle/gx/gx_copy.cpp
 index 3dbdc8d..be45c92 100644
 --- a/runtime/src/hle/gx/gx_copy.cpp

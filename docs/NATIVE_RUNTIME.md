@@ -476,6 +476,14 @@ runtime nunca carga un SYSCONF, así que el SDK caía siempre en inglés. Ahora 
 nativa (`runtime/src/hle/sc.cpp`) y devuelve el de `[console] language` en `Config.toml`, que se
 elige en F10 > Graphics > Language. No hace falta el disco europeo para jugar en español.
 
+Con eso solo cambió el aviso de la correa del Wii Remote. El juego elige el idioma de sus propios
+textos con otra función, 0x8010FF04, que en la versión de EE. UU. siempre contesta 1 (inglés); lo
+guarda al arrancar y con él escoge cada archivo de `msglang`, `talk_la`, `event_la`, `param_la` y
+`cg_la`. Usa los mismos números que la consola, así que ahora es una nativa de este juego
+(`runtime/src/hle/foreign_game_natives.cpp`, macro `FOREIGN_GAME_NATIVE`) que contesta el mismo
+idioma. `tools/export_wiicompiled_layer.py` la copia a `natives.cpp` para que el traductor no la
+traduzca ni la meta dentro de quien la llama.
+
 ### Qué sigue
 
 1. Compilar el runtime de WiiCompiled con la capa (los pasos de arriba) en
@@ -953,6 +961,14 @@ its own with `SCGetLanguage` (0x802A4F40), which reads the console's language fr
 runtime never loads a SYSCONF, so the SDK always fell back to English. `SCGetLanguage` is now native
 (`runtime/src/hle/sc.cpp`) and returns `[console] language` from `Config.toml`, chosen in
 F10 > Graphics > Language. The European disc is not needed to play in Spanish.
+
+That alone only changed the Wii Remote strap notice. The game picks its own text's language with
+another function, 0x8010FF04, which in the US build always answers 1 (English); it stores the answer
+while it starts and picks every `msglang`, `talk_la`, `event_la`, `param_la` and `cg_la` file by
+it. It uses the console's numbers, so it is now a native for this game
+(`runtime/src/hle/foreign_game_natives.cpp`, macro `FOREIGN_GAME_NATIVE`) that answers the same
+language. `tools/export_wiicompiled_layer.py` copies it into `natives.cpp` so the translator neither
+translates it nor inlines it into its callers.
 
 ### What comes next
 

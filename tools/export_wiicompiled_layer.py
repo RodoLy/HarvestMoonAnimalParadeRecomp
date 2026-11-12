@@ -259,6 +259,27 @@ NATIVES_HEADER = """\
 """
 
 
+# A native for this game's own code: FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, Name, ret, (args), (call))
+# in WiiCompiled's runtime (see runtime/include/hle_stubs.h). Its address is already this game's.
+GAME_NATIVE = re.compile(
+    r"FOREIGN_GAME_NATIVE\(\s*RBIEE9\s*,\s*(?P<address>[0-9A-Fa-f]{8})\s*,\s*(?P<rest>[^;]*?)\)\s*;"
+)
+
+
+def game_native_blocks(wiicompiled: Path) -> list[str]:
+    """natives.cpp lines for the runtime's natives of this game's own code."""
+    blocks = []
+    for source in sorted((wiicompiled / "runtime" / "src").rglob("*.cpp")):
+        text = source.read_text(encoding="utf-8", errors="replace")
+        for match in GAME_NATIVE.finditer(text):
+            where = source.relative_to(wiicompiled).as_posix()
+            blocks.append(
+                f"// This game's own code at 0x{match['address'].upper()} ({where})\n"
+                f"PPC_NATIVE_OVERRIDE({match['address'].upper()}, {match['rest']});"
+            )
+    return blocks
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -297,6 +318,7 @@ def main() -> int:
         f"({native.replacement.source.as_posix()})\n{statement_at(native.replacement, native.here)}"
         for native in natives
     ]
+    blocks += game_native_blocks(Path(arguments.wiicompiled))
     registrations.write_text(NATIVES_HEADER + "\n" + "\n\n".join(blocks) + "\n", encoding="utf-8")
 
     print(f"{len(replacements)} native registrations in WiiCompiled")
