@@ -37,6 +37,14 @@ stick = Nunchuk stick, A/B = A/B, X/Y = 1/2, L/R = Z/C, Start/Z = +/-, both
 together = Home, D-pad and C-stick = D-pad. The mouse is the pointer, left click
 A, right click B. A real Wii Remote can be paired in F10 instead.
 
+Snapdragon X laptops (Qualcomm Adreno GPU): update the graphics driver first, with the
+Snapdragon Control Panel app (Microsoft Store) or your laptop maker's support app. With the
+Adreno driver of 2023, Direct3D 12 shows the picture split down the middle and things
+blinking at higher resolutions; the drivers Qualcomm has published since draw it right.
+The game uses Direct3D 12 by default ("Automatic" in F10 > Graphics > Graphics API).
+Vulkan only runs in a reduced mode on this GPU and can stop with "Device lost"; choose it
+there only if Direct3D 12 still looks wrong after the update.
+
 For PowerShell: .\play.ps1 -Disc D:\Games\AnimalParade.rvz, -Rebuild to start the build over,
 -NoStart to only build.
 
@@ -79,6 +87,15 @@ emulado. Tu gamepad o teclado funciona como el control de GameCube que mapeas en
 F10: stick = stick del Nunchuk, A/B = A/B, X/Y = 1/2, L/R = Z/C, Start/Z = +/-,
 los dos juntos = Home, cruceta y C-stick = cruceta. El mouse es el puntero, clic
 izquierdo A, clic derecho B. En F10 también puedes emparejar un Wii Remote real.
+
+Laptops Snapdragon X (GPU Qualcomm Adreno): primero actualiza el controlador gráfico,
+con la app Snapdragon Control Panel (Microsoft Store) o la app de soporte del fabricante de
+tu laptop. Con el controlador de Adreno de 2023, Direct3D 12 muestra la imagen partida por
+la mitad y cosas que parpadean en resoluciones altas; los controladores que Qualcomm ha
+publicado desde entonces la dibujan bien. El juego usa Direct3D 12 por defecto
+("Automatic" en F10 > Graphics > Graphics API). Vulkan solo funciona en un modo reducido en
+esta GPU y puede detenerse con "Device lost"; elígelo ahí solo si Direct3D 12 se sigue
+viendo mal después de actualizar.
 
 Desde PowerShell: .\play.ps1 -Disc D:\Juegos\AnimalParade.rvz, -Rebuild para compilar desde cero,
 -NoStart para solo compilar.
