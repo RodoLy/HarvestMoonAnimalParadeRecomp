@@ -200,7 +200,7 @@ index f367955..43a0bf3 100644
      }
    } else if (subCmd == GX_AURORA_DEBUG_GROUP_PUSH) {
 diff --git a/lib/gx/gx.cpp b/lib/gx/gx.cpp
-index e373bf0..bb87ff9 100644
+index e373bf0..d222651 100644
 --- a/lib/gx/gx.cpp
 +++ b/lib/gx/gx.cpp
 @@ -42,6 +42,8 @@ wgpu::BindGroupLayout sTextureBindGroupLayout;
@@ -212,7 +212,7 @@ index e373bf0..bb87ff9 100644
  
  template <typename T>
  T round_away_from_zero(float value) noexcept {
-@@ -260,6 +262,34 @@ void update() noexcept {
+@@ -260,6 +262,40 @@ void update() noexcept {
      window::set_force_aspect_16_9(policy == AURORA_VIEWPORT_16_9);
      window::set_present_surface_fill(policy == AURORA_VIEWPORT_STRETCH);
    }
@@ -231,6 +231,12 @@ index e373bf0..bb87ff9 100644
 +  if (!(gameAspect > 0.f) || gfx::is_offscreen()) {
 +    return 1.f;
 +  }
++  // Until the frame has made as many texture copies as the one before, what is drawn is most likely
++  // something the game will read back as a texture - the shadow under a character is drawn into a
++  // corner of the frame and copied from there - and has to land where the game expects it.
++  if (g_gxState.texCopiesThisFrame < g_gxState.texCopiesLastFrame) {
++    return 1.f;
++  }
 +  const auto [fbWidth, fbHeight] = vi::configured_fb_size();
 +  if (std::abs(g_gxState.logicalViewport.width) < static_cast<float>(fbWidth) * WidePictureFullWidth) {
 +    return 1.f;
@@ -247,7 +253,7 @@ index e373bf0..bb87ff9 100644
  }
  
  Vec2<uint32_t> logical_fb_size() noexcept {
-@@ -303,10 +333,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
+@@ -303,10 +339,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
    const float scaleX = static_cast<float>(targetWidth) / static_cast<float>(logicalFbWidth);
    const float scaleY = static_cast<float>(targetHeight) / static_cast<float>(logicalFbHeight);
  
@@ -268,7 +274,7 @@ index e373bf0..bb87ff9 100644
  
    const auto mappedLeft = std::clamp(static_cast<int32_t>(std::floor(left)), 0, static_cast<int32_t>(targetWidth));
    const auto mappedTop = std::clamp(static_cast<int32_t>(std::floor(top)), 0, static_cast<int32_t>(targetHeight));
-@@ -433,7 +471,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
+@@ -433,7 +477,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
    }
    g_gxState.logicalViewport = viewport;
    set_render_viewport(mapped_render_viewport());
@@ -279,10 +285,10 @@ index e373bf0..bb87ff9 100644
    }
  }
 diff --git a/lib/gx/gx.hpp b/lib/gx/gx.hpp
-index 02be26a..559dd5c 100644
+index 02be26a..4977ef9 100644
 --- a/lib/gx/gx.hpp
 +++ b/lib/gx/gx.hpp
-@@ -406,6 +406,10 @@ struct GXState {
+@@ -406,6 +406,15 @@ struct GXState {
  
    // View state
    AuroraViewportPolicy viewportPolicy = AURORA_VIEWPORT_FIT;
@@ -290,10 +296,15 @@ index 02be26a..559dd5c 100644
 +  float wideGameAspect = 0.f;
 +  // Whether the orthographic draw being submitted covers the whole width of the frame.
 +  bool orthoDrawFillsWidth = false;
++  // EFB copies into textures since the last copy to the display, and how many the frame before had.
++  // A game draws what it reads back as a texture (a shadow, a blurred copy of the scene) before its
++  // last texture copy of the frame, and the picture shown on screen - its text, its clock - after.
++  u32 texCopiesThisFrame = 0;
++  u32 texCopiesLastFrame = 0;
    gfx::Viewport logicalViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
    gfx::Viewport renderViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
    gfx::ClipRect logicalScissor{0, 0, 640, 480};
-@@ -455,6 +459,13 @@ void initialize() noexcept;
+@@ -455,6 +464,13 @@ void initialize() noexcept;
  void shutdown() noexcept;
  void update() noexcept;
  void set_viewport_policy(AuroraViewportPolicy policy) noexcept;
@@ -307,6 +318,25 @@ index 02be26a..559dd5c 100644
  void clear_static_texture_cache() noexcept;
  void clear_copy_texture_cache() noexcept;
  void evict_copy_texture(const void* dest) noexcept;
+diff --git a/lib/gx/regs.cpp b/lib/gx/regs.cpp
+index e709ab6..927ea6d 100644
+--- a/lib/gx/regs.cpp
++++ b/lib/gx/regs.cpp
+@@ -288,9 +288,14 @@ void bp_efb_copy(u8, u32 value) noexcept {
+   const bool clear = reg_get(value, 1, 11) != 0;
+   if (reg_get(value, 1, 14) != 0) {
+     copy_disp(clear, value);
++    g_gxState.texCopiesLastFrame = g_gxState.texCopiesThisFrame;
++    g_gxState.texCopiesThisFrame = 0;
+   } else {
+     copy_tex(g_gxState.texCopyDest, clear, value);
++    ++g_gxState.texCopiesThisFrame;
+   }
++  // Wide picture treats a flat draw differently once the frame's texture copies are done.
++  g_gxState.dirty |= DirtyUniform;
+ }
+ 
+ // TLUT load trigger (0x65)
 diff --git a/lib/gx/shader_info.cpp b/lib/gx/shader_info.cpp
 index f5df625..423a5da 100644
 --- a/lib/gx/shader_info.cpp
