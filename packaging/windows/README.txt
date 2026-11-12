@@ -45,6 +45,9 @@ The game uses Direct3D 12 by default ("Automatic" in F10 > Graphics > Graphics A
 Vulkan only runs in a reduced mode on this GPU and can stop with "Device lost"; choose it
 there only if Direct3D 12 still looks wrong after the update.
 
+Language: the disc has the game in English, Spanish, French, German and Italian. Choose
+one in F10 > Graphics > Language and restart the game.
+
 For PowerShell: .\play.ps1 -Disc D:\Games\AnimalParade.rvz, -Rebuild to start the build over,
 -NoStart to only build.
 
@@ -96,6 +99,9 @@ publicado desde entonces la dibujan bien. El juego usa Direct3D 12 por defecto
 ("Automatic" en F10 > Graphics > Graphics API). Vulkan solo funciona en un modo reducido en
 esta GPU y puede detenerse con "Device lost"; elígelo ahí solo si Direct3D 12 se sigue
 viendo mal después de actualizar.
+
+Idioma: el disco trae el juego en inglés, español, francés, alemán e italiano. Elige uno
+en F10 > Graphics > Language y reinicia el juego.
 
 Desde PowerShell: .\play.ps1 -Disc D:\Juegos\AnimalParade.rvz, -Rebuild para compilar desde cero,
 -NoStart para solo compilar.

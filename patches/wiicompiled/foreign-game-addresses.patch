@@ -553,19 +553,43 @@ index e3ba175..49d9409 100644
  void Audio_HLE_Tick(CpuContext* ctx, uint32_t deltaMicros);
  void Audio_HLE_Poll(CpuContext* ctx);
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..ffcc87a 100644
+index ea5a12b..d6b9144 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
-@@ -51,6 +51,8 @@ struct RuntimeUserConfig {
+@@ -51,6 +51,9 @@ struct RuntimeUserConfig {
      std::optional<bool> textureReplacements;
      std::optional<bool> textureDumps;
      std::optional<bool> showFps;
++    std::optional<std::string> language;
 +    std::optional<bool> fastLoading;
 +    std::optional<bool> fastForwardKey;
      std::optional<uint32_t> disabledPostProcessingPaths;
      std::optional<float> audioVolume;
      std::optional<float> audioMusicVolume;
-@@ -168,7 +170,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
+@@ -146,6 +149,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+ 
+ // Must stay in step with the backend table in main.cpp, which is what actually
+ // maps these to AuroraBackend.
++// The languages the console can be set to, as the game's SCGetLanguage reports them (0 = Japanese,
++// 1 = English, 2 = German, 3 = French, 4 = Spanish, 5 = Italian, 6 = Dutch). Animal Parade's disc
++// carries English, German, French, Spanish and Italian text, so those are the ones offered.
++inline constexpr std::array<std::pair<std::string_view, uint32_t>, 5> kConsoleLanguages{{
++    {"english", 1}, {"german", 2}, {"french", 3}, {"spanish", 4}, {"italian", 5},
++}};
++
++inline bool IsSupportedLanguage(std::string_view value) {
++    for (const auto& [name, code] : kConsoleLanguages) {
++        if (name == value) {
++            return true;
++        }
++    }
++    return false;
++}
++
+ inline bool IsSupportedGraphicsApi(std::string_view value) {
+ #if defined(__APPLE__)
+     static constexpr std::array<std::string_view, 2> values{"auto", "metal"};
+@@ -168,7 +187,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
  // 240 was offered by an early build and is no longer supported; a saved 240 is
  // migrated to 180 at the parse site.
  inline bool IsSupportedFrameInterpolationFps(uint32_t value) {
@@ -574,16 +598,35 @@ index ea5a12b..ffcc87a 100644
  }
  
  inline std::optional<std::filesystem::path> ExecutableDirectory() {
-@@ -464,6 +466,8 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
+@@ -298,6 +317,10 @@ inline void EnsureConfigFile() {
+               "# replacement would need. Both are read once, at startup.\n"
+               "texture_replacements = false\n"
+               "texture_dumps = false\n\n"
++              "[console]\n"
++              "# The language the console reports to the game: english, spanish, french,\n"
++              "# german or italian. Read once, at startup.\n"
++              "language = \"english\"\n\n"
+               "[audio]\n"
+               "volume = 1.0\n"
+               "music_volume = 1.0\n"
+@@ -464,6 +487,16 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
      config.gxWorker = FindConfigValue<bool>(document, "video", "gx_worker");
      config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
      config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
++    if (auto value = FindConfigValue<std::string>(document, "console", "language")) {
++        if (IsSupportedLanguage(*value)) {
++            config.language = *value;
++        } else {
++            std::cerr << "[runtime] Unknown console.language=\"" << *value
++                      << "\", using english" << std::endl;
++        }
++    }
 +    config.fastLoading = FindConfigValue<bool>(document, "speed", "fast_loading");
 +    config.fastForwardKey = FindConfigValue<bool>(document, "speed", "hold_tab_to_fast_forward");
      config.textureReplacements = FindConfigValue<bool>(document, "video", "texture_replacements");
      config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
      if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-@@ -665,6 +669,14 @@ inline bool SetDisplayMode(std::string value) {
+@@ -665,6 +698,14 @@ inline bool SetDisplayMode(std::string value) {
      return WriteSetting("video", "display_mode", FormatString(value));
  }
  
@@ -598,10 +641,18 @@ index ea5a12b..ffcc87a 100644
  inline bool SetSkipUnreadyPipelines(bool value) {
      Mutable().skipUnreadyPipelines = value;
      return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
-@@ -680,6 +692,16 @@ inline bool SetDisableCopyFilter(bool value) {
+@@ -680,6 +721,24 @@ inline bool SetDisableCopyFilter(bool value) {
      return WriteSetting("video", "disable_copy_filter", value ? "true" : "false");
  }
  
++inline bool SetLanguage(std::string value) {
++    if (!IsSupportedLanguage(value)) {
++        return false;
++    }
++    Mutable().language = value;
++    return WriteSetting("console", "language", FormatString(value));
++}
++
 +inline bool SetFastLoading(bool value) {
 +    Mutable().fastLoading = value;
 +    return WriteSetting("speed", "fast_loading", value ? "true" : "false");
@@ -615,10 +666,25 @@ index ea5a12b..ffcc87a 100644
  inline bool SetShowFps(bool value) {
      Mutable().showFps = value;
      return WriteSetting("video", "show_fps", value ? "true" : "false");
-@@ -979,6 +1001,14 @@ inline bool DisableCopyFilter(bool fallback = true) {
+@@ -979,6 +1038,29 @@ inline bool DisableCopyFilter(bool fallback = true) {
      return Get().disableCopyFilter.value_or(fallback);
  }
  
++inline std::string Language(std::string fallback = "english") {
++    return Get().language.value_or(std::move(fallback));
++}
++
++// The language as the console reports it to the game (see kConsoleLanguages).
++inline uint32_t ConsoleLanguageCode() {
++    const std::string language = Language();
++    for (const auto& [name, code] : kConsoleLanguages) {
++        if (name == language) {
++            return code;
++        }
++    }
++    return 1;
++}
++
 +inline bool FastLoading(bool fallback = true) {
 +    return Get().fastLoading.value_or(fallback);
 +}
@@ -2410,6 +2476,28 @@ index d2423e6..e764565 100644
  }
  
  void InsertThreadIntoQueueByPriority(uint32_t queuePtr, uint32_t threadPtr, int32_t priority)
+diff --git a/runtime/src/hle/sc.cpp b/runtime/src/hle/sc.cpp
+index 22e45dc..fdba12e 100644
+--- a/runtime/src/hle/sc.cpp
++++ b/runtime/src/hle/sc.cpp
+@@ -70,6 +70,17 @@ extern "C" uint32_t SCGetEuRgb60Mode_HLE()
+ 
+ PPC_NATIVE_OVERRIDE(801B1CAC, SCGetEuRgb60Mode_HLE, uint32_t, (), ());
+ 
++// 0x801B1D0C -> SCGetLanguage()
++// The console's language. The runtime never loads a SYSCONF, so without this the SDK falls back to
++// English. Games that carry several languages pick theirs from it (Animal Parade's disc has
++// English, German, French, Spanish and Italian text); [console] language in Config.toml picks it.
++extern "C" uint32_t SCGetLanguage_HLE()
++{
++    return RuntimeConfigFile::ConsoleLanguageCode();
++}
++
++PPC_NATIVE_OVERRIDE(801B1D0C, SCGetLanguage_HLE, uint32_t, (), ());
++
+ // Expose the selected emulated NAND identity through the SDK SC APIs.
+ 
+ extern "C" uint32_t SCGetProductArea_HLE()
 diff --git a/runtime/src/hle/storage/dvd.cpp b/runtime/src/hle/storage/dvd.cpp
 index b76e5e1..95ed9a3 100644
 --- a/runtime/src/hle/storage/dvd.cpp
@@ -3000,7 +3088,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..305107b 100644
+index 6c2083a..b8bca71 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -3083,7 +3171,7 @@ index 6c2083a..305107b 100644
      ImGui::Separator();
      if (ImGui::Checkbox("Mute game music while external media is playing",
                          &g_attenuateMusicWhenMediaPlays)) {
-@@ -1144,24 +1156,100 @@ void DrawAudioSettings() {
+@@ -1144,24 +1156,145 @@ void DrawAudioSettings() {
      }
  }
  
@@ -3155,6 +3243,51 @@ index 6c2083a..305107b 100644
 +    }
 +}
 +
++// The game's language, as the console reports it (SCGetLanguage, in hle/sc.cpp). The game reads it
++// while it starts, so the choice is saved to Config.toml and applies after a restart. Each name is
++// written in its own language, so a player can find theirs.
++void DrawLanguageChoice() {
++    struct Choice {
++        const char* label;
++        const char* configName;
++    };
++    static constexpr std::array<Choice, 5> kChoices{{
++        {"English", "english"},
++        {"Espanol", "spanish"},
++        {"Francais", "french"},
++        {"Deutsch", "german"},
++        {"Italiano", "italian"},
++    }};
++    static int selected = [] {
++        const std::string saved = RuntimeConfigFile::Language();
++        for (size_t i = 0; i < kChoices.size(); ++i) {
++            if (saved == kChoices[i].configName) {
++                return static_cast<int>(i);
++            }
++        }
++        return 0;
++    }();
++    static const int atLaunch = selected;
++
++    if (ImGui::BeginCombo("Language (next launch)", kChoices[static_cast<size_t>(selected)].label)) {
++        for (size_t i = 0; i < kChoices.size(); ++i) {
++            const bool isSelected = static_cast<int>(i) == selected;
++            if (ImGui::Selectable(kChoices[i].label, isSelected) && !isSelected) {
++                if (RuntimeConfigFile::SetLanguage(kChoices[i].configName)) {
++                    selected = static_cast<int>(i);
++                }
++            }
++            if (isSelected) {
++                ImGui::SetItemDefaultFocus();
++            }
++        }
++        ImGui::EndCombo();
++    }
++    if (selected != atLaunch) {
++        ImGui::TextDisabled("Saved. Restart the game to apply it.");
++    }
++}
++
 +void DrawGraphicsSettings() {
 +    g_displayMode = static_cast<int>(aurora_get_display_mode());
 +    // The aspect, force-aspect and bloom settings below drive Mario Kart Wii's own screens and
@@ -3197,7 +3330,7 @@ index 6c2083a..305107b 100644
      ImGui::Separator();
      struct EffectFlag {
          const char* label;
-@@ -1172,6 +1260,9 @@ void DrawGraphicsSettings() {
+@@ -1172,6 +1305,9 @@ void DrawGraphicsSettings() {
      }};
  
      for (const auto& effect : kEffectFlags) {
@@ -3207,7 +3340,7 @@ index 6c2083a..305107b 100644
          bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
          if (ImGui::Checkbox(effect.label, &disabled)) {
              if (disabled) {
-@@ -1183,8 +1274,10 @@ void DrawGraphicsSettings() {
+@@ -1183,8 +1319,10 @@ void DrawGraphicsSettings() {
              RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
          }
      }
@@ -3220,7 +3353,7 @@ index 6c2083a..305107b 100644
      static constexpr const char* kDisplayModes[] = {
          "Windowed",
          "Borderless fullscreen",
-@@ -1205,13 +1298,13 @@ void DrawGraphicsSettings() {
+@@ -1205,13 +1343,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -3237,15 +3370,14 @@ index 6c2083a..305107b 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1285,8 +1378,23 @@ void DrawGraphicsSettings() {
+@@ -1285,8 +1423,25 @@ void DrawGraphicsSettings() {
      if (ImGui::Checkbox("Show FPS", &g_showFps)) {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
 +    // Fast-forward: makes the game's own waits go by sooner (see VI_HLE_SetFastLoading).
 +    static bool s_fastLoading = RuntimeConfigFile::FastLoading(true);
 +    static bool s_fastForwardKey = RuntimeConfigFile::FastForwardKey(true);
-     ImGui::Separator();
--    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
++    ImGui::Separator();
 +    if (ImGui::Checkbox("Fast loading", &s_fastLoading)) {
 +        VI_HLE_SetFastLoading(s_fastLoading);
 +        RuntimeConfigFile::SetFastLoading(s_fastLoading);
@@ -3256,13 +3388,16 @@ index 6c2083a..305107b 100644
 +        RuntimeConfigFile::SetFastForwardKey(s_fastForwardKey);
 +    }
 +    ImGui::TextDisabled("While Tab is held the whole game runs up to four times faster.");
+     ImGui::Separator();
+-    ImGui::Text("Graphics API: %s", GraphicsApiDisplayName());
++    DrawLanguageChoice();
 +    ImGui::Separator();
 +    ImGui::Text("Graphics API in use: %s", GraphicsApiDisplayName());
 +    DrawGraphicsApiChoice();
  }
  
  void DrawFpsOverlay() {
-@@ -1663,6 +1771,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1663,6 +1818,10 @@ void HandleEvents(const AuroraEvent* events) noexcept {
              CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED
                                                                    : static_cast<uint32_t>(PAD_KEY_INVALID));
          }
@@ -3273,7 +3408,7 @@ index 6c2083a..305107b 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1844,12 @@ void Draw() noexcept {
+@@ -1732,6 +1891,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {

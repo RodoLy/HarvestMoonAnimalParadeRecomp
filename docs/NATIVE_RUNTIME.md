@@ -467,6 +467,15 @@ protocolo sin juego.
   ocurren mientras se camina. El runtime avisa en el log con `[frame-watch]`
   de tramos con muchos menos dibujos de lo normal y de fotogramas lentos.
 
+### El idioma (2026-11-11)
+
+El disco de EE. UU. (RBIEE9) trae los textos en cinco idiomas: `files/msglang/` tiene `eng`, `spa`,
+`fre`, `ger` e `ita` (más `bri`), y lo mismo `talk_la`, `event_la`, `cg_la` y `param_la`. El juego
+elige el suyo con `SCGetLanguage` (0x802A4F40), que lee el idioma de la consola de su SYSCONF. El
+runtime nunca carga un SYSCONF, así que el SDK caía siempre en inglés. Ahora `SCGetLanguage` es
+nativa (`runtime/src/hle/sc.cpp`) y devuelve el de `[console] language` en `Config.toml`, que se
+elige en F10 > Graphics > Language. No hace falta el disco europeo para jugar en español.
+
 ### Qué sigue
 
 1. Compilar el runtime de WiiCompiled con la capa (los pasos de arriba) en
@@ -935,6 +944,15 @@ protocol without a game.
   traces, one every two seconds, for problems that show up while walking. The
   runtime reports runs of frames with far fewer draws than usual and slow
   frames in the log with `[frame-watch]`.
+
+### The language (2026-11-11)
+
+The US disc (RBIEE9) carries the text in five languages: `files/msglang/` has `eng`, `spa`, `fre`,
+`ger` and `ita` (plus `bri`), and so do `talk_la`, `event_la`, `cg_la` and `param_la`. The game picks
+its own with `SCGetLanguage` (0x802A4F40), which reads the console's language from its SYSCONF. The
+runtime never loads a SYSCONF, so the SDK always fell back to English. `SCGetLanguage` is now native
+(`runtime/src/hle/sc.cpp`) and returns `[console] language` from `Config.toml`, chosen in
+F10 > Graphics > Language. The European disc is not needed to play in Spanish.
 
 ### What comes next
 
