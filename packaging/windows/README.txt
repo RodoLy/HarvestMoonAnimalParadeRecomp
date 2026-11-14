@@ -17,12 +17,14 @@ What you need
 How to play
 -----------
 1. Unzip the package to C:\HMAP (or another short folder).
-2. Double click play.cmd. The first time it asks for the disc image.
-3. Wait: it extracts the disc (once, a few minutes), translates the game (under a
-   minute) and compiles it (a while the first time; much less after that). Then the
-   game starts.
+2. Double click play.cmd (or Launcher.exe). The launcher opens.
+3. Choose "Prepare the game" and your disc image. It extracts the disc (once, a few
+   minutes), translates the game (under a minute) and compiles it (a while the first
+   time; much less after that). The launcher shows each step.
+4. Choose "Play".
 
-Next time, play.cmd only compiles what changed, or you can open Game\AnimalParade.exe.
+The Options tab has the game's settings (also in F10 inside the game). play.ps1 still
+works on its own, in a console window: play.cmd -Rebuild, for example, runs it.
 
 Settings, saves and logs are in UserData\. The disc image is remembered in
 UserData\disc.txt.
@@ -70,13 +72,16 @@ Qué necesitas
 Cómo jugar
 ----------
 1. Descomprime el paquete en C:\HMAP (u otra carpeta corta).
-2. Doble clic en play.cmd. La primera vez te pide la imagen del disco.
-3. Espera: extrae el disco (una sola vez, unos minutos), traduce el juego (menos de un
-   minuto) y lo compila (un rato la primera vez; mucho menos después). Luego el juego
-   empieza.
+2. Doble clic en play.cmd (o Launcher.exe). Se abre el launcher.
+3. Elige "Preparar el juego" y la imagen de tu disco. Extrae el disco (una sola vez,
+   unos minutos), traduce el juego (menos de un minuto) y lo compila (un rato la
+   primera vez; mucho menos después). El launcher muestra cada paso.
+4. Elige "Jugar".
 
-La siguiente vez, play.cmd solo compila lo que cambió, o puedes abrir
-Game\AnimalParade.exe.
+La pestaña Opciones tiene los ajustes del juego (también en F10 dentro del juego).
+play.ps1 sigue funcionando solo, en una ventana de consola: play.cmd -Rebuild, por
+ejemplo, lo corre.
+
 
 La configuración, las partidas y los registros están en UserData\. La imagen del disco
 se recuerda en UserData\disc.txt.
