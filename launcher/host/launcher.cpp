@@ -382,7 +382,9 @@ void StartPreparation(bool startGameAfter) {
     g_prep.cancelled = false;
     g_prep.startGameAfter = startGameAfter;
     { std::lock_guard lock(g_prep.errorLock); g_prep.error.clear(); }
-    SendProgress(0, 0);
+    // Preparing shows its steps from the start. Playing first checks, in a second or two, that the
+    // game is current; the steps show only if there is real work (a new disc, a changed package).
+    if (!startGameAfter) SendProgress(0, 0);
 
     std::wstring command = L"powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File \"" +
                            (Root() / L"play.ps1").wstring() + L"\" -NoStart";
@@ -419,7 +421,7 @@ void StartPreparation(bool startGameAfter) {
     CloseHandle(process.hThread);
     g_prep.process = process.hProcess;
 
-    std::thread([readEnd, processHandle = process.hProcess] {
+    std::thread([readEnd, processHandle = process.hProcess, showSteps = !startGameAfter]() mutable {
         int stage = 0;
         double fraction = 0;
         std::string pending;
@@ -437,7 +439,14 @@ void StartPreparation(bool startGameAfter) {
                 const int oldStage = stage;
                 const double oldFraction = fraction;
                 ReadProgressLine(line, stage, fraction);
-                if (stage != oldStage || fraction - oldFraction > 0.004) SendProgress(stage, fraction);
+                // Real work: extracting, translating (not "is current"), or compiling something.
+                if (!showSteps && (line.find(L"== Extracting") != std::wstring::npos ||
+                                   line.find(L"== Translating") != std::wstring::npos ||
+                                   (line.size() > 1 && line[0] == L'[' && line.find(L'/') != std::wstring::npos))) {
+                    showSteps = true;
+                    SendProgress(stage, fraction);
+                }
+                if (showSteps && (stage != oldStage || fraction - oldFraction > 0.004)) SendProgress(stage, fraction);
                 // An error from the script: "play.ps1 : <message>" or the message on its own line.
                 if (line.find(L"play.ps1 :") == 0) {
                     std::lock_guard lock(g_prep.errorLock);
