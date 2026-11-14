@@ -36,10 +36,16 @@ if (-not $Processor) {
 $compiler = Join-Path $bin "$Processor-w64-mingw32-clang++.exe"
 if (-not (Test-Path -LiteralPath $compiler)) { throw "No compiler at $compiler." }
 
+# The icon (host\launcher.rc), as an object file the compiler links in.
+$windres = Join-Path $bin "$Processor-w64-mingw32-windres.exe"
+$icon = Join-Path ([IO.Path]::GetTempPath()) "launcher-icon-$Processor.o"
+& $windres (Join-Path $here 'host\launcher.rc') -O coff -o $icon
+if ($LASTEXITCODE -ne 0) { throw "The launcher's icon did not compile (exit code $LASTEXITCODE)." }
+
 $loader = Join-Path $here 'third_party\OpenWebView2Loader'
 & $compiler -std=c++17 -O2 -municode -mwindows `
     "-I$loader\Include" "-I$loader\Source" `
-    (Join-Path $here 'host\launcher.cpp') (Join-Path $loader 'Source\WebView2Loader.cpp') `
+    (Join-Path $here 'host\launcher.cpp') (Join-Path $loader 'Source\WebView2Loader.cpp') $icon `
     -static -lole32 -lversion -lcomdlg32 -lshell32 -luuid `
     -o (Join-Path $Package 'Launcher.exe')
 if ($LASTEXITCODE -ne 0) { throw "Launcher.exe did not compile (exit code $LASTEXITCODE)." }

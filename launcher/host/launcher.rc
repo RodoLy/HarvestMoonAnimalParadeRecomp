@@ -1,0 +1,3 @@
+// The program's icon: the cow from the launcher's animals, on the launcher's colours. The same
+// icon is the game's (packaging/windows/AnimalParade.ico, see the package workflows).
+1 ICON "../../packaging/windows/AnimalParade.ico"

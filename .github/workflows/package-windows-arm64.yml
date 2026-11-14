@@ -188,6 +188,8 @@ jobs:
           }
 
           Copy-Item (Join-Path $wc 'runtime') (Join-Path $workspace 'runtime') -Recurse
+          # The game's icon: the launcher's cow instead of WiiCompiled's (packaging/windows/AnimalParade.ico).
+          Copy-Item packaging\windows\AnimalParade.ico (Join-Path $workspace 'runtime\resources\WiiCompiled.ico') -Force
           Remove-Item (Join-Path $workspace 'runtime\build') -Recurse -Force -ErrorAction SilentlyContinue
           Copy-Item (Join-Path $wc 'aurora-main') (Join-Path $workspace 'aurora-main') -Recurse
           Remove-Item (Join-Path $workspace 'aurora-main\.git') -Recurse -Force -ErrorAction SilentlyContinue
