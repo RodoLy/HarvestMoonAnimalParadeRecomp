@@ -230,7 +230,13 @@ function overall() {
 }
 
 function count() { return state.tab === 2 ? state.mods.length : rows().length; }
-function move(step) { const n = count(); if (n) { state.sel = (state.sel + step + n) % n; state.toast = ''; render(); } }
+function move(step) {
+  const n = count();
+  if (!n) return;
+  state.sel = (state.sel + step + n) % n; state.toast = '';
+  render();
+  showChosenRow();
+}
 function setTab(i) { state.tab = (i + 4) % 4; state.sel = 0; state.scroll = 0; state.toast = ''; render(); }
 function escape() {
   if (state.status === 'preparing') send({ cmd: 'cancel' });
@@ -319,20 +325,12 @@ function render() {
   $('panelTitle').textContent = tab === 2 ? w.modsOn(onCount, state.mods.length) : w.panel[tab];
   $('tabAnimal').innerHTML = animal(['lion', 'elephant', 'hippo', 'giraffe'][tab], { width: 66, height: 66, objectFit: 'cover', marginTop: 4 });
 
-  // Scroll so that the chosen row shows.
-  const heights = tab === 2 ? state.mods.map(() => 72) : list.map((r) => (r.play ? 124 : 56));
-  const visible = 340;
-  let y = 0; const tops = heights.map((h) => { const top = y; y += h + 6; return top; });
-  const total = Math.max(0, y - 6);
-  if (heights.length) state.scroll = Math.min(Math.max(state.scroll, tops[sel] + heights[sel] - visible), tops[sel]);
-  state.scroll = Math.max(0, Math.min(state.scroll, Math.max(0, total - visible)));
-  $('handle').style.top = (1 + 264 * (heights.length > 1 ? sel / (heights.length - 1) : 0)) + 'px';
 
   // The list (or the mods).
   let html = '';
   if (tab !== 2) {
     html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
-      '<div style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:' + (tab === 3 ? 520 : 1124) + 'px;transform:translateY(' + (-state.scroll) + 'px)">' +
+      '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:' + (tab === 3 ? 520 : 1124) + 'px">' +
       list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
   if (tab === 3) {
@@ -347,6 +345,7 @@ function render() {
     html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + w.noMods + '</div>';
   }
   $('content').innerHTML = html;
+  applyScroll(false);
   blinkEyes($('stage'));
 
   // The message box: what just happened, or what the chosen row does.
@@ -379,23 +378,60 @@ $('stage').addEventListener('mousemove', (e) => {
   const rowEl = e.target.closest('[data-row]');
   if (rowEl && Number(rowEl.dataset.row) !== state.sel) { state.sel = Number(rowEl.dataset.row); state.toast = ''; render(); }
 });
-$('stage').addEventListener('wheel', (e) => { if (e.target.closest('.wheel')) move(e.deltaY > 0 ? 1 : -1); });
-// The scroll bar: the arrows move one row; clicking or dragging on the bar picks the row at that
-// height, as the handle shows the chosen row's place in the list.
-$('scrollUp').addEventListener('click', () => move(-1));
-$('scrollDown').addEventListener('click', () => move(1));
-function pickFromBar(clientY) {
-  const n = count();
-  if (n < 2) return;
-  const bar = $('track').getBoundingClientRect();
-  const along = Math.min(1, Math.max(0, (clientY - bar.top) / bar.height));
-  const row = Math.round(along * (n - 1));
-  if (row !== state.sel) { state.sel = row; state.toast = ''; render(); }
+$('stage').addEventListener('wheel', (e) => { if (e.target.closest('.wheel')) { e.preventDefault(); scrollBy(e.deltaY); } }, { passive: false });
+// The scroll bar, like any other: the handle's size is how much of the list shows, dragging it
+// or the mouse wheel moves the list smoothly, a click on the bar jumps there, the arrows step.
+const VISIBLE = 352;     // the height of the list's window
+const TRACK = 300;       // the inside of the bar
+function listHeight() { const list = $('list'); return list ? list.offsetHeight : 0; }
+function maxScroll() { return Math.max(0, listHeight() - VISIBLE); }
+function handleSize() { const total = listHeight(); return total > VISIBLE ? Math.max(28, TRACK * VISIBLE / total) : TRACK; }
+
+function applyScroll(smooth) {
+  state.scroll = Math.max(0, Math.min(state.scroll, maxScroll()));
+  const list = $('list');
+  if (list) {
+    list.style.transition = smooth ? 'transform .14s ease-out' : 'none';
+    list.style.transform = 'translateY(' + (-state.scroll) + 'px)';
+  }
+  const size = handleSize(), room = TRACK - size;
+  $('handle').style.height = size + 'px';
+  $('handle').style.top = (1 + (maxScroll() ? room * state.scroll / maxScroll() : 0)) + 'px';
+  $('handle').style.opacity = maxScroll() ? 1 : 0.45;
 }
+
+function scrollBy(pixels) { state.scroll += pixels; applyScroll(true); }
+
+// After the keys change the chosen row, bring it into view.
+function showChosenRow() {
+  const row = document.querySelector('[data-row="' + state.sel + '"]');
+  if (!row) return;
+  const top = row.offsetTop - 6, bottom = row.offsetTop + row.offsetHeight + 6;
+  if (top < state.scroll) state.scroll = top;
+  else if (bottom > state.scroll + VISIBLE) state.scroll = bottom - VISIBLE;
+  applyScroll(true);
+}
+
+$('scrollUp').addEventListener('click', () => scrollBy(-62));
+$('scrollDown').addEventListener('click', () => scrollBy(62));
 $('track').addEventListener('mousedown', (e) => {
   e.preventDefault();
-  pickFromBar(e.clientY);
-  const follow = (m) => pickFromBar(m.clientY);
+  const bar = $('track').getBoundingClientRect();
+  const scale = bar.height / 304;  // the page is scaled to the window
+  const size = handleSize(), room = TRACK - size;
+  if (!room) return;
+  const handle = $('handle').getBoundingClientRect();
+  // A click outside the handle first centres the handle there; then it follows the mouse.
+  if (e.clientY < handle.top || e.clientY > handle.bottom) {
+    const y = (e.clientY - bar.top) / scale - size / 2;
+    state.scroll = Math.max(0, Math.min(room, y)) / room * maxScroll();
+    applyScroll(true);
+  }
+  const startY = e.clientY, startScroll = state.scroll;
+  const follow = (m) => {
+    state.scroll = startScroll + (m.clientY - startY) / scale * maxScroll() / room;
+    applyScroll(false);
+  };
   const stop = () => { window.removeEventListener('mousemove', follow); window.removeEventListener('mouseup', stop); };
   window.addEventListener('mousemove', follow);
   window.addEventListener('mouseup', stop);
