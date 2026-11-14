@@ -380,6 +380,26 @@ $('stage').addEventListener('mousemove', (e) => {
   if (rowEl && Number(rowEl.dataset.row) !== state.sel) { state.sel = Number(rowEl.dataset.row); state.toast = ''; render(); }
 });
 $('stage').addEventListener('wheel', (e) => { if (e.target.closest('.wheel')) move(e.deltaY > 0 ? 1 : -1); });
+// The scroll bar: the arrows move one row; clicking or dragging on the bar picks the row at that
+// height, as the handle shows the chosen row's place in the list.
+$('scrollUp').addEventListener('click', () => move(-1));
+$('scrollDown').addEventListener('click', () => move(1));
+function pickFromBar(clientY) {
+  const n = count();
+  if (n < 2) return;
+  const bar = $('track').getBoundingClientRect();
+  const along = Math.min(1, Math.max(0, (clientY - bar.top) / bar.height));
+  const row = Math.round(along * (n - 1));
+  if (row !== state.sel) { state.sel = row; state.toast = ''; render(); }
+}
+$('track').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  pickFromBar(e.clientY);
+  const follow = (m) => pickFromBar(m.clientY);
+  const stop = () => { window.removeEventListener('mousemove', follow); window.removeEventListener('mouseup', stop); };
+  window.addEventListener('mousemove', follow);
+  window.addEventListener('mouseup', stop);
+});
 $('esc').addEventListener('click', escape);
 $('close').addEventListener('click', () => send({ cmd: 'exit' }));
 $('minimize').addEventListener('click', () => send({ cmd: 'minimize' }));
