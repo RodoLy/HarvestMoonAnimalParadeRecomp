@@ -189,6 +189,10 @@ jobs:
           foreach ($file in 'play.ps1', 'play.cmd', 'README.txt') {
             Copy-Item "packaging\windows\$file" $env:PACKAGE
           }
+          # The launcher (launcher\README.md): Launcher.exe, built with the package's own compiler,
+          # and its page. play.cmd opens it. version.txt is the version it shows.
+          & launcher\build.ps1 -Package $env:PACKAGE
+          Set-Content (Join-Path $env:PACKAGE 'version.txt') ('v' + (Get-Content VERSION).Trim())
           # Makes the runtime keep its settings, saves and logs in UserData next to play.ps1.
           Set-Content (Join-Path $env:PACKAGE 'portable.txt') 'Harvest Moon: Animal Parade keeps its user data in UserData.'
           New-Item -ItemType Directory -Force -Path (Join-Path $env:PACKAGE 'licenses') | Out-Null
