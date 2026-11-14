@@ -1,132 +1,104 @@
-# Harvest Moon: Animal Parade – PC recompilation
+# Harvest Moon: Animal Parade – native PC port
 
-[Español](#español) · [English](#english)
+[Español](README.es.md)
 
----
-
-## Español
-
-Port a PC de *Harvest Moon: Animal Parade* (Wii) por recompilación estática,
-siguiendo el mismo camino que el recomp de *Magical Melody*
+A native PC port of *Harvest Moon: Animal Parade* (Wii) by static recompilation: the game's
+PowerPC code is translated to C++ and compiled for your computer, and the Wii it expects is
+provided by [WiiCompiled](https://github.com/patchzyy/wiicompiled)'s runtime. There is no emulator.
+It follows the same path as the *Magical Melody* recompilation
 ([HMMMGC](https://github.com/RodoLy/hmmmgc)).
 
-**Binario objetivo:** `Harvest Moon: Animal Parade (USA)`, ID `RBIEE9`,
-revisión 1. `sys/main.dol` SHA-1 `6ca574d26858941bfd1404b0293ef84bd821ddd0`.
+**This repository contains no game data.** You need your own disc: `Harvest Moon: Animal
+Parade (USA)`, ID `RBIEE9`, revision 1 (`sys/main.dol` SHA-1
+`6ca574d26858941bfd1404b0293ef84bd821ddd0`).
 
-Este repositorio no contiene datos del juego. Necesitas tu propio respaldo del
-disco.
+![The farm with the wide picture](docs/images/wide-picture.jpg)
 
-### Estado
+## What this port adds
 
-- **Fase 0 terminada:** mapa de funciones del ejecutable (17 142 funciones,
-  validado contra el índice de excepciones de CodeWarrior), con 1 241 nombres
-  del SDK. Ver [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
-- **Fase 1 empezada:** el script para compilar y jugar en Linux o WSL2 ya
-  está adaptado ([docs/BUILDING.md](docs/BUILDING.md)), pero todavía no se ha
-  probado con el juego. Falta el paquete nativo para Windows en ARM.
-- **Fase 2 (runtime sin Dolphin) empezada:** el traductor de WiiCompiled ya
-  traduce el juego entero (17 217 funciones), y está medido qué pide el juego y
-  qué ya da WiiCompiled. GX, OS, DVD, VI y PPC ya tienen nombre en casi todo lo que
-  el juego llama (GX 117 de 129, OS 101 de 108), y
-  está la capa que pone las nativas de WiiCompiled en las direcciones de este
-  juego (271 de 582). Ver
-  [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) y [docs/PLAN.md](docs/PLAN.md).
+Out of the box the game looks and plays as it did on the Wii: 4:3 picture, 30 frames per
+second, English. Everything below except fast loading is a choice in the **F10** menu.
 
-### Jugar en Windows (x86-64, en pruebas)
+| | |
+|---|---|
+| **Native on Windows x64 and Windows on ARM** | Two packages: x86-64, and ARM64 for Snapdragon X laptops, so the game runs natively instead of through x86-64 emulation. |
+| **Wide picture** | *F10 > Graphics > Picture > Wide* fills a widescreen window: the 3D cameras see more at the sides, and the menus and text keep their shape in the middle. |
+| **Frame interpolation** | The game runs at 30 FPS; *F10 > Graphics > Frame interpolation* shows 60, 120 or 180 FPS by inserting frames in between. The game's own speed does not change. |
+| **Fast loading** | Always on: the black screens between areas go by four times faster. Holding **Tab** fast-forwards everything (off by default; turn it on in F10). |
+| **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
+| **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
+| **No Wii Remote needed** | An emulated Wii Remote with Nunchuk driven by a gamepad or the keyboard; the mouse is the pointer. A real Wii Remote can be paired instead. |
 
-El workflow **Windows x64 package** (pestaña Actions → Run workflow) arma un
-paquete sin datos del juego: el runtime de WiiCompiled con la capa de este juego,
-su traductor y su compilador portátil. En tu computadora, `play.cmd` toma tu
-imagen del disco (.rvz, .iso o .wbfs), la extrae, traduce el juego, lo compila y
-lo inicia. Los pasos están en
-[packaging/windows/README.txt](packaging/windows/README.txt). Para PCs con Windows
-sobre ARM (por ejemplo laptops Snapdragon X) hay un segundo workflow, **Windows
-ARM64 package**, que arma el mismo paquete con herramientas ARM64 para que el
-juego corra de forma nativa y no con la emulación de x86-64 (en pruebas: aún no
-se ha comprobado que arranque). Allí el runtime se compila en tu computadora la
-primera vez.
+| Original (4:3) | Wide |
+|---|---|
+| ![Original picture](docs/images/original-picture.jpg) | ![Wide picture](docs/images/wide-picture.jpg) |
 
-### Empezar
+![Town Hall](docs/images/town.jpg)
 
-Necesitas Python 3.11+.
+### Languages, and why the US disc has them
 
-```sh
-python3 -m pip install -r requirements-dev.txt   # capstone, pytest, ruff
+The US disc already carries the game's text in five languages: `files/msglang/`, `talk_la/`,
+`event_la/`, `param_la/` and `cg_la/` each have `eng`, `spa`, `fre`, `ger` and `ita` folders
+(plus `bri`, British English). The European and US releases share that text; the US game
+just never uses it, because its function that picks the language (0x8010FF04) always answers
+English. The port answers it, and the Wii's own `SCGetLanguage`, with the language you choose
+in *F10 > Graphics > Language*. Restart the game after changing it.
 
-# 1. Extrae tu disco a orig/RBIEE9 (en Dolphin: clic derecho en el juego →
-#    Propiedades → Sistema de archivos → clic derecho en la partición de datos →
-#    Extraer partición completa) y comprueba que sea el binario correcto
-python3 tools/check_disc.py
+Known issue: in any language other than English the title screen shows the Japanese logo. The
+US disc only has the Japanese and the English logos; the European logo is not on it.
 
-# 2. Regenera el mapa de funciones y corre las pruebas
-python3 tools/analyze.py
-python3 -m pytest
+## Play on Windows
 
-# 3. Lee cualquier función
-python3 tools/disasm.py OSInit
-```
+1. In the **Actions** tab, run **Windows x64 package** or, on a Windows on ARM PC,
+   **Windows ARM64 package**, and download the package (it has no game data).
+2. Unzip it to a short folder, such as `C:\HMAP`.
+3. Double click `play.cmd` and choose your disc image (.rvz, .iso or .wbfs). The first time
+   it extracts the disc, translates the game and compiles it; then the game starts.
 
-En Windows usa `py` en lugar de `python3`. En una PC con procesador ARM,
-instala el Python **x64**: `capstone` no publica paquete precompilado para
-Windows ARM64.
+The full steps are in [packaging/windows/README.txt](packaging/windows/README.txt). Settings,
+saves and logs are in `UserData\`.
 
-### Relación con otros repositorios
+## Frequently asked questions
 
-- **[HMMMGC](https://github.com/RodoLy/hmmmgc)**: de ahí vienen las
-  herramientas de `tools/` y las pruebas. Funcionaron sin cambios en este juego.
-- **Repositorio de investigación de Animal Parade** (descompilación): la
-  organización del disco, los nombres originales de archivos y clases, y el
-  menú de desarrolladores oculto.
+These came up while the port was being made.
 
-### Licencia
+**The first start takes a long time.** The first time, `play.cmd` extracts the disc,
+translates the game's code and compiles it; that is several minutes. Later starts only build
+what changed.
 
-GNU General Public License, versión 3 o posterior (GPL-3.0-or-later), igual que
-HMMMGC, ModernGekko y DolRecomp. El texto completo está en [LICENSE](LICENSE).
-El juego no se incluye ni se distribuye.
+**It runs slowly on my Snapdragon X laptop.** Use the ARM64 package. The x64 package works on
+Windows on ARM, but through x86-64 emulation.
 
----
+**On Snapdragon X the picture is split down the middle, or things blink.** That is the 2023
+Adreno graphics driver with Direct3D 12. Update the driver with the *Snapdragon Control Panel*
+app (Microsoft Store) or your laptop maker's support app; newer drivers draw it right.
 
-## English
+**Vulkan stops with "Device lost", runs at 20 FPS or shows a blue and green screen on
+Snapdragon X.** On the Adreno GPU Vulkan only gets a reduced mode. Use Direct3D 12, which is
+what *Automatic* picks.
 
-A PC port of *Harvest Moon: Animal Parade* (Wii) by static recompilation,
-following the same path as the *Magical Melody* recompilation
-([HMMMGC](https://github.com/RodoLy/hmmmgc)).
+**The FPS counter says 30.** That is the game's own speed on the Wii. Turn on *Frame
+interpolation* in F10 to see 60, 120 or 180 FPS.
 
-**Target binary:** `Harvest Moon: Animal Parade (USA)`, ID `RBIEE9`,
-revision 1. `sys/main.dol` SHA-1 `6ca574d26858941bfd1404b0293ef84bd821ddd0`.
+**With interpolation the counter drops below 60 outdoors.** Big outdoor areas are heavier. When
+a frame of the game is late, there is no frame to insert for it; the game itself keeps its
+speed.
 
-This repository contains no game data. You need your own backup of the disc.
+**I chose Spanish but the game is still in English.** Restart the game: it reads the language
+once, while it starts. Also check that you started the port with `play.cmd` and not another
+copy or Dolphin.
 
-### Status
+**The game looks different from what I see here.** Make sure you start `play.cmd` from the
+package folder. `Game\AnimalParade.exe` starts the last build without updating it, and Dolphin
+is a different program altogether.
 
-- **Phase 0 done:** function map of the executable (17,142 functions,
-  validated against CodeWarrior's exception index), with 1,241 SDK names. See
-  [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md).
-- **Phase 1 started:** the script to build and play on Linux or WSL2 is
-  adapted ([docs/BUILDING.md](docs/BUILDING.md)) but not yet tested with the
-  game. The native package for Windows on ARM is still to do.
-- **Phase 2 (runtime without Dolphin) started:** WiiCompiled's translator
-  already translates the whole game (17,217 functions), and what the game needs
-  and what WiiCompiled already provides is measured. GX, OS, DVD, VI and PPC now have
-  a name for almost everything the game calls (GX 117 of 129, OS 101 of 108),
-  and the layer that puts WiiCompiled's natives at this game's addresses is
-  done (271 of 582). See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md)
-  and [docs/PLAN.md](docs/PLAN.md).
+**Why does the title screen show the Japanese logo in Spanish?** See *Known issue* above.
 
-### Play on Windows (x86-64, being tried)
+**Are there cheats?** Not for now. Codes that change the game's instructions cannot work in a
+recompiled game, and the ones that only change values in memory need addresses that are still
+being found.
 
-The **Windows x64 package** workflow (Actions tab → Run workflow) builds a
-package with no game data: WiiCompiled's runtime with this game's layer, its
-translator and its portable compiler. On your computer, `play.cmd` takes your
-disc image (.rvz, .iso or .wbfs), extracts it, translates the game, compiles it
-and starts it. The steps are in
-[packaging/windows/README.txt](packaging/windows/README.txt). For Windows on ARM
-PCs (for example Snapdragon X laptops) a second workflow, **Windows ARM64
-package**, builds the same package with ARM64 tools so the game runs natively
-instead of through x86-64 emulation (being tried: it has not yet been confirmed
-to start). There the runtime is compiled on your computer the first time.
-
-### Getting started
+## For developers
 
 You need Python 3.11+.
 
@@ -146,19 +118,22 @@ python3 -m pytest
 python3 tools/disasm.py OSInit
 ```
 
-On Windows use `py` instead of `python3`. On a PC with an ARM processor,
-install the **x64** Python: `capstone` publishes no prebuilt package for
-Windows ARM64.
+On Windows use `py` instead of `python3`. On a PC with an ARM processor, install the **x64**
+Python: `capstone` publishes no prebuilt package for Windows ARM64.
 
-### Related repositories
+How the port works: [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) (the runtime and every
+change made for this game), [docs/FUNCTION_MAP.md](docs/FUNCTION_MAP.md) (the function map,
+17,142 functions) and [docs/PLAN.md](docs/PLAN.md).
 
-- **[HMMMGC](https://github.com/RodoLy/hmmmgc)**: the tools in `tools/` and the
-  tests come from there. They worked unchanged on this game.
-- **The Animal Parade research repository** (decompilation): the disc layout,
-  the original file and class names, and the hidden developers' menu.
+## Related repositories
 
-### License
+- **[HMMMGC](https://github.com/RodoLy/hmmmgc)**: the tools in `tools/` and the tests come
+  from there. They worked unchanged on this game.
+- **The Animal Parade research repository** (decompilation): the disc layout, the original
+  file and class names, and the hidden developers' menu.
 
-GNU General Public License, version 3 or later (GPL-3.0-or-later), like
-HMMMGC, ModernGekko and DolRecomp. The full text is in [LICENSE](LICENSE). The
-game is not included or distributed.
+## License
+
+GNU General Public License, version 3 or later (GPL-3.0-or-later), like HMMMGC, ModernGekko
+and DolRecomp. The full text is in [LICENSE](LICENSE). The game is not included or
+distributed; the screenshots are from the port running a legally owned disc.
