@@ -24,7 +24,7 @@ segundo, en inglés. Todo lo de abajo, menos la carga rápida, se elige en el me
 | **Nativo en Windows x64 y Windows en ARM** | Dos paquetes: x86-64, y ARM64 para laptops Snapdragon X, para que el juego corra nativo y no con la emulación de x86-64. |
 | **Imagen ancha** | *F10 > Graphics > Picture > Wide* llena una ventana panorámica: las cámaras 3D ven más a los lados, y los menús y textos conservan su forma en el centro. |
 | **Interpolación de cuadros** | El juego corre a 30 FPS; *F10 > Graphics > Frame interpolation* muestra 60, 120 o 180 FPS metiendo cuadros intermedios. La velocidad del juego no cambia. |
-| **Carga rápida** | Siempre activa: las pantallas negras entre zonas pasan cuatro veces más rápido. Mantener **Tab** acelera todo (apagado de inicio; se activa en F10). |
+| **Carga rápida** | Siempre activa: las pantallas negras entre zonas pasan cuatro veces más rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
 | **Cinco idiomas** | Inglés, español, francés, alemán e italiano desde el mismo disco de EE. UU. (ver abajo). |
 | **Direct3D 12 o Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* elige Direct3D 12. |
 | **Sin Wii Remote** | Un Wii Remote con Nunchuk emulado que se maneja con mando o teclado; el mouse es el puntero. También se puede emparejar un Wii Remote real. |
@@ -92,7 +92,7 @@ arrancar.
 disco de EE. UU. solo tiene el logo japonés para mostrar (ver *Problema conocido* arriba).
 
 **¿Cómo uso el puntero del Wii Remote?** Con el mouse: es el puntero, clic izquierdo es A y clic
-derecho es B. Los botones del mando y del teclado se cambian en F10.
+derecho es B. Los botones del mando y del teclado se cambian en la pestaña Controles del launcher o en F10.
 
 **¿Dónde están mis partidas?** En `UserData\NAND\`, junto a la configuración
 (`UserData\Config.toml`). Copia toda la carpeta `UserData` para guardarlas.

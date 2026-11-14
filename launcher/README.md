@@ -25,6 +25,12 @@ and of `host/launcher.cpp`. To prepare the game the program runs `play.ps1 -NoSt
 script `play.cmd` always ran, hidden, and turns its lines into the three steps on the page.
 Settings go to `UserData\Config.toml`; the first time, they start as the original game.
 
+**Controls tab.** Each Wii Remote and Nunchuk button (and fast-forward) has a key and a controller
+button: choose a row, press Enter, then press the key or the controller button. Keys go to
+`UserData\keyboard_bindings.dat`, the file the game's input library keeps (its layout is described
+in `host/launcher.cpp`); controller buttons go to `[controller]` in `Config.toml`, and
+fast-forward's to `[speed]`. The game reads both at start, and F10 > Controls changes the same ones.
+
 **Try the page in a browser.** Open `web/index.html`: without the program around it the page
 pretends to prepare, so the design can be looked at and clicked through.
 
@@ -46,6 +52,13 @@ contesta con el estado del juego; la lista de mensajes está al principio de `we
 `host/launcher.cpp`. Para preparar el juego, el programa corre `play.ps1 -NoStart`, el mismo
 script que siempre corrió `play.cmd`, oculto, y convierte sus líneas en los tres pasos de la
 página. Los ajustes van a `UserData\Config.toml`; la primera vez empiezan como el juego original.
+
+**Pestaña Controles.** Cada botón del Wii Remote y del Nunchuk (y el avance rápido) tiene una tecla
+y un botón del control: eliges una fila, Enter, y presionas la tecla o el botón del control. Las
+teclas van a `UserData\keyboard_bindings.dat`, el archivo que guarda la biblioteca de entrada del
+juego (su formato está descrito en `host/launcher.cpp`); los botones del control van a
+`[controller]` en `Config.toml`, y los del avance rápido a `[speed]`. El juego los lee al iniciar, y
+F10 > Controles cambia los mismos.
 
 **Probar la página en un navegador.** Abre `web/index.html`: sin el programa alrededor, la página
 finge que prepara, para poder ver el diseño y probarlo.

@@ -3,7 +3,8 @@
 // (see "Without the program" at the end), which is how the design can be looked at and tried.
 //
 // Messages to the program:   { cmd: 'hello' | 'prepare' | 'play' | 'cancel' | 'chooseDisc' |
-//                               'openLog' | 'exit' | 'minimize' | 'drag' | 'setOption' | 'setUiLanguage', ... }
+//                               'openLog' | 'exit' | 'minimize' | 'drag' | 'setOption' | 'setUiLanguage' |
+//                               'setKey' | 'setPad' | 'setKeyboard' | 'resetControls', ... }
 // Messages from the program: { type: 'state', ... }      everything the page shows about the game
 //                            { type: 'progress', ... }   a step of the preparation and how far it is
 //                            { type: 'finished', ... }   the preparation ended: ok, or the error
@@ -17,7 +18,7 @@
 const T = {
   es: {
     subtitle: 'versión nativa para PC', tabs: ['Juego', 'Opciones', 'Mods', 'Controles'],
-    panel: ['Animal Parade', 'Imagen y sonido', '', 'Dispositivos'], modsOn: (a, b) => a + ' de ' + b + ' activados',
+    panel: ['Animal Parade', 'Imagen y sonido', '', 'Botones y teclas'], modsOn: (a, b) => a + ' de ' + b + ' activados',
     disc: 'Disco', version: 'versión', on: 'Activado', off: 'Desactivado',
     ready: 'Listo', notPrepared: 'Sin preparar', preparingS: 'Preparando', failed: 'Falló',
     play: 'Jugar', prepare: 'Preparar el juego', preparing: 'Preparando…', tryAgain: 'Intentar de nuevo',
@@ -35,17 +36,24 @@ const T = {
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
     noMods: 'No hay mods en la carpeta Mods.', modNoSettings: 'Este mod no tiene ajustes.', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
-    keyboard: 'Teclado', keyboardHint: 'El teclado funciona como el control que mapeas en F10.', inUse: 'En uso',
+    keyboard: 'Teclado', keyboardHint: 'El teclado como el control del jugador 1. Apagado, se juega solo con un control o un Wii Remote real.',
     controller: 'Control', controllerHint: 'Conecta un control y el juego lo toma en lugar del teclado.',
     notConnected: 'No conectado', connected: 'Conectado',
     mouse: 'Mouse', mouseHint: 'El mouse es el puntero del Wii Remote: clic izquierdo A, clic derecho B.', pointer: 'Puntero',
     wiimote: 'Wii Remote real', wiimoteHint: 'Un Wii Remote real se empareja dentro del juego, en F10.', inF10: 'En F10',
-    mapTitle: 'Wii Remote y Nunchuk emulados',
-    map: [['Stick', 'Stick del Nunchuk'], ['A / B', 'A / B'], ['X / Y', '1 / 2'], ['L / R', 'Z / C'], ['Start / Z', '+ / −'], ['Start + Z', 'Home'], ['Cruceta · C-stick', 'Cruceta']],
+    bindHint: (name) => 'Enter y luego presiona la tecla o el botón del control para ' + name + '.',
+    bindKeyOnly: 'En el control es el stick izquierdo; aquí se cambia la tecla.',
+    homeNote: 'Home es + y − a la vez.',
+    capture: (name) => 'Presiona una tecla o un botón del control para ' + name + '. Supr la deja sin tecla; Esc cancela.',
+    captureKeyOnly: (name) => 'Presiona una tecla para ' + name + '. Supr la deja sin tecla; Esc cancela.',
+    pressNow: 'Presiona…', none: 'Ninguno',
+    fastForwardHint: 'Mantenerlo acelera todo el juego hasta cuatro veces. Se enciende en Opciones.',
+    reset: 'Restaurar los controles', resetHint: 'Vuelve a poner las teclas y los botones del control como al principio.', resetDone: 'Se restauraron los controles.',
+    reserved: 'F10 abre el menú del juego; elige otra tecla.',
   },
   en: {
     subtitle: 'native PC port', tabs: ['Game', 'Options', 'Mods', 'Controls'],
-    panel: ['Animal Parade', 'Picture and sound', '', 'Devices'], modsOn: (a, b) => a + ' of ' + b + ' on',
+    panel: ['Animal Parade', 'Picture and sound', '', 'Buttons and keys'], modsOn: (a, b) => a + ' of ' + b + ' on',
     disc: 'Disc', version: 'version', on: 'On', off: 'Off',
     ready: 'Ready', notPrepared: 'Not prepared', preparingS: 'Preparing', failed: 'Failed',
     play: 'Play', prepare: 'Prepare the game', preparing: 'Preparing…', tryAgain: 'Try again',
@@ -63,13 +71,20 @@ const T = {
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
     noMods: 'There are no mods in the Mods folder.', modNoSettings: 'This mod has no settings.', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
-    keyboard: 'Keyboard', keyboardHint: 'The keyboard works as the controller you map in F10.', inUse: 'In use',
+    keyboard: 'Keyboard', keyboardHint: 'The keyboard as player 1\'s controller. Off, the game is played only with a controller or a real Wii Remote.',
     controller: 'Controller', controllerHint: 'Connect a controller and the game uses it instead of the keyboard.',
     notConnected: 'Not connected', connected: 'Connected',
     mouse: 'Mouse', mouseHint: 'The mouse is the Wii Remote pointer: left click A, right click B.', pointer: 'Pointer',
     wiimote: 'Real Wii Remote', wiimoteHint: 'A real Wii Remote is paired inside the game, in F10.', inF10: 'In F10',
-    mapTitle: 'Emulated Wii Remote and Nunchuk',
-    map: [['Stick', 'Nunchuk stick'], ['A / B', 'A / B'], ['X / Y', '1 / 2'], ['L / R', 'Z / C'], ['Start / Z', '+ / −'], ['Start + Z', 'Home'], ['D-pad · C-stick', 'D-pad']],
+    bindHint: (name) => 'Enter, then press the key or the controller button for ' + name + '.',
+    bindKeyOnly: 'On a controller it is the left stick; here the key is changed.',
+    homeNote: 'Home is + and − together.',
+    capture: (name) => 'Press a key or a controller button for ' + name + '. Delete leaves it without a key; Esc cancels.',
+    captureKeyOnly: (name) => 'Press a key for ' + name + '. Delete leaves it without a key; Esc cancels.',
+    pressNow: 'Press…', none: 'None',
+    fastForwardHint: 'Holding it runs the whole game up to four times faster. Turn it on in Options.',
+    reset: 'Reset the controls', resetHint: 'Puts the keys and the controller buttons back as they start.', resetDone: 'The controls were reset.',
+    reserved: 'F10 opens the game\'s menu; choose another key.',
   },
 };
 
@@ -94,11 +109,62 @@ const OPTS = [
     values: { es: ['English', 'Español', 'Français', 'Deutsch', 'Italiano'], en: ['English', 'Español', 'Français', 'Deutsch', 'Italiano'] },
     settings: ['english', 'spanish', 'french', 'german', 'italian'],
     hint: { es: 'El disco trae cinco idiomas.', en: 'The disc has five languages.' } },
-  { key: 'fastForward', es: 'Avance rápido con Tab', en: 'Fast-forward with Tab', flag: true, settings: [false, true],
-    hint: { es: 'Mantener Tab acelera todo el juego. Las cargas rápidas están siempre activas.', en: 'Holding Tab fast-forwards everything. Fast loading is always on.' } },
+  { key: 'fastForward', es: 'Avance rápido (mantener)', en: 'Fast-forward (hold)', flag: true, settings: [false, true],
+    hint: { es: 'Mantener su tecla (Tab al principio) o su botón acelera todo el juego; se cambian en Controles. Las cargas rápidas están siempre activas.',
+      en: 'Holding its key (Tab to begin with) or its button fast-forwards everything; change them in Controls. Fast loading is always on.' } },
   { key: 'showFps', es: 'Mostrar FPS', en: 'Show FPS', flag: true, settings: [false, true],
     hint: { es: 'Muestra los cuadros por segundo en una esquina.', en: 'Shows the frames per second in a corner.' } },
 ];
+
+// The Controls tab: the Wii Remote and Nunchuk buttons, each with a key and a controller button.
+// "id" is the game's own button (host/launcher.cpp); keyOnly ones have no controller button here.
+const ACTIONS = [
+  { id: 'a', es: 'A', en: 'A' }, { id: 'b', es: 'B', en: 'B' }, { id: 'x', es: '1', en: '1' }, { id: 'y', es: '2', en: '2' },
+  { id: 'start', es: '+', en: '+', home: true }, { id: 'z', es: '−', en: '−', home: true },
+  { id: 'l', es: 'Z del Nunchuk', en: 'Nunchuk Z' }, { id: 'r', es: 'C del Nunchuk', en: 'Nunchuk C' },
+  { id: 'up', es: 'Cruceta ↑', en: 'D-pad ↑' }, { id: 'down', es: 'Cruceta ↓', en: 'D-pad ↓' },
+  { id: 'left', es: 'Cruceta ←', en: 'D-pad ←' }, { id: 'right', es: 'Cruceta →', en: 'D-pad →' },
+  { id: 'stickUp', es: 'Stick del Nunchuk ↑', en: 'Nunchuk stick ↑', keyOnly: true },
+  { id: 'stickDown', es: 'Stick del Nunchuk ↓', en: 'Nunchuk stick ↓', keyOnly: true },
+  { id: 'stickLeft', es: 'Stick del Nunchuk ←', en: 'Nunchuk stick ←', keyOnly: true },
+  { id: 'stickRight', es: 'Stick del Nunchuk →', en: 'Nunchuk stick →', keyOnly: true },
+  { id: 'fastForward', es: 'Avance rápido', en: 'Fast-forward' },
+];
+
+// Keys: the browser's name for each key (KeyboardEvent.code), the game's number for it (an SDL
+// scancode, the USB key number) and how it shows. -2 to -6 are mouse buttons.
+const KEYS = [];
+'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach((c, i) => KEYS.push(['Key' + c, 4 + i, c]));
+'1234567890'.split('').forEach((c, i) => KEYS.push(['Digit' + c, 30 + i, c]));
+for (let i = 1; i <= 12; ++i) KEYS.push(['F' + i, 57 + i, 'F' + i]);
+'123456789'.split('').forEach((c, i) => KEYS.push(['Numpad' + c, 89 + i, 'Num ' + c]));
+KEYS.push(['Enter', 40, 'Enter'], ['Escape', 41, 'Esc'], ['Backspace', 42, 'Backspace'], ['Tab', 43, 'Tab'], ['Space', 44, 'Space'],
+  ['Minus', 45, '-'], ['Equal', 46, '='], ['BracketLeft', 47, '['], ['BracketRight', 48, ']'], ['Backslash', 49, '\\'],
+  ['Semicolon', 51, ';'], ['Quote', 52, "'"], ['Backquote', 53, '`'], ['Comma', 54, ','], ['Period', 55, '.'], ['Slash', 56, '/'],
+  ['CapsLock', 57, 'Caps Lock'], ['PrintScreen', 70, 'Print Screen'], ['ScrollLock', 71, 'Scroll Lock'], ['Pause', 72, 'Pause'],
+  ['Insert', 73, 'Insert'], ['Home', 74, 'Home'], ['PageUp', 75, 'Page Up'], ['Delete', 76, 'Delete'], ['End', 77, 'End'],
+  ['PageDown', 78, 'Page Down'], ['ArrowRight', 79, '→'], ['ArrowLeft', 80, '←'], ['ArrowDown', 81, '↓'], ['ArrowUp', 82, '↑'],
+  ['NumLock', 83, 'Num Lock'], ['NumpadDivide', 84, 'Num /'], ['NumpadMultiply', 85, 'Num *'], ['NumpadSubtract', 86, 'Num -'],
+  ['NumpadAdd', 87, 'Num +'], ['NumpadEnter', 88, 'Num Enter'], ['Numpad0', 98, 'Num 0'], ['NumpadDecimal', 99, 'Num .'],
+  ['IntlBackslash', 100, '<'], ['ContextMenu', 101, 'Menu'], ['ControlLeft', 224, 'Left Ctrl'], ['ShiftLeft', 225, 'Left Shift'],
+  ['AltLeft', 226, 'Left Alt'], ['MetaLeft', 227, 'Left Win'], ['ControlRight', 228, 'Right Ctrl'], ['ShiftRight', 229, 'Right Shift'],
+  ['AltRight', 230, 'Right Alt'], ['MetaRight', 231, 'Right Win'],
+  [null, -2, 'Mouse left'], [null, -3, 'Mouse middle'], [null, -4, 'Mouse right'], [null, -5, 'Mouse side 1'], [null, -6, 'Mouse side 2']);
+const KEY_NUMBER = Object.fromEntries(KEYS.filter((k) => k[0]).map((k) => [k[0], k[1]]));
+const KEY_LABEL = Object.fromEntries(KEYS.map((k) => [k[1], k[2]]));
+function keyLabel(n) { return n == null || n < 0 && !KEY_LABEL[n] ? '—' : KEY_LABEL[n] || '#' + n; }
+
+// Controller buttons: the standard layout's button numbers (the Gamepad API) as the game's names
+// ([controller] in Config.toml), and how each shows (Xbox names, the most common).
+const PAD_BUTTONS = ['south', 'east', 'west', 'north', 'left_shoulder', 'right_shoulder', 'left_trigger', 'right_trigger',
+  'back', 'start', 'left_stick', 'right_stick', 'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right', 'guide'];
+const PAD_AXES = [['left_stick_left', 'left_stick_right'], ['left_stick_up', 'left_stick_down'], ['right_stick_left', 'right_stick_right'], ['right_stick_up', 'right_stick_down']];
+const PAD_LABEL = { south: 'A', east: 'B', west: 'X', north: 'Y', left_shoulder: 'LB', right_shoulder: 'RB', left_trigger: 'LT', right_trigger: 'RT',
+  back: 'Back', start: 'Start', guide: 'Guide', left_stick: 'L3', right_stick: 'R3', dpad_up: 'D-pad ↑', dpad_down: 'D-pad ↓', dpad_left: 'D-pad ←', dpad_right: 'D-pad →',
+  left_stick_left: 'L-stick ←', left_stick_right: 'L-stick →', left_stick_up: 'L-stick ↑', left_stick_down: 'L-stick ↓',
+  right_stick_left: 'R-stick ←', right_stick_right: 'R-stick →', right_stick_up: 'R-stick ↑', right_stick_down: 'R-stick ↓',
+  disabled: '—', unmapped: '—' };
+function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
 const GAMEPAD = '<svg viewBox="0 0 24 16" width="1.15em" height="0.8em" style="display:block" fill="currentColor">' +
@@ -124,6 +190,8 @@ const state = {
   stage: 0, fraction: 0, // the preparation: which step (0 extract, 1 translate, 2 compile) and how far, 0..1
   options: { picture: 0, interpolation: 0, resolution: 0, fullscreen: 0, api: 0, language: 0, fastForward: 0, showFps: 0 },
   controllers: 0,
+  controls: { keyboard: true, keys: {}, pad: {}, fastForwardKey: 43, fastForwardButton: 'disabled' },
+  capture: null,         // the button waiting for a key or a controller button: { action, until }
   mods: [], modsOn: {},
   version: 'dev',
 };
@@ -223,11 +291,26 @@ function rows() {
     });
   }
   if (state.tab === 3) {
-    return [
-      { label: w.keyboard, value: w.inUse, tone: 'on', hint: w.keyboardHint },
+    const c = state.controls;
+    const toggleKeyboard = () => { c.keyboard = !c.keyboard; send({ cmd: 'setKeyboard', value: c.keyboard }); };
+    const list = [{ label: w.keyboard, value: c.keyboard ? w.on : w.off, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
+      change: toggleKeyboard, activate: toggleKeyboard }];
+    for (const a of ACTIONS) {
+      const name = a[state.lang], waiting = state.capture && state.capture.action === a;
+      const key = a.id === 'fastForward' ? c.fastForwardKey : c.keys[a.id];
+      const pad = a.keyOnly ? null : a.id === 'fastForward' ? c.fastForwardButton : c.pad[a.id];
+      let hint = a.id === 'fastForward' ? w.fastForwardHint + ' ' + w.bindHint(name) : w.bindHint(name);
+      if (a.keyOnly) hint += ' ' + w.bindKeyOnly;
+      if (a.home) hint += ' ' + w.homeNote;
+      list.push({ label: name, hint, html: waiting ? null : bindingChips(keyLabel(key), a.keyOnly ? null : (pad === 'disabled' ? w.none : padLabel(pad))),
+        value: waiting ? w.pressNow : null, tone: 'warning', activate: () => startCapture(a) });
+    }
+    list.push({ label: w.reset, value: 'Enter', tone: 'key', hint: w.resetHint, activate: () => { send({ cmd: 'resetControls' }); state.toast = w.resetDone; } });
+    list.push(
       { label: w.controller, value: state.controllers ? w.connected : w.notConnected, tone: state.controllers ? 'on' : 'warning', hint: w.controllerHint },
       { label: w.mouse, value: w.pointer, tone: 'value', hint: w.mouseHint },
-      { label: w.wiimote, value: w.inF10, tone: 'value', hint: w.wiimoteHint }];
+      { label: w.wiimote, value: w.inF10, tone: 'value', hint: w.wiimoteHint });
+    return list;
   }
   return [];
 }
@@ -291,7 +374,7 @@ function playRow(r, i, chosen) {
 
 function normalRow(r, i, chosen) {
   const pet = ROW_ANIMALS[state.tab][i % ROW_ANIMALS[state.tab].length];
-  const value = !r.value ? '' : r.tone === 'key'
+  const value = r.html ? r.html : !r.value ? '' : r.tone === 'key'
     ? '<span style="min-width:58px;box-sizing:border-box;text-align:center;padding:2px 12px;border-radius:8px;background:#5e3712;color:#fff3d0;font:700 19px/1.3 Dosis,sans-serif;letter-spacing:.05em">' + esc(r.value) + '</span>'
     : '<span style="font:700 24px/1.2 Dosis,sans-serif;letter-spacing:.05em;white-space:nowrap;color:' + (TONES[r.tone] || '#4a2c12') + '">' + esc(r.value) + '</span>';
   const arrow = (dir, sign) => '<span data-step="' + sign + '" style="width:18px;text-align:center;cursor:pointer">' + (chosen && r.arrows ? dir : '') + '</span>';
@@ -340,15 +423,8 @@ function render() {
   let html = '';
   if (tab !== 2) {
     html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
-      '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:' + (tab === 3 ? 520 : 1124) + 'px">' +
+      '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:1124px">' +
       list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
-  }
-  if (tab === 3) {
-    html += '<div class="abs" style="left:594px;top:122px;width:592px;height:340px;box-sizing:border-box;border-radius:6px;background:#fffbe0;border:3px solid #e3c85a;padding:14px 22px;display:flex;flex-direction:column">' +
-      '<div style="font-size:23px;letter-spacing:.06em;color:#4a2c12;padding-bottom:6px;border-bottom:2px solid #e3c85a">' + w.mapTitle + '</div>' +
-      w.map.map(([from, to]) => '<div style="flex:1;display:flex;align-items:center;gap:12px;border-bottom:2px dotted #e6d68a;font-size:20px;letter-spacing:.04em">' +
-        '<span style="flex:none;padding:1px 10px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 15px/1.5 \'Baloo 2\',sans-serif;color:#5e3712;white-space:nowrap">' + from + '</span>' +
-        '<span style="color:#b9982e">→</span><span style="color:#5a4420;white-space:nowrap">' + to + '</span></div>').join('') + '</div>';
   }
   if (tab === 2) {
     // This port has no mods yet: the Mods folder is read when it does.
@@ -360,6 +436,7 @@ function render() {
 
   // The message box: what just happened, or what the chosen row does.
   let message = state.toast;
+  if (state.capture) message = (state.capture.action.keyOnly ? w.captureKeyOnly : w.capture)(state.capture.action[state.lang]);
   if (!message && tab === 2) message = w.noMods;
   if (!message && list[sel]) message = list[sel].hint || '';
   $('message').textContent = message;
@@ -370,6 +447,7 @@ function render() {
 // Mouse and keys.
 
 $('stage').addEventListener('click', (e) => {
+  if (state.capture) { endCapture(); return; }
   const stepEl = e.target.closest('[data-step]');
   const rowEl = e.target.closest('[data-row]');
   const tabEl = e.target.closest('[data-tab]');
@@ -467,6 +545,7 @@ $('langEs').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexO
 $('langEn').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexOf('english')));
 
 window.addEventListener('keydown', (e) => {
+  if (state.capture) { e.preventDefault(); if (!e.repeat) captureKey(e.code); return; }
   const k = e.key, tab = state.tab;
   if (k === 'Escape') return escape();
   if (k === 'q' || k === 'Q') return setTab(tab - 1);
@@ -479,6 +558,72 @@ window.addEventListener('keydown', (e) => {
   if (step && r.change) { r.change(step); render(); }
   if (k === 'Enter' && r.activate) { r.activate(); render(); }
 });
+
+// ---------------------------------------------------------------------------------------------
+// Changing a control: Enter on a button's row waits up to ten seconds for a key or a controller
+// button. Keys come from the keyboard events; controller buttons are read with the Gamepad API.
+
+function bindingChips(key, pad) {
+  const chip = (symbol, text) => '<span style="display:flex;align-items:center;gap:6px;font:700 22px/1.2 Dosis,sans-serif;color:#4a2c12;white-space:nowrap">' +
+    '<span style="font-size:16px;color:#8a6a2a">' + symbol + '</span>' +
+    '<span style="min-width:104px;box-sizing:border-box;text-align:center;padding:1px 10px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 17px/1.4 \'Baloo 2\',sans-serif;color:#5e3712">' + esc(text) + '</span></span>';
+  return '<span style="display:flex;gap:18px">' + chip('⌨\uFE0E', key) + (pad != null ? chip('🎮\uFE0E', pad) : '') + '</span>';
+}
+
+// The controller buttons held now; a stick direction counts past "reach" (0..1) of the way.
+function pressedNow(reach) {
+  const held = new Set();
+  for (const pad of (navigator.getGamepads ? navigator.getGamepads() : [])) {
+    if (!pad) continue;
+    pad.buttons.forEach((b, i) => { if (b.pressed && PAD_BUTTONS[i]) held.add(PAD_BUTTONS[i]); });
+    PAD_AXES.forEach((names, i) => {
+      const v = pad.axes[i] || 0;
+      if (v < -reach) held.add(names[0]);
+      if (v > reach) held.add(names[1]);
+    });
+  }
+  return held;
+}
+
+function startCapture(action) {
+  state.capture = { action, until: Date.now() + 10000, held: pressedNow(0.3) };
+  state.toast = '';
+  render();
+  const watch = () => {
+    const capture = state.capture;
+    if (!capture || capture.action !== action) return;
+    if (Date.now() > capture.until) return endCapture();
+    if (!action.keyOnly) {
+      // A button that was not already held when the wait began; a stick has to go most of the way.
+      for (const name of pressedNow(0.6)) if (!capture.held.has(name)) return bindPad(action, name);
+      const resting = pressedNow(0.3);
+      for (const name of capture.held) if (!resting.has(name)) capture.held.delete(name);
+    }
+    requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
+}
+
+function endCapture() { state.capture = null; render(); }
+
+function captureKey(code) {
+  const action = state.capture.action, w = t();
+  if (code === 'Escape') return endCapture();
+  if (code === 'F10') { state.toast = w.reserved; state.capture = null; return render(); }
+  const number = code === 'Delete' ? -1 : KEY_NUMBER[code];
+  if (number == null) return;
+  if (action.id === 'fastForward') state.controls.fastForwardKey = number;
+  else { state.controls.keys[action.id] = number; state.controls.keyboard = true; }
+  send({ cmd: 'setKey', action: action.id, scancode: number });
+  endCapture();
+}
+
+function bindPad(action, name) {
+  if (action.id === 'fastForward') state.controls.fastForwardButton = name;
+  else state.controls.pad[action.id] = name;
+  send({ cmd: 'setPad', action: action.id, value: name });
+  endCapture();
+}
 
 // The page is drawn at 1280 x 752 and scaled to fill the window.
 function fit() {
@@ -493,7 +638,7 @@ window.addEventListener('resize', fit);
 function receive(message) {
   const w = t();
   if (message.type === 'state') {
-    for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version']) if (key in message) state[key] = message[key];
+    for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version', 'controls']) if (key in message) state[key] = message[key];
 
     if (message.options) {
       for (const o of OPTS) {
@@ -522,7 +667,12 @@ if (window.chrome && window.chrome.webview) {
   send = (m) => window.chrome.webview.postMessage(m);
   window.chrome.webview.addEventListener('message', (e) => receive(e.data));
 } else {
-  // Without the program: preparing pretends to take a few seconds.
+  // Without the program: the controls start as the program's defaults, and preparing pretends to
+  // take a few seconds.
+  state.controls = { keyboard: true, fastForwardKey: 43, fastForwardButton: 'disabled',
+    keys: { a: 44, b: 225, x: 30, y: 31, start: 40, z: 42, l: 20, r: 8, up: 82, down: 81, left: 80, right: 79, stickRight: 7, stickLeft: 4, stickUp: 26, stickDown: 22 },
+    pad: { a: 'south', b: 'east', x: 'west', y: 'north', start: 'start', z: 'right_shoulder', l: 'left_trigger', r: 'right_trigger',
+      up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right' } };
   send = (m) => {
     if (m.cmd === 'prepare' || m.cmd === 'chooseDisc') {
       state.hasDisc = true;

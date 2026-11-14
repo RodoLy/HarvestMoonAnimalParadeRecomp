@@ -24,7 +24,7 @@ second, English. Everything below except fast loading is a choice in the **F10**
 | **Native on Windows x64 and Windows on ARM** | Two packages: x86-64, and ARM64 for Snapdragon X laptops, so the game runs natively instead of through x86-64 emulation. |
 | **Wide picture** | *F10 > Graphics > Picture > Wide* fills a widescreen window: the 3D cameras see more at the sides, and the menus and text keep their shape in the middle. |
 | **Frame interpolation** | The game runs at 30 FPS; *F10 > Graphics > Frame interpolation* shows 60, 120 or 180 FPS by inserting frames in between. The game's own speed does not change. |
-| **Fast loading** | Always on: the black screens between areas go by four times faster. Holding **Tab** fast-forwards everything (off by default; turn it on in F10). |
+| **Fast loading** | Always on: the black screens between areas go by four times faster. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
 | **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
 | **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
 | **No Wii Remote needed** | An emulated Wii Remote with Nunchuk driven by a gamepad or the keyboard; the mouse is the pointer. A real Wii Remote can be paired instead. |
@@ -92,7 +92,7 @@ while it starts.
 only has the Japanese logo to show (see *Known issue* above).
 
 **How do I use the Wii Remote pointer?** With the mouse: it is the pointer, left click is A and
-right click is B. Controller and keyboard buttons can be changed in F10.
+right click is B. Controller and keyboard buttons can be changed in the launcher's Controls tab or in F10.
 
 **Where are my saves?** In `UserData\NAND\`, next to the settings (`UserData\Config.toml`).
 Copy the whole `UserData` folder to keep them.

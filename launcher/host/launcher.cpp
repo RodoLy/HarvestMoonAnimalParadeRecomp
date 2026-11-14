@@ -9,6 +9,10 @@
 //   chooseDisc   ask for the disc image, remember it in UserData\disc.txt, and prepare
 //   openLog      open the newest UserData\Logs\...\console.log
 //   setOption    write one setting to UserData\Config.toml
+//   setKey       bind a keyboard key to a button (UserData\keyboard_bindings.dat) or to fast-forward
+//   setPad       bind a controller button to a button ([controller] in Config.toml) or to fast-forward
+//   setKeyboard  turn the keyboard on or off as the first player's controller
+//   resetControls  put every key and controller button back as they start
 //   setUiLanguage, minimize, drag, exit
 //
 // Built with the llvm-mingw compiler that comes with the package (see launcher/build.ps1). The
@@ -29,7 +33,10 @@
 #include <xinput.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -238,6 +245,7 @@ struct Option {
     const char* key;
     enum Kind { Bool, Number, Text } kind;
     const char* fallback;
+    const char* oldKey = nullptr;  // the name older versions wrote, still read
 };
 
 const Option kOptions[] = {
@@ -247,7 +255,7 @@ const Option kOptions[] = {
     {"fullscreen", "video", "display_mode", Option::Text, "windowed"},
     {"api", "video", "graphics_api", Option::Text, "auto"},
     {"language", "console", "language", Option::Text, "english"},
-    {"fastForward", "speed", "hold_tab_to_fast_forward", Option::Bool, "false"},
+    {"fastForward", "speed", "hold_to_fast_forward", Option::Bool, "false", "hold_tab_to_fast_forward"},
     {"showFps", "video", "show_fps", Option::Bool, "false"},
 };
 
@@ -275,7 +283,9 @@ std::string ConfigValue(const Option& option, const std::wstring& pageValue) {
 
 // The Config.toml line as the page's value.
 std::wstring PageValue(const Option& option, const ConfigFile& config) {
-    const std::string value = config.Get(option.section, option.key).value_or(option.fallback);
+    std::optional<std::string> found = config.Get(option.section, option.key);
+    if (!found && option.oldKey) found = config.Get(option.section, option.oldKey);
+    const std::string value = found.value_or(option.fallback);
     if (std::string(option.page) == "fullscreen") return value == "windowed" ? L"false" : L"true";
     if (option.kind == Option::Text) return JsonString(Wide(value));
     if (option.kind == Option::Number) {
@@ -290,6 +300,215 @@ std::wstring PageValue(const Option& option, const ConfigFile& config) {
         }
     }
     return Wide(value);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The controls. The game reads them from two places, and the launcher writes both:
+//   - UserData\keyboard_bindings.dat: the keyboard, written by the game's input library (aurora,
+//     lib/dolphin/pad/pad.cpp). After a 32-byte header ("KBND", version 3) come four players, each
+//     with: one byte "the keyboard is on", 12 buttons {int32 key, uint16 button, 2 bytes padding}
+//     and 10 stick and trigger directions {int32 key, uint16 direction, int16 influence}. Keys are
+//     SDL scancodes (the USB key numbers); -1 is no key, -2 to -6 are mouse buttons.
+//   - [controller] in Config.toml: the controller, one line per button, with names like "south"
+//     (the bottom face button) or "left_trigger".
+// Fast-forward has its own key and controller button in [speed].
+//
+// The buttons are the game's (GameCube) buttons, which the game turns into the Wii Remote and
+// Nunchuk: A A, B B, X 1, Y 2, Start +, Z -, L Nunchuk Z, R Nunchuk C, the D-pad the D-pad.
+
+// The page's names, in the order of the file and of [controller].
+const char* const kButtonNames[12] = {"a", "b", "x", "y", "start", "z", "l", "r", "up", "down", "left", "right"};
+const uint16_t kButtonIds[12] = {0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x0010, 0x0040, 0x0020, 0x0008, 0x0004, 0x0001, 0x0002};
+// The Nunchuk stick: the first four directions of the file.
+const char* const kStickNames[4] = {"stickRight", "stickLeft", "stickUp", "stickDown"};
+constexpr int kAxisTriggerL = 8, kAxisTriggerR = 9;
+
+// The keys a new player starts with (the same as the game's "Reset to the default keys", in
+// settings_overlay.cpp): A Space, B Left Shift, 1 and 2, + Enter, - Backspace, Z Q, C E, the arrows
+// the D-pad, WASD the stick. The mouse is the pointer, so it is left alone.
+const int32_t kDefaultKeys[12] = {44, 225, 30, 31, 40, 42, 20, 8, 82, 81, 80, 79};
+const int32_t kDefaultAxisKeys[10] = {7, 4, 26, 22, 15, 13, 12, 14, 20, 8};
+// The controller buttons a new player starts with (aurora's own, for any XInput-like controller).
+const char* const kDefaultPad[12] = {"south", "east", "west", "north", "start", "right_shoulder", "unmapped", "unmapped",
+                                     "dpad_up", "dpad_down", "dpad_left", "dpad_right"};
+constexpr int32_t kDefaultFastForwardKey = 43;  // Tab
+
+fs::path KeyboardPath() { return UserData() / L"keyboard_bindings.dat"; }
+
+struct KeyboardFile {
+    struct Player {
+        bool on = false;
+        int32_t buttons[12];
+        int32_t axes[10];
+        int16_t influence[10] = {};
+    };
+    std::array<Player, 4> players;
+
+    KeyboardFile() {
+        for (auto& player : players) {
+            std::fill(std::begin(player.buttons), std::end(player.buttons), -1);
+            std::fill(std::begin(player.axes), std::end(player.axes), -1);
+        }
+    }
+
+    static constexpr size_t kHeader = 32, kPlayer = 1 + 12 * 8 + 10 * 8;
+
+    static bool Exists() { return fs::exists(KeyboardPath()); }
+
+    static KeyboardFile Load() {
+        KeyboardFile file;
+        const std::string data = ReadText(KeyboardPath());
+        if (data.size() < kHeader + 4 * kPlayer || data.compare(0, 4, "KBND") != 0 || data[4] != 3) return file;
+        auto read32 = [&](size_t at) { int32_t v; std::memcpy(&v, data.data() + at, 4); return v; };
+        auto read16 = [&](size_t at) { int16_t v; std::memcpy(&v, data.data() + at, 2); return v; };
+        for (size_t p = 0; p < 4; ++p) {
+            const size_t at = kHeader + p * kPlayer;
+            file.players[p].on = data[at] != 0;
+            for (size_t i = 0; i < 12; ++i) file.players[p].buttons[i] = read32(at + 1 + i * 8);
+            for (size_t i = 0; i < 10; ++i) {
+                file.players[p].axes[i] = read32(at + 1 + 96 + i * 8);
+                file.players[p].influence[i] = read16(at + 1 + 96 + i * 8 + 6);
+            }
+        }
+        return file;
+    }
+
+    void Save() const {
+        std::string data(kHeader + 4 * kPlayer, '\0');
+        std::memcpy(data.data(), "KBND", 4);
+        data[4] = 3;
+        auto write = [&](size_t at, const void* value, size_t size) { std::memcpy(data.data() + at, value, size); };
+        for (size_t p = 0; p < 4; ++p) {
+            const size_t at = kHeader + p * kPlayer;
+            data[at] = players[p].on ? 1 : 0;
+            for (size_t i = 0; i < 12; ++i) {
+                write(at + 1 + i * 8, &players[p].buttons[i], 4);
+                write(at + 1 + i * 8 + 4, &kButtonIds[i], 2);
+            }
+            for (size_t i = 0; i < 10; ++i) {
+                const uint16_t direction = static_cast<uint16_t>(i);
+                write(at + 1 + 96 + i * 8, &players[p].axes[i], 4);
+                write(at + 1 + 96 + i * 8 + 4, &direction, 2);
+                write(at + 1 + 96 + i * 8 + 6, &players[p].influence[i], 2);
+            }
+        }
+        WriteText(KeyboardPath(), data);
+    }
+
+    void SetDefaults(Player& player) {
+        player.on = true;
+        std::copy(std::begin(kDefaultKeys), std::end(kDefaultKeys), player.buttons);
+        std::copy(std::begin(kDefaultAxisKeys), std::end(kDefaultAxisKeys), player.axes);
+    }
+};
+
+// The first time, the keyboard is on with the default keys, so the game can be played right away.
+void WriteFirstKeyboard() {
+    if (KeyboardFile::Exists()) return;
+    KeyboardFile file;
+    file.SetDefaults(file.players[0]);
+    file.Save();
+}
+
+int ButtonIndex(const std::wstring& name) {
+    for (int i = 0; i < 12; ++i) if (Wide(kButtonNames[i]) == name) return i;
+    return -1;
+}
+
+int StickIndex(const std::wstring& name) {
+    for (int i = 0; i < 4; ++i) if (Wide(kStickNames[i]) == name) return i;
+    return -1;
+}
+
+// A [controller] line is "name" or "name,second name"; a name may end in "@threshold".
+std::string PadPrimary(const std::string& value) {
+    std::string name = ConfigFile::Strip(value.substr(0, value.find(',')));
+    return name.substr(0, name.find('@'));
+}
+
+// What the page shows for the controller button of game button i.
+std::string PadShown(const ConfigFile& config, int i) {
+    std::string name = PadPrimary(config.Get("controller", kButtonNames[i]).value_or(kDefaultPad[i]));
+    // L and R left alone follow the triggers.
+    if (name == "unmapped" && i == 6) return "left_trigger";
+    if (name == "unmapped" && i == 7) return "right_trigger";
+    return name;
+}
+
+std::wstring ControlsJson(const ConfigFile& config) {
+    const KeyboardFile keyboard = KeyboardFile::Load();
+    const auto& player = keyboard.players[0];
+    std::wostringstream json;
+    json << L"{\"keyboard\":" << (player.on ? L"true" : L"false") << L",\"keys\":{";
+    for (int i = 0; i < 12; ++i) json << (i ? L"," : L"") << L"\"" << Wide(kButtonNames[i]) << L"\":" << player.buttons[i];
+    for (int i = 0; i < 4; ++i) json << L",\"" << Wide(kStickNames[i]) << L"\":" << player.axes[i];
+    json << L"},\"pad\":{";
+    for (int i = 0; i < 12; ++i) json << (i ? L"," : L"") << L"\"" << Wide(kButtonNames[i]) << L"\":" << JsonString(Wide(PadShown(config, i)));
+    int32_t fastKey = kDefaultFastForwardKey;
+    try { fastKey = std::stoi(config.Get("speed", "fast_forward_key").value_or("43")); } catch (...) {}
+    json << L"},\"fastForwardKey\":" << fastKey
+         << L",\"fastForwardButton\":" << JsonString(Wide(PadPrimary(config.Get("speed", "fast_forward_button").value_or("disabled")))) << L"}";
+    return json.str();
+}
+
+// A key for a button, a stick direction or fast-forward. The keyboard turns on with it.
+void SetKey(const std::wstring& action, int32_t key) {
+    if (action == L"fastForward") {
+        ConfigFile config = ConfigFile::Load();
+        config.Set("speed", "fast_forward_key", std::to_string(key));
+        config.Save();
+        return;
+    }
+    KeyboardFile keyboard = KeyboardFile::Load();
+    auto& player = keyboard.players[0];
+    if (const int i = ButtonIndex(action); i >= 0) {
+        player.buttons[i] = key;
+        // Nunchuk Z and C also follow the analog triggers, so those move with them.
+        if (i == 6) player.axes[kAxisTriggerL] = key;
+        if (i == 7) player.axes[kAxisTriggerR] = key;
+    } else if (const int i = StickIndex(action); i >= 0) {
+        player.axes[i] = key;
+    } else {
+        return;
+    }
+    player.on = true;
+    keyboard.Save();
+}
+
+// A controller button ("south", "left_trigger"...) for a button or fast-forward. A second button
+// someone wrote by hand in Config.toml stays.
+void SetPad(const std::wstring& action, const std::string& value) {
+    ConfigFile config = ConfigFile::Load();
+    if (action == L"fastForward") {
+        config.Set("speed", "fast_forward_button", "\"" + value + "\"");
+    } else if (const int i = ButtonIndex(action); i >= 0) {
+        const std::string old = config.Get("controller", kButtonNames[i]).value_or("");
+        const auto comma = old.find(',');
+        config.Set("controller", kButtonNames[i], "\"" + value + (comma == std::string::npos ? "" : old.substr(comma)) + "\"");
+    } else {
+        return;
+    }
+    config.Save();
+}
+
+void SetKeyboardOn(bool on) {
+    KeyboardFile keyboard = KeyboardFile::Load();
+    auto& player = keyboard.players[0];
+    const bool noKeys = std::all_of(std::begin(player.buttons), std::end(player.buttons), [](int32_t k) { return k == -1; });
+    if (on && noKeys) keyboard.SetDefaults(player);
+    player.on = on;
+    keyboard.Save();
+}
+
+void ResetControls() {
+    KeyboardFile keyboard = KeyboardFile::Load();
+    keyboard.SetDefaults(keyboard.players[0]);
+    keyboard.Save();
+    ConfigFile config = ConfigFile::Load();
+    for (int i = 0; i < 12; ++i) config.Set("controller", kButtonNames[i], std::string("\"") + kDefaultPad[i] + "\"");
+    config.Set("speed", "fast_forward_key", std::to_string(kDefaultFastForwardKey));
+    config.Set("speed", "fast_forward_button", "\"disabled\"");
+    config.Save();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -525,7 +744,7 @@ std::wstring StateJson(const wchar_t* status) {
         json << (first ? L"" : L",") << L"\"" << Wide(option.page) << L"\":" << PageValue(option, config);
         first = false;
     }
-    json << L"}}";
+    json << L"},\"controls\":" << ControlsJson(config) << L"}";
     return json.str();
 }
 
@@ -584,6 +803,21 @@ void OnPageMessage(const std::wstring& json) {
             config.Set(option.section, option.key, ConfigValue(option, message[L"value"]));
             config.Save();
         }
+    } else if (cmd == L"setKey") {
+        try { SetKey(message[L"action"], std::stoi(message[L"scancode"])); } catch (...) {}
+        PostToPage(StateJson(CurrentStatus()));
+    } else if (cmd == L"setPad") {
+        // Only the names the game knows: letters, digits and "_".
+        const std::string value = Utf8(message[L"value"]);
+        if (!value.empty() && std::all_of(value.begin(), value.end(), [](char c) { return isalnum(static_cast<unsigned char>(c)) || c == '_'; }))
+            SetPad(message[L"action"], value);
+        PostToPage(StateJson(CurrentStatus()));
+    } else if (cmd == L"setKeyboard") {
+        SetKeyboardOn(message[L"value"] == L"true");
+        PostToPage(StateJson(CurrentStatus()));
+    } else if (cmd == L"resetControls") {
+        ResetControls();
+        PostToPage(StateJson(CurrentStatus()));
     } else if (cmd == L"setUiLanguage") {
         ConfigFile config = ConfigFile::Load();
         config.Set("launcher", "language", message[L"value"] == L"es" ? "\"es\"" : "\"en\"");
@@ -709,6 +943,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     WriteFirstConfig();
+    WriteFirstKeyboard();
 
     WNDCLASSW windowClass{};
     windowClass.lpfnWndProc = WindowProc;
