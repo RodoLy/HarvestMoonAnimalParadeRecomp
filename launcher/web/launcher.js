@@ -100,7 +100,13 @@ const OPTS = [
     hint: { es: 'Muestra los cuadros por segundo en una esquina.', en: 'Shows the frames per second in a corner.' } },
 ];
 
-const SYMS = ['★', '⚙︎', '✿︎', '✚︎'];
+// The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
+const GAMEPAD = '<svg viewBox="0 0 24 16" width="1.15em" height="0.8em" style="display:block" fill="currentColor">' +
+  '<mask id="gamepadHoles"><rect width="24" height="16" fill="#fff"/>' +
+  '<path d="M5.2 4.4h1.6v1.8h1.8v1.6H6.8v1.8H5.2V7.8H3.4V6.2h1.8z" fill="#000"/>' +
+  '<circle cx="17.2" cy="5.4" r="1.2" fill="#000"/><circle cx="19.4" cy="7.6" r="1.2" fill="#000"/></mask>' +
+  '<path mask="url(#gamepadHoles)" d="M6 1h12a5 5 0 0 1 4.8 3.6l1 4.6A3.6 3.6 0 0 1 17.6 12L15.8 10H8.2L6.4 12A3.6 3.6 0 0 1 .2 9.2l1-4.6A5 5 0 0 1 6 1z"/></svg>';
+const SYMS = ['★', '⚙\uFE0E', '✿\uFE0E', GAMEPAD];
 const ROW_ANIMALS = [['elephant', 'giraffe', 'zebra', 'hippo'], ['cow', 'horse', 'sheep', 'chicken', 'duck', 'chick', 'lion', 'ostrich'], ['cow'], ['sheep', 'chicken', 'duck', 'zebra']];
 const PARADE_TOP = [{ n: 'giraffe', left: 6, h: 92, sway: true }, { n: 'elephant', left: 46, w: 64, h: 64 }, { n: 'lion', left: 104, w: 60, h: 60, hop: true },
   { n: 'ostrich', left: 188, h: 84, sway: true }, { n: 'hippo', left: 82, w: 46, h: 46 }, { n: 'zebra', left: 150, w: 52, h: 52 }];
