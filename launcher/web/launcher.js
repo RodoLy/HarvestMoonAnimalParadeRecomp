@@ -21,7 +21,7 @@ const T = {
     disc: 'Disco', version: 'versión', on: 'Activado', off: 'Desactivado',
     ready: 'Listo', notPrepared: 'Sin preparar', preparingS: 'Preparando', failed: 'Falló',
     play: 'Jugar', prepare: 'Preparar el juego', preparing: 'Preparando…', tryAgain: 'Intentar de nuevo',
-    playHint: 'Abre el juego con tu disco. En el juego, F10 abre las opciones.',
+    playHint: 'Abre el juego con tu disco. Dentro del juego, F10 abre el menú de opciones.',
     prepareHint: 'La primera vez extrae el disco, traduce el juego y lo compila. Tarda varios minutos.',
     noDiscHint: 'Primero elige la imagen de tu disco: Harvest Moon: Animal Parade (USA), RBIEE9.',
     stages: ['Extraer', 'Traducir', 'Compilar'],
@@ -31,7 +31,8 @@ const T = {
     openLog: 'Abrir el registro', openLogHint: 'Abre el registro más nuevo de UserData\\Logs.', uiLanguage: 'Idioma', uiLanguageHint: 'El idioma del juego y del launcher. El launcher solo está en español e inglés; en los demás idiomas se ve en inglés.', noLog: 'Todavía no hay registros.',
     exit: 'Salir', exitHint: 'Cierra el launcher.', cancel: 'Cancelar', cancelled: 'Se canceló la preparación.',
     prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
-    hintMove: 'Elegir', hintChange: 'Cambiar',
+    hintMove: 'Elegir', hintChange: 'Cambiar', f10: 'Menú en el juego',
+    optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
     noMods: 'No hay mods en la carpeta Mods.', modNoSettings: 'Este mod no tiene ajustes.', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
     keyboard: 'Teclado', keyboardHint: 'El teclado funciona como el control que mapeas en F10.', inUse: 'En uso',
@@ -48,7 +49,7 @@ const T = {
     disc: 'Disc', version: 'version', on: 'On', off: 'Off',
     ready: 'Ready', notPrepared: 'Not prepared', preparingS: 'Preparing', failed: 'Failed',
     play: 'Play', prepare: 'Prepare the game', preparing: 'Preparing…', tryAgain: 'Try again',
-    playHint: 'Opens the game with your disc. In the game, F10 opens the options.',
+    playHint: 'Opens the game with your disc. Inside the game, F10 opens the options menu.',
     prepareHint: 'The first time it extracts the disc, translates the game and compiles it. It takes several minutes.',
     noDiscHint: 'First choose your disc image: Harvest Moon: Animal Parade (USA), RBIEE9.',
     stages: ['Extract', 'Translate', 'Compile'],
@@ -58,7 +59,8 @@ const T = {
     openLog: 'Open the log', openLogHint: 'Opens the newest log in UserData\\Logs.', uiLanguage: 'Language', uiLanguageHint: 'The language of the game and of the launcher. The launcher is only in English and Spanish; with the other languages it shows in English.', noLog: 'There are no logs yet.',
     exit: 'Exit', exitHint: 'Closes the launcher.', cancel: 'Cancel', cancelled: 'The preparation was cancelled.',
     prepared: 'The game is ready.', opening: 'Opening the game…',
-    hintMove: 'Select', hintChange: 'Change',
+    hintMove: 'Select', hintChange: 'Change', f10: 'Menu in the game',
+    optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
     noMods: 'There are no mods in the Mods folder.', modNoSettings: 'This mod has no settings.', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
     keyboard: 'Keyboard', keyboardHint: 'The keyboard works as the controller you map in F10.', inUse: 'In use',
@@ -210,7 +212,7 @@ function rows() {
         state.options[o.key] = next;
         send({ cmd: 'setOption', key: o.key, value: o.settings[next] });
       };
-      return { label: o[state.lang], hint: o.hint[state.lang], arrows: true, value: o.flag ? (v ? w.on : w.off) : o.values[state.lang][v],
+      return { label: o[state.lang], hint: o.hint[state.lang] + ' ' + w.optionsNote, arrows: true, value: o.flag ? (v ? w.on : w.off) : o.values[state.lang][v],
         tone: o.flag ? (v ? 'on' : 'off') : 'value', change, activate: () => change(1) };
     });
   }
@@ -304,6 +306,7 @@ function render() {
   $('subtitle').textContent = w.subtitle;
   $('hintMove').textContent = w.hintMove;
   $('hintChange').textContent = w.hintChange;
+  $('f10Label').textContent = w.f10;
   $('escLabel').textContent = state.status === 'preparing' ? w.cancel : w.exit;
   $('versionLabel').textContent = w.version;
   $('version').textContent = state.version;
