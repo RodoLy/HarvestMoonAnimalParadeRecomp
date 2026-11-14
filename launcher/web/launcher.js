@@ -28,7 +28,7 @@ const T = {
     stageLong: ['extrayendo el disco (una sola vez).', 'traduciendo el código del juego.', 'compilando el juego.'],
     step: (i) => 'Paso ' + i + ' de 3: ',
     changeDisc: 'Cambiar el disco', changeDiscHint: 'Elige otra imagen del disco (.rvz, .iso, .wbfs, .wia o .ciso).',
-    openLog: 'Abrir el registro', openLogHint: 'Abre el registro más nuevo de UserData\\Logs.', uiLanguage: 'Idioma', uiLanguageHint: 'El idioma del launcher. El del juego está en Opciones.', noLog: 'Todavía no hay registros.',
+    openLog: 'Abrir el registro', openLogHint: 'Abre el registro más nuevo de UserData\\Logs.', uiLanguage: 'Idioma', uiLanguageHint: 'El idioma del juego y del launcher. El launcher solo está en español e inglés; en los demás idiomas se ve en inglés.', noLog: 'Todavía no hay registros.',
     exit: 'Salir', exitHint: 'Cierra el launcher.', cancel: 'Cancelar', cancelled: 'Se canceló la preparación.',
     prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
     hintMove: 'Elegir', hintChange: 'Cambiar',
@@ -55,7 +55,7 @@ const T = {
     stageLong: ['extracting the disc (only once).', 'translating the game\'s code.', 'compiling the game.'],
     step: (i) => 'Step ' + i + ' of 3: ',
     changeDisc: 'Change the disc', changeDiscHint: 'Choose another disc image (.rvz, .iso, .wbfs, .wia or .ciso).',
-    openLog: 'Open the log', openLogHint: 'Opens the newest log in UserData\\Logs.', uiLanguage: 'Language', uiLanguageHint: 'The launcher\'s language. The game\'s is in Options.', noLog: 'There are no logs yet.',
+    openLog: 'Open the log', openLogHint: 'Opens the newest log in UserData\\Logs.', uiLanguage: 'Language', uiLanguageHint: 'The language of the game and of the launcher. The launcher is only in English and Spanish; with the other languages it shows in English.', noLog: 'There are no logs yet.',
     exit: 'Exit', exitHint: 'Closes the launcher.', cancel: 'Cancel', cancelled: 'The preparation was cancelled.',
     prepared: 'The game is ready.', opening: 'Opening the game…',
     hintMove: 'Select', hintChange: 'Change',
@@ -198,12 +198,12 @@ function rows() {
     }
     return [play,
       { label: w.changeDisc, value: state.discId || '—', tone: 'value', hint: w.changeDiscHint, activate: () => { if (st !== 'preparing') send({ cmd: 'chooseDisc' }); } },
-      { label: w.uiLanguage, value: state.lang === 'es' ? 'Español' : 'English', tone: 'value', arrows: true, hint: w.uiLanguageHint,
-        change: () => setUiLanguage(state.lang === 'es' ? 'en' : 'es'), activate: () => setUiLanguage(state.lang === 'es' ? 'en' : 'es') },
+      { label: w.uiLanguage, value: LANGUAGE.values.en[state.options.language], tone: 'value', arrows: true, hint: w.uiLanguageHint,
+        change: (step) => setLanguage(state.options.language + step), activate: () => setLanguage(state.options.language + 1) },
       { label: st === 'preparing' ? w.cancel : w.exit, value: 'Esc', tone: 'key', hint: w.exitHint, activate: escape }];
   }
   if (state.tab === 1) {
-    return OPTS.map((o) => {
+    return OPTS.filter((o) => o.key !== 'language').map((o) => {
       const v = state.options[o.key], n = o.settings.length;
       const change = (step) => {
         const next = (v + step + n) % n;
@@ -441,9 +441,21 @@ $('esc').addEventListener('click', escape);
 $('close').addEventListener('click', () => send({ cmd: 'exit' }));
 $('minimize').addEventListener('click', () => send({ cmd: 'minimize' }));
 $('titlebar').addEventListener('mousedown', (e) => { if (!e.target.closest('.titlebutton')) send({ cmd: 'drag' }); });
-function setUiLanguage(lang) { state.lang = lang; state.toast = ''; send({ cmd: 'setUiLanguage', value: lang }); render(); }
-$('langEs').addEventListener('click', () => setUiLanguage('es'));
-$('langEn').addEventListener('click', () => setUiLanguage('en'));
+// One language for both: the game's (Config.toml [console] language, five of them) and the
+// launcher's, which has Spanish and English and shows the other three in English.
+const LANGUAGE = OPTS.find((o) => o.key === 'language');
+function launcherLanguage() { return LANGUAGE.settings[state.options.language] === 'spanish' ? 'es' : 'en'; }
+function setLanguage(index) {
+  const n = LANGUAGE.settings.length;
+  state.options.language = (index + n) % n;
+  send({ cmd: 'setOption', key: 'language', value: LANGUAGE.settings[state.options.language] });
+  state.lang = launcherLanguage();
+  send({ cmd: 'setUiLanguage', value: state.lang });
+  state.toast = '';
+  render();
+}
+$('langEs').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexOf('spanish')));
+$('langEn').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexOf('english')));
 
 window.addEventListener('keydown', (e) => {
   const k = e.key, tab = state.tab;
@@ -473,12 +485,13 @@ function receive(message) {
   const w = t();
   if (message.type === 'state') {
     for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version']) if (key in message) state[key] = message[key];
-    if (message.uiLanguage) state.lang = message.uiLanguage;
+
     if (message.options) {
       for (const o of OPTS) {
         const i = o.settings.findIndex((s) => s === message.options[o.key]);
         state.options[o.key] = i < 0 ? 0 : i;
       }
+      state.lang = launcherLanguage();
     }
   } else if (message.type === 'progress') {
     state.status = 'preparing'; state.stage = message.stage; state.fraction = message.fraction; state.toast = '';
