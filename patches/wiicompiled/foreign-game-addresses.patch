@@ -3251,7 +3251,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..cad9ce2 100644
+index 6c2083a..37cdb65 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -3388,7 +3388,59 @@ index 6c2083a..cad9ce2 100644
              auto* pad = SDL_GetGamepadFromID(g_rebind.instance);
              if (pad != nullptr) {
                  for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && g_rebind.active; ++i) {
-@@ -727,6 +758,37 @@ void DrawExpressionSettings() {
+@@ -586,17 +617,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
+ }
+ 
+ void ApplyKeyboardPreset(uint32_t port) {
+-    const std::array<int, PAD_BUTTON_COUNT> keys = {
+-        PAD_KEY_MOUSE_LEFT, SDL_SCANCODE_SPACE, SDL_SCANCODE_E, SDL_SCANCODE_Q,
+-        SDL_SCANCODE_RETURN, PAD_KEY_MOUSE_MIDDLE, SDL_SCANCODE_LSHIFT, PAD_KEY_MOUSE_RIGHT,
+-        SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
+-    };
++    // A foreign game is played with the emulated Wii Remote and Nunchuk, whose pointer is the mouse
++    // and whose A and B are its buttons (bluetooth/emulated_remote_host.cpp), so its keys leave the
++    // mouse alone: A Space, B Left Shift, 1 and 2, + Enter, - Backspace, Z Q, C E, D-pad the arrows,
++    // Nunchuk stick WASD. The launcher writes the same keys (launcher/host/launcher.cpp).
++    const bool foreignGame = GuestRegion::IsForeignGame();
++    const std::array<int, PAD_BUTTON_COUNT> keys = foreignGame
++        ? std::array<int, PAD_BUTTON_COUNT>{
++              SDL_SCANCODE_SPACE, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_1, SDL_SCANCODE_2,
++              SDL_SCANCODE_RETURN, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_Q, SDL_SCANCODE_E,
++              SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT}
++        : std::array<int, PAD_BUTTON_COUNT>{
++              PAD_KEY_MOUSE_LEFT, SDL_SCANCODE_SPACE, SDL_SCANCODE_E, SDL_SCANCODE_Q,
++              SDL_SCANCODE_RETURN, PAD_KEY_MOUSE_MIDDLE, SDL_SCANCODE_LSHIFT, PAD_KEY_MOUSE_RIGHT,
++              SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT};
+     for (size_t i = 0; i < keys.size(); ++i)
+         PADSetKeyButtonBinding(port, {keys[i], kControllerButtons[i].padButton});
+     const std::array<int, PAD_AXIS_COUNT> axes = {
+         SDL_SCANCODE_D, SDL_SCANCODE_A, SDL_SCANCODE_W, SDL_SCANCODE_S,
+         SDL_SCANCODE_L, SDL_SCANCODE_J, SDL_SCANCODE_I, SDL_SCANCODE_K,
+-        SDL_SCANCODE_LSHIFT, PAD_KEY_MOUSE_RIGHT,
++        foreignGame ? SDL_SCANCODE_Q : SDL_SCANCODE_LSHIFT, foreignGame ? SDL_SCANCODE_E : PAD_KEY_MOUSE_RIGHT,
+     };
+     uint32_t axisCount = 0;
+     auto* mappings = PADGetKeyAxisBindings(port, &axisCount);
+@@ -625,11 +665,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
+ 
+ void DrawKeyboardSettings(uint32_t port) {
+     PushMenuTextWrap();
+-    ImGui::TextUnformatted("Default: WASD to steer, mouse left to accelerate, Space to brake.");
++    ImGui::TextUnformatted(GuestRegion::IsForeignGame()
++        ? "Default: WASD the Nunchuk stick, Space A, Left Shift B, 1 and 2, Enter +, Backspace -, "
++          "Q Z, E C, the arrows the D-pad. The mouse is the pointer (left click A, right click B)."
++        : "Default: WASD to steer, mouse left to accelerate, Space to brake.");
+     ImGui::PopTextWrapPos();
+     if (!ImGui::CollapsingHeader("Customize keys")) return;
+     ImGui::Indent();
+-    if (ImGui::Button("Reset to WASD + mouse")) ApplyKeyboardPreset(port);
++    if (ImGui::Button(GuestRegion::IsForeignGame() ? "Reset to the default keys" : "Reset to WASD + mouse")) {
++        ApplyKeyboardPreset(port);
++    }
+     uint32_t count = 0;
+     auto* buttons = PADGetKeyButtonBindings(port, &count);
+     ImGui::SeparatorText("Buttons");
+@@ -727,6 +772,37 @@ void DrawExpressionSettings() {
      }
  }
  
@@ -3426,7 +3478,7 @@ index 6c2083a..cad9ce2 100644
  void DrawRumbleSettings() {
      ImGui::Separator();
      if (ImGui::Checkbox("Controller vibration", &g_rumbleEnabled)) {
-@@ -1064,6 +1126,7 @@ void DrawControllerSettings() {
+@@ -1064,6 +1140,7 @@ void DrawControllerSettings() {
      ImGui::Spacing();
      controller_mapping_wizard::DrawSetupList();
      DrawWiiRemoteSetup();
@@ -3434,7 +3486,7 @@ index 6c2083a..cad9ce2 100644
      DrawRumbleSettings();
  }
  
-@@ -1074,22 +1137,25 @@ void DrawAudioSettings() {
+@@ -1074,22 +1151,25 @@ void DrawAudioSettings() {
          AudioBackend::Instance().SetMasterVolume(volume);
          RuntimeConfigFile::SetAudioVolume(volume);
      }
@@ -3464,7 +3516,7 @@ index 6c2083a..cad9ce2 100644
          const float volume = static_cast<float>(g_voicesVolumePercent) / 100.0f;
          MusicAttenuation::SetVoicesVolume(volume);
          RuntimeConfigFile::SetVoicesVolume(volume);
-@@ -1114,6 +1180,9 @@ void DrawAudioSettings() {
+@@ -1114,6 +1194,9 @@ void DrawAudioSettings() {
              "Runs the AX/DSP voice mix off the game thread. Turn this off if you "
              "suspect an audio problem; the mix then runs inline as it used to.");
      }
@@ -3474,7 +3526,7 @@ index 6c2083a..cad9ce2 100644
      ImGui::Separator();
      if (ImGui::Checkbox("Mute game music while external media is playing",
                          &g_attenuateMusicWhenMediaPlays)) {
-@@ -1144,24 +1213,145 @@ void DrawAudioSettings() {
+@@ -1144,24 +1227,145 @@ void DrawAudioSettings() {
      }
  }
  
@@ -3516,7 +3568,10 @@ index 6c2083a..cad9ce2 100644
 +            if (saved == kChoices[i].configName) {
 +                return static_cast<int>(i);
 +            }
-+        }
+         }
+-        if (ImGui::Selectable("4:3", !g_widescreen)) {
+-            g_widescreen = false;
+-            RuntimeConfigFile::SetWidescreen(false);
 +        return 0;
 +    }();
 +    static const int atLaunch = selected;
@@ -3561,10 +3616,7 @@ index 6c2083a..cad9ce2 100644
 +            if (saved == kChoices[i].configName) {
 +                return static_cast<int>(i);
 +            }
-         }
--        if (ImGui::Selectable("4:3", !g_widescreen)) {
--            g_widescreen = false;
--            RuntimeConfigFile::SetWidescreen(false);
++        }
 +        return 0;
 +    }();
 +    static const int atLaunch = selected;
@@ -3633,7 +3685,7 @@ index 6c2083a..cad9ce2 100644
      ImGui::Separator();
      struct EffectFlag {
          const char* label;
-@@ -1172,6 +1362,9 @@ void DrawGraphicsSettings() {
+@@ -1172,6 +1376,9 @@ void DrawGraphicsSettings() {
      }};
  
      for (const auto& effect : kEffectFlags) {
@@ -3643,7 +3695,7 @@ index 6c2083a..cad9ce2 100644
          bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
          if (ImGui::Checkbox(effect.label, &disabled)) {
              if (disabled) {
-@@ -1183,8 +1376,10 @@ void DrawGraphicsSettings() {
+@@ -1183,8 +1390,10 @@ void DrawGraphicsSettings() {
              RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
          }
      }
@@ -3656,7 +3708,7 @@ index 6c2083a..cad9ce2 100644
      static constexpr const char* kDisplayModes[] = {
          "Windowed",
          "Borderless fullscreen",
-@@ -1205,13 +1400,13 @@ void DrawGraphicsSettings() {
+@@ -1205,13 +1414,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -3673,7 +3725,7 @@ index 6c2083a..cad9ce2 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1285,8 +1480,13 @@ void DrawGraphicsSettings() {
+@@ -1285,8 +1494,13 @@ void DrawGraphicsSettings() {
      if (ImGui::Checkbox("Show FPS", &g_showFps)) {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
@@ -3688,7 +3740,7 @@ index 6c2083a..cad9ce2 100644
  }
  
  void DrawFpsOverlay() {
-@@ -1660,9 +1860,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1660,9 +1874,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
          controller_mapping_wizard::HandleSdlEvent(ev->sdl);
          if (g_rebind.active && (IsToggleKey(ev->sdl, SDL_SCANCODE_BACKSPACE) ||
                                  IsToggleKey(ev->sdl, SDL_SCANCODE_DELETE))) {
@@ -3703,7 +3755,7 @@ index 6c2083a..cad9ce2 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1936,12 @@ void Draw() noexcept {
+@@ -1732,6 +1950,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
