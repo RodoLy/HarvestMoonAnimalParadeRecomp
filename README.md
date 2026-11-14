@@ -60,39 +60,45 @@ saves and logs are in `UserData\`.
 
 ## Frequently asked questions
 
-These came up while the port was being made.
+**The first start takes several minutes.** The first time, `play.cmd` extracts the disc,
+translates the game's code and compiles it. Later starts only build what changed.
 
-**The first start takes a long time.** The first time, `play.cmd` extracts the disc,
-translates the game's code and compiles it; that is several minutes. Later starts only build
-what changed.
+**The game runs slowly on a Windows on ARM laptop (Snapdragon X).** Use the ARM64 package. The
+x64 package also works there, but through x86-64 emulation, which is slower.
 
-**It runs slowly on my Snapdragon X laptop.** Use the ARM64 package. The x64 package works on
-Windows on ARM, but through x86-64 emulation.
+**The picture is split down the middle, or things blink (Snapdragon X / Adreno GPU).** That is
+an old Adreno graphics driver with Direct3D 12. Update the driver with the *Snapdragon Control
+Panel* app (Microsoft Store) or your laptop maker's support app.
 
-**On Snapdragon X the picture is split down the middle, or things blink.** That is the 2023
-Adreno graphics driver with Direct3D 12. Update the driver with the *Snapdragon Control Panel*
-app (Microsoft Store) or your laptop maker's support app; newer drivers draw it right.
+**Vulkan stops with "Device lost", runs slowly or shows wrong colors.** Some GPUs, Adreno among
+them, only give Vulkan a reduced mode. Switch to Direct3D 12 (*Automatic* in
+*F10 > Graphics > Graphics API*) and restart.
 
-**Vulkan stops with "Device lost", runs at 20 FPS or shows a blue and green screen on
-Snapdragon X.** On the Adreno GPU Vulkan only gets a reduced mode. Use Direct3D 12, which is
-what *Automatic* picks.
+**The FPS counter says 30.** The game runs at 30 frames per second, as on the Wii. Turn on
+*Frame interpolation* in F10 to see 60, 120 or 180 FPS.
 
-**The FPS counter says 30.** That is the game's own speed on the Wii. Turn on *Frame
-interpolation* in F10 to see 60, 120 or 180 FPS.
+**With frame interpolation the counter stays under the chosen FPS in some areas.** In heavy
+areas, when a frame of the game is late there is no frame to insert for it. The game's speed
+does not change; lower the interpolation or the resolution if it bothers you.
 
-**With interpolation the counter drops below 60 outdoors.** Big outdoor areas are heavier. When
-a frame of the game is late, there is no frame to insert for it; the game itself keeps its
-speed.
+**Something looks wrong at the edges, or a menu looks stretched, with the wide picture.** The
+game was made for 4:3. Choose *Original (4:3)* in *F10 > Graphics > Picture* and please report
+where it happened.
 
-**I chose Spanish but the game is still in English.** Restart the game: it reads the language
-once, while it starts. Also check that you started the port with `play.cmd` and not another
-copy or Dolphin.
+**I changed the language and nothing changed.** Restart the game: it reads the language once,
+while it starts.
 
-**The game looks different from what I see here.** Make sure you start `play.cmd` from the
-package folder. `Game\AnimalParade.exe` starts the last build without updating it, and Dolphin
-is a different program altogether.
+**The title screen shows the Japanese logo.** In any language other than English the US disc
+only has the Japanese logo to show (see *Known issue* above).
 
-**Why does the title screen show the Japanese logo in Spanish?** See *Known issue* above.
+**How do I use the Wii Remote pointer?** With the mouse: it is the pointer, left click is A and
+right click is B. Controller and keyboard buttons can be changed in F10.
+
+**Where are my saves?** In `UserData\NAND\`, next to the settings (`UserData\Config.toml`).
+Copy the whole `UserData` folder to keep them.
+
+**The game closed with a message.** The message says why. Please open an issue with it and the
+newest folder in `UserData\Logs`.
 
 **Are there cheats?** Not for now. Codes that change the game's instructions cannot work in a
 recompiled game, and the ones that only change values in memory need addresses that are still

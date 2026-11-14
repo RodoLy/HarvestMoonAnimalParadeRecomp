@@ -60,39 +60,45 @@ configuración, las partidas y los registros quedan en `UserData\`.
 
 ## Preguntas frecuentes
 
-Salieron mientras se hacía el port.
+**La primera vez tarda varios minutos en abrir.** La primera vez, `play.cmd` extrae el disco,
+traduce el código del juego y lo compila. Las siguientes solo compila lo que cambió.
 
-**La primera vez tarda mucho en abrir.** La primera vez, `play.cmd` extrae el disco, traduce
-el código del juego y lo compila; son varios minutos. Las siguientes solo compila lo que
-cambió.
+**El juego va lento en una laptop con Windows en ARM (Snapdragon X).** Usa el paquete ARM64.
+El de x64 también funciona ahí, pero con la emulación de x86-64, que es más lenta.
 
-**Va lento en mi laptop Snapdragon X.** Usa el paquete ARM64. El de x64 funciona en Windows en
-ARM, pero con la emulación de x86-64.
+**La imagen sale partida a la mitad, o hay cosas que parpadean (Snapdragon X / GPU Adreno).**
+Es un driver de gráficos Adreno viejo con Direct3D 12. Actualiza el driver con la app
+*Snapdragon Control Panel* (Microsoft Store) o la app de soporte del fabricante de tu laptop.
 
-**En Snapdragon X la imagen sale partida a la mitad, o hay cosas que parpadean.** Es el driver
-de gráficos Adreno de 2023 con Direct3D 12. Actualiza el driver con la app *Snapdragon Control
-Panel* (Microsoft Store) o la app de soporte del fabricante de tu laptop; los drivers nuevos lo
-dibujan bien.
+**Vulkan se detiene con "Device lost", va lento o muestra colores raros.** Algunas GPU, entre
+ellas Adreno, solo le dan a Vulkan un modo reducido. Cambia a Direct3D 12 (*Automatic* en
+*F10 > Graphics > Graphics API*) y reinicia.
 
-**Vulkan se detiene con "Device lost", va a 20 FPS o muestra una pantalla azul con verde en
-Snapdragon X.** En la GPU Adreno, Vulkan solo funciona en un modo reducido. Usa Direct3D 12,
-que es lo que elige *Automatic*.
+**El contador de FPS dice 30.** El juego corre a 30 cuadros por segundo, como en la Wii. Activa
+*Frame interpolation* en F10 para ver 60, 120 o 180 FPS.
 
-**El contador de FPS dice 30.** Es la velocidad propia del juego en la Wii. Activa *Frame
-interpolation* en F10 para ver 60, 120 o 180 FPS.
+**Con la interpolación, en algunas zonas el contador no llega a los FPS elegidos.** En zonas
+pesadas, cuando un cuadro del juego llega tarde no hay cuadro que meter para él. La velocidad
+del juego no cambia; baja la interpolación o la resolución si te molesta.
 
-**Con la interpolación el contador baja de 60 afuera.** Las zonas grandes al aire libre pesan
-más. Cuando un cuadro del juego llega tarde, no hay cuadro que meter para él; la velocidad del
-juego no cambia.
+**Con la imagen ancha algo se ve mal en las orillas, o un menú se ve estirado.** El juego se
+hizo para 4:3. Elige *Original (4:3)* en *F10 > Graphics > Picture* y, por favor, avisa dónde
+pasó.
 
-**Elegí español y el juego sigue en inglés.** Reinicia el juego: lee el idioma una sola vez, al
-arrancar. Revisa también que lo abriste con `play.cmd` y no con otra copia o con Dolphin.
+**Cambié el idioma y no cambió nada.** Reinicia el juego: lee el idioma una sola vez, al
+arrancar.
 
-**El juego se ve distinto a lo que ves aquí.** Abre `play.cmd` de la carpeta del paquete.
-`Game\AnimalParade.exe` abre la última compilación sin actualizarla, y Dolphin es otro programa.
+**La pantalla de título muestra el logo japonés.** En cualquier idioma que no sea inglés, el
+disco de EE. UU. solo tiene el logo japonés para mostrar (ver *Problema conocido* arriba).
 
-**¿Por qué la pantalla de título sale con el logo japonés en español?** Ver *Problema
-conocido* arriba.
+**¿Cómo uso el puntero del Wii Remote?** Con el mouse: es el puntero, clic izquierdo es A y clic
+derecho es B. Los botones del mando y del teclado se cambian en F10.
+
+**¿Dónde están mis partidas?** En `UserData\NAND\`, junto a la configuración
+(`UserData\Config.toml`). Copia toda la carpeta `UserData` para guardarlas.
+
+**El juego se cerró con un mensaje.** El mensaje dice por qué. Abre un issue con él y la
+carpeta más reciente de `UserData\Logs`.
 
 **¿Hay trucos?** Por ahora no. Los códigos que cambian las instrucciones del juego no pueden
 funcionar en un juego recompilado, y los que solo cambian valores en memoria necesitan
