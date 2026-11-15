@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..7750459
+index 0000000..c5dbbdc
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,587 @@
+@@ -0,0 +1,598 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2083,17 +2083,22 @@ index 0000000..7750459
 +
 +// ---------------------------------------------------------------------------------------------
 +// Testing: the proposal at home. With [mods] romance_any_gender_test_proposal = true (F10 > Mods),
-+// a candidate's proposal starts when the player steps out of the house in the morning or the day,
-+// instead of when the player gives them the Blue Feather, so there is no need to find them. Each
-+// villager's proposal is their event whose messages are L000005 (GIL_L000005 for Gill): its
-+// trigger becomes the one the morning gift events use (the farm, coming from the house), and its
-+// condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at 900).
++// a candidate's confession and proposal start when the player steps out of the house in the morning
++// or the day, instead of at the lighthouse and when the player gives them the Blue Feather, so
++// there is no need to find them. The confession is the candidate's event whose messages are
++// L000003a and the proposal L000005 (GIL_L000003a, GIL_L000005 for Gill). The confession has to
++// play for real: it is what makes the candidate the player's sweetheart, and without it the
++// proposal is turned down. Both triggers become the one the morning gift events use (the farm,
++// coming from the house), so the confession comes on one outing and the proposal on the next; the
++// proposal's condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at
++// 900).
 +
 +constexpr const char* kTestProposalKey = "romance_any_gender_test_proposal";
 +
 +std::set<long> ProposalEvents(const std::filesystem::path& eventFolder, std::map<long, long>& characters) {
 +    std::set<long> events;
 +    static const std::regex proposal("msg0_0\\s+\"[A-Z]+_L000005\"");
++    static const std::regex confession("msg0_0\\s+\"[A-Z]+_L000003a\"");
 +    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
 +        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
 +            const long character = Number(block, "chara0");
@@ -2101,6 +2106,10 @@ index 0000000..7750459
 +                std::regex_search(block, proposal)) {
 +                events.insert(Number(block, "evtNo"));
 +                characters[Number(block, "evtNo")] = character;
++            }
++            if (character >= 0 && NaturalPartnerSex(static_cast<uint32_t>(character)) >= 0 &&
++                std::regex_search(block, confession)) {
++                events.insert(Number(block, "evtNo"));
 +            }
 +        }
 +    }
@@ -2218,7 +2227,7 @@ index 0000000..7750459
 +            WithoutFeatherCondition(ReadFile(eventFolder / "prm_love.epc"), proposalCharacters);
 +        if (!conditions.empty()) {
 +            std::ofstream(root / "event" / "prm_love.epc", std::ios::binary | std::ios::trunc) << conditions;
-+            std::fprintf(stderr, "[mod %s] test: %zu proposals start on leaving the house\n", kMod,
++            std::fprintf(stderr, "[mod %s] test: %zu confessions and proposals start on leaving the house\n", kMod,
 +                         proposals.size());
 +        }
 +    }
@@ -2271,10 +2280,11 @@ index 0000000..7750459
 +}
 +
 +// The event flags a candidate's heart events before the proposal expect to be set: every flag that
-+// one of those events, or the proposal itself, needs to be 1 in its conditions (prm_love.epc): the
-+// proposal asks for the confession's flag, which no earlier event does. A candidate's events are the
-+// ones varSet_love*.db gives that character's messages; their message names count up, and number
-+// 5 (GIL_L000005 for Gill) is the proposal, so these are L000000 to L000005. The file is
++// one of those events needs to be 1 in its conditions (prm_love.epc). That leaves the confession
++// (L000003a) to play: its own flag is only asked for by the proposal, and the confession scene is
++// what makes the candidate the player's sweetheart, which the proposal checks. A candidate's events
++// are the ones varSet_love*.db gives that character's messages; their message names count up, and
++// number 5 (GIL_L000005 for Gill) is the proposal, so these are L000000 to L000004. The file is
 +// "EVTP", a count and {event, offset, size} rows, then each event's "EVCD" block: a count at 8 and
 +// from 0x14 conditions of six numbers; {0, flag, -1, 0, 0, value} asks for a flag.
 +std::vector<uint32_t> HeartEventFlags(uint32_t character) {
@@ -2282,7 +2292,7 @@ index 0000000..7750459
 +    std::set<long> events;
 +    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
 +        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
-+            static const std::regex beforeProposal("msg0_0\\s+\"[A-Z]+_L00000[0-5]");
++            static const std::regex beforeProposal("msg0_0\\s+\"[A-Z]+_L00000[0-4]");
 +            if (Number(block, "chara0") == static_cast<long>(character) &&
 +                std::regex_search(block, beforeProposal)) {
 +                events.insert(Number(block, "evtNo"));
@@ -2421,7 +2431,7 @@ index 0000000..7750459
 +        }
 +        const bool feather = HoldBlueFeather();
 +        result = std::string(kCandidates[chosen].name) + ": 10 hearts, " + std::to_string(flags.size()) +
-+                 " heart event flags set, house built up" +
++                 " heart event flags set (the confession still to come), house built up" +
 +                 (feather ? ", Blue Feather in your hands. Save, then give it to them."
 +                          : ". Save; then, on the farm or in town, press Hold a Blue Feather and give it to them.");
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
@@ -2437,7 +2447,8 @@ index 0000000..7750459
 +    if (ImGui::Checkbox("Proposal when leaving the house (next start)", &s_atHome)) {
 +        RuntimeConfigFile::SetModEnabled(kTestProposalKey, s_atHome);
 +    }
-+    ImGui::TextDisabled("The candidate comes to propose as you step out, without the Blue Feather.");
++    ImGui::TextDisabled("Step out of the house: first the candidate's confession, the next time the proposal "
++                        "(no Blue Feather needed).");
 +    if (ImGui::Button("Finish the story (all bells rung)")) {
 +        const std::vector<uint32_t> flags = StoryFlags();
 +        const uint32_t state = Memory::Read32(kGameState);
