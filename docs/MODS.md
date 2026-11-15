@@ -42,7 +42,7 @@ What the game does, and what the mod changes:
 |---|---|---|
 | The player's sex | Game variable `0x23` (0 man, 1 woman), read by `0x801071A8` | Unchanged |
 | Who is a candidate | A man: characters 1-8, the Harvest Goddess (52), the Witch Princess (59). A woman: 9-16, the Harvest King (60), the Wizard (61) | All twenty, for either |
-| Heart events | `event/trig_love.db` marks each event `attr "man"` or `attr "woman"`, and `0x8012E07C` starts it only for that sex | The copy leaves that line out for the candidates' own events. The wedding and children's events keep it |
+| Heart events | `event/trig_love.db` marks each event `attr "man"` or `attr "woman"`, and `0x8012E07C` starts it only for that sex | The copy leaves that line out for every event of a candidate (those `event/varSet_love*.db` gives to one), the wedding and the children's included |
 | "Is this my candidate?" | `0x801DA2EC`, `0x801DA5BC`, `0x8010F0B0` answer by the player's sex | Wrapped: they answer for the character, as if the player were the sex the original pairs them with |
 | The spouse's clothes | `0x80181FF4` looks for the spouse in the costume table as "wife" or "husband" by the player's sex, and each candidate is only listed in one role | Wrapped: if the role finds nothing, it looks in the other one |
 
@@ -57,19 +57,37 @@ male player and one for a female player (`msglang/<language>/male` and `female`)
 the folder by the player's sex, so in Spanish, for example, the lines already use the right
 gender.
 
-**The children.** After the wedding, each candidate's events go on with the family: L000015 the
-spouse asks to have a child, L000016 the birth (the spouse is taken to the clinic, then the
-baby is named), L000017 to L000020 the baby growing; L000029 to L000034 the second child. The
-birth is the only scene written twice, `script/love/loveGirl/LG_L000016.opb` for a wife and
-`loveBoy/LB_L000016.opb` for a husband (likewise the proposal, L000005, the wedding, L000007, and
-the second child, L000029 and L000030); the rest are shared (`loveCommon/LC_*`).
-`tools/game_files.py` reads the event, message and scene files (their formats are at its top).
+**The children: adoption.** After the wedding, each candidate's events go on with the family:
+L000015, at bedtime, the spouse asks to have a child (and whether a boy or a girl); L000016, days
+later, the birth; L000017 to L000020 the baby growing; L000029 and L000030 the second child, the
+same way. For a couple of the same sex the mod (`romance_adoption.cpp`) plays a new scene instead
+of L000015 and L000029:
+
+1. At bedtime the spouse asks, with their own lines, as in the original: a child? a boy or a girl?
+2. They say they will ask the Harvest Goddess, who listens to those who truly love each other.
+3. The Harvest Goddess appears in the house with a baby: she has seen their great love and gives
+   them the baby to adopt. The player names the baby.
+4. The Goddess leaves, and the scene ends as the birth does: what the baby will be like, the
+   parenting book (first child), the spouse's hearts, the baby in the family.
+
+It marks the question and the birth as done, so there is no pregnancy and L000016/L000030 never
+come. With the Harvest Goddess or the Harvest King as the spouse nothing changes: their child
+already comes by magic.
+
+| | How |
+|---|---|
+| Which scene an event plays | A table at `0x80485160`, 12 bytes per event; `0x801320B4` returns the scene's file. The mod wraps it: for a same-sex couple's L000015 and L000029 it answers with the disc's unused test scenes `script/test/sample/sample_125.opb` to `sample_127.opb` (files 18426 to 18428) |
+| The scene | OPAL bytecode the mod writes into its copies of those files, staged like the game's own scenes (`LC_L000015.opb`, the Goddess's `GDSS_L000016.opb`, the births `LG/LB_L000016.opb`) |
+| The spouse's lines | Their own: the question's message set (`event/msgSet_love*.db`) gets ten lines of the birth's set added (slots 20 to 29: the name, what the baby will be like, good night, the book) |
+| The Goddess's lines | New: messages `0xE000` on, added to every `msglang/<language>/<male|female>/love*.mpc` (Spanish in `spa`, English in the others) |
+| Flags | Each spouse's question and birth "done" flags (their own condition in `prm_love.epc`), and the game's "first child" or "second child" flag |
+
+The scene's files are written at start-up to `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
 **Still to do:**
-- Check the rest of the places that read the player's sex: the wedding, the spouse at home and
-  the rivals.
-- For a same-sex couple, replace the pregnancy with a new scene: the Harvest Goddess calls the
-  couple and gives them a baby to adopt, for their great love.
+- Try it all in the game: the proposal, the wedding, the spouse at home and both adoptions.
+- Check the rest of the places that read the player's sex: the wedding, the spouse at home and the
+  rivals.
 
 ---
 
@@ -115,7 +133,7 @@ Lo que hace el juego y lo que cambia el mod:
 |---|---|---|
 | El sexo de quien juega | La variable `0x23` del juego (0 hombre, 1 mujer), que lee `0x801071A8` | Igual |
 | Quién es candidato | Un hombre: los personajes 1-8, la Diosa de la Cosecha (52) y la Princesa Bruja (59). Una mujer: 9-16, el Rey de la Cosecha (60) y el Mago (61) | Los veinte, para cualquiera |
-| Eventos de corazón | `event/trig_love.db` marca cada evento con `attr "man"` o `attr "woman"`, y `0x8012E07C` solo lo inicia para ese sexo | La copia quita esa línea en los eventos propios de los candidatos. La boda y los eventos de los hijos la conservan |
+| Eventos de corazón | `event/trig_love.db` marca cada evento con `attr "man"` o `attr "woman"`, y `0x8012E07C` solo lo inicia para ese sexo | La copia quita esa línea en todos los eventos de un candidato (los que `event/varSet_love*.db` le da), también la boda y los de los hijos |
 | «¿Es mi candidato?» | `0x801DA2EC`, `0x801DA5BC` y `0x8010F0B0` responden según el sexo de quien juega | Envueltas: responden por el personaje, como si quien juega fuera del sexo con el que el original lo empareja |
 | La ropa de la pareja | `0x80181FF4` busca a la pareja en la tabla de vestuario como «esposa» o «esposo» según el sexo de quien juega, y cada candidato solo aparece en un papel | Envuelta: si el papel no encuentra nada, busca en el otro |
 
@@ -130,17 +148,34 @@ versión para jugador hombre y otra para jugadora mujer (`msglang/<idioma>/male`
 juego elige la carpeta según el sexo de quien juega, así que en español, por ejemplo, las frases ya
 usan el género correcto.
 
-**Los hijos.** Después de la boda, los eventos de cada candidato siguen con la familia: L000015
-la pareja propone tener un hijo, L000016 el parto (la pareja va a la clínica y luego se le pone
-nombre al bebé), L000017 a L000020 el bebé creciendo; L000029 a L000034 el segundo hijo. El parto
-es la única escena escrita dos veces, `script/love/loveGirl/LG_L000016.opb` para una esposa y
-`loveBoy/LB_L000016.opb` para un esposo (igual que la pedida, L000005, la boda, L000007, y el
-segundo hijo, L000029 y L000030); las demás son comunes (`loveCommon/LC_*`).
-`tools/game_files.py` lee los archivos de eventos, mensajes y escenas (sus formatos están al
-principio).
+**Los hijos: la adopción.** Después de la boda, los eventos de cada candidato siguen con la
+familia: L000015, a la hora de dormir, la pareja propone tener un hijo (y si niño o niña); L000016,
+días después, el parto; L000017 a L000020 el bebé creciendo; L000029 y L000030 el segundo hijo,
+igual. Para una pareja del mismo sexo el mod (`romance_adoption.cpp`) pone una escena nueva en lugar
+de L000015 y L000029:
+
+1. A la hora de dormir la pareja pregunta, con sus propias frases, como en el original: ¿un hijo?
+   ¿niño o niña?
+2. Dice que se lo pedirán a la Diosa de la Cosecha, que escucha a quienes se quieren de verdad.
+3. La Diosa de la Cosecha aparece en la casa con un bebé: ha visto su gran amor y les da el bebé en
+   adopción. Quien juega le pone nombre.
+4. La Diosa se va y la escena termina como el parto: cómo será el bebé, el libro de crianza (primer
+   hijo), los corazones de la pareja, el bebé en la familia.
+
+Marca la pregunta y el parto como hechos, así que no hay embarazo y L000016/L000030 nunca llegan.
+Con la Diosa o el Rey de la Cosecha como pareja no cambia nada: su hijo ya llega por magia.
+
+| | Cómo |
+|---|---|
+| Qué escena pone un evento | Una tabla en `0x80485160`, 12 bytes por evento; `0x801320B4` devuelve el archivo de la escena. El mod la envuelve: para L000015 y L000029 de una pareja del mismo sexo responde con escenas de prueba que el disco no usa, `script/test/sample/sample_125.opb` a `sample_127.opb` (archivos 18426 a 18428) |
+| La escena | Código OPAL que el mod escribe en sus copias de esos archivos, montado como las escenas del juego (`LC_L000015.opb`, la de la Diosa `GDSS_L000016.opb`, los partos `LG/LB_L000016.opb`) |
+| Las frases de la pareja | Las suyas: al conjunto de mensajes de la pregunta (`event/msgSet_love*.db`) se le añaden diez frases del conjunto del parto (posiciones 20 a 29: el nombre, cómo será el bebé, buenas noches, el libro) |
+| Las frases de la Diosa | Nuevas: mensajes `0xE000` en adelante, añadidos a cada `msglang/<idioma>/<male|female>/love*.mpc` (español en `spa`, inglés en los demás) |
+| Banderas | Las de "hecho" de la pregunta y del parto de cada pareja (su propia condición en `prm_love.epc`) y la del juego de "primer hijo" o "segundo hijo" |
+
+Los archivos de la escena se escriben al abrir el juego en `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
 **Falta:**
+- Probarlo todo en el juego: la pedida, la boda, la pareja en casa y las dos adopciones.
 - Revisar el resto de los lugares que leen el sexo de quien juega: la boda, la pareja en casa y
   los rivales.
-- Para una pareja del mismo sexo, cambiar el embarazo por una escena nueva: la Diosa de la
-  Cosecha llama a la pareja y le da un bebé en adopción, por su gran amor.

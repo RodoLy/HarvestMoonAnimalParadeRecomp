@@ -1875,12 +1875,996 @@ index 0000000..e9bc399
 +}
 +
 +} // namespace GameMods
+diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
+new file mode 100644
+index 0000000..5dbf1a1
+--- /dev/null
++++ b/runtime/src/hle/game_mods/romance_adoption.cpp
+@@ -0,0 +1,978 @@
++// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
++// fall in love with the player, is romance_any_gender.cpp.)
++//
++// In the original game a couple's first child comes in two of the spouse's events: L000015, at
++// bedtime, where the spouse asks whether the player wants a child and whether a boy or a girl, and
++// days later L000016, the birth. The second child repeats it with L000029 and L000030. (Each
++// candidate has their own copy of these events: GIL_L000015 is Gill's event 1811, for example;
++// event/varSet_love*.db gives each event its character and its messages.)
++//
++// For a couple of the same sex, the mod plays a new scene instead of L000015 and L000029. The
++// spouse asks the same questions with their own lines, the couple wishes for a baby, and the
++// Harvest Goddess appears in the house and gives them a baby to adopt, for their great love. The
++// scene then ends the way the birth does (the baby's name, what the baby will be like, the
++// parenting book) and marks both the question and the birth as done, so there is no pregnancy and
++// L000016 or L000030 never comes.
++//
++// How it is done:
++// - The scene an event plays comes from a table at 0x80485160, 12 bytes per event: {kind, file,
++//   message files}. 0x801320B4 (event in r3) returns the file, a number in the game's file table
++//   at 0x80431340 (16 bytes per file, a pointer to its name first). The mod wraps 0x801320B4: for
++//   a same-sex couple's L000015 or L000029 it answers with one of the disc's unused test scenes,
++//   script/test/sample/sample_125.opb to sample_127.opb (files 18426 to 18428), and the mod's
++//   copies of those hold the new scene.
++// - The scene is OPAL bytecode built here (OpalScene below); tools/game_files.py describes the
++//   format. The commands are the ones the game's own scenes use for the same things: the bedtime
++//   talk is staged like loveCommon/LC_L000015.opb, the Goddess like the Harvest Goddess's own
++//   baby scene (loveGdss/GDSS_L000016.opb), and the end does what the birth scenes do
++//   (loveGirl/LG_L000016.opb and loveBoy/LB_L000016.opb).
++// - The spouse's lines are their own: an event's messages are 32 slots, -320 to -289, filled from
++//   its message set (event/msgSet_love*.db). L000015's and L000029's sets use 20; the mod's copy of
++//   the file adds ten lines of the spouse's birth set (the baby's name, what the baby will be like,
++//   good night and the book) as slots 20 to 29. The Goddess's lines are new: the mod adds them to
++//   every love message pack (msglang/<language>/<male|female>/love*.mpc) as messages 0xE000 and
++//   on, in Spanish for the Spanish packs and in English for the others.
++// - The Harvest Goddess and the Harvest King as spouses keep their own scenes: their child already
++//   comes by magic.
++
++#include "romance_any_gender.h"
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "memory.h"
++#include "runtime_config.h"
++
++#include <algorithm>
++#include <cstdint>
++#include <cstdio>
++#include <cstring>
++#include <fstream>
++#include <iterator>
++#include <map>
++#include <regex>
++#include <string>
++#include <vector>
++
++using namespace RomanceAnyGender;
++
++namespace {
++
++// ---------------------------------------------------------------------------------------------
++// Where the scene goes.
++
++// The disc's unused test scenes that carry the adoption (script/test/sample/), by file number.
++constexpr uint32_t kFirstChildForMenFile = 18426;    // sample_125.opb
++constexpr uint32_t kFirstChildForWomenFile = 18427;  // sample_126.opb
++constexpr uint32_t kSecondChildFile = 18428;         // sample_127.opb
++
++// A spouse's events about the children, and what the scene needs to know of them.
++struct Spouse {
++    uint32_t character = 0;
++    long askEvent[2] = {-1, -1};    // L000015 and L000029: the question
++    long birthEvent[2] = {-1, -1};  // L000016 and L000030: the birth
++    uint32_t askFlag[2] = {};       // each event's own "done" flag
++    uint32_t birthFlag[2] = {};
++    int preferredSex = 0;           // the first child they ask for when the player lets them choose
++};
++
++std::vector<Spouse> g_spouses;
++
++struct Adoption {
++    uint32_t character;
++    int child;  // 0 the first, 1 the second
++};
++std::map<uint32_t, Adoption> g_adoptions;  // by the question's event
++
++} // namespace
++
++// 0x801320B4 (event in r3): the file of the scene the event plays.
++extern "C" void AnimalParadeEventScene(CpuContext* ctx) {
++    const uint32_t event = ctx->gpr[3];
++    GuestFunctions::BaseTranslation(0x801320B4u)(ctx);
++    if (!Enabled()) {
++        return;
++    }
++    const auto found = g_adoptions.find(event);
++    if (found == g_adoptions.end() || Memory::Read32(kGameState) == 0) {
++        return;
++    }
++    const int playerSex = static_cast<int>(Memory::Read32(VariableAddress(0x23)));
++    if (NaturalPartnerSex(found->second.character) == playerSex) {
++        return;  // a couple the original game already has: its own scenes
++    }
++    if (found->second.child == 0) {
++        ctx->gpr[3] = playerSex == kMan ? kFirstChildForMenFile : kFirstChildForWomenFile;
++    } else {
++        ctx->gpr[3] = kSecondChildFile;
++    }
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 801320B4, AnimalParadeEventScene);
++
++namespace {
++
++// ---------------------------------------------------------------------------------------------
++// Writing a scene: OPAL bytecode.
++//
++// A command is the word 0x80000000 + its number, then its arguments. An argument after the word
++// 0x01000000 is an integer, after 0x02000000 a float, after 0x04000000 a yes/no; other arguments
++// are plain words (a character, a motion, a message, a float written as its bits). Jumps name a
++// command by its number. The file: "OPAL", the version 0x01040000, -1, then the offsets of the
++// command table, of the commands, their count and the offset of the debug section; the table has
++// each command's offset from the first; the debug section has, for each command, its number, a
++// 32-byte source name and a source line.
++
++class OpalScene {
++public:
++    using Words = std::vector<uint32_t>;
++
++    void Add(uint32_t command, const Words& arguments) {
++        Words words{0x80000000u | command};
++        words.insert(words.end(), arguments.begin(), arguments.end());
++        m_commands.push_back(std::move(words));
++    }
++
++    // A place to jump to: NewLabel(), jump to it, and Mark() it where it is.
++    int NewLabel() {
++        m_labels.push_back(-1);
++        return static_cast<int>(m_labels.size()) - 1;
++    }
++    void Mark(int label) { m_labels[label] = static_cast<int>(m_commands.size()); }
++
++    // A command whose argument `at` is a label's command number.
++    void AddJump(uint32_t command, Words arguments, size_t at, int label) {
++        m_fixes.push_back({m_commands.size(), at + 1, label});
++        Add(command, arguments);
++    }
++
++    std::string Build(const std::string& sourceName) const {
++        std::vector<Words> commands = m_commands;
++        for (const Fix& fix : m_fixes) {
++            commands[fix.command][fix.word] = static_cast<uint32_t>(m_labels[fix.label]);
++        }
++        const uint32_t count = static_cast<uint32_t>(commands.size());
++        const uint32_t table = 0x1C;
++        const uint32_t code = table + 4 * count;
++        uint32_t size = 0;
++        for (const Words& words : commands) {
++            size += 4 * static_cast<uint32_t>(words.size());
++        }
++        std::string out;
++        auto put = [&out](uint32_t value) {
++            out.push_back(static_cast<char>(value >> 24));
++            out.push_back(static_cast<char>(value >> 16));
++            out.push_back(static_cast<char>(value >> 8));
++            out.push_back(static_cast<char>(value));
++        };
++        out += "OPAL";
++        for (const uint32_t value : {0x01040000u, 0xFFFFFFFFu, table, code, count, code + size}) {
++            put(value);
++        }
++        uint32_t offset = 0;
++        for (const Words& words : commands) {
++            put(offset);
++            offset += 4 * static_cast<uint32_t>(words.size());
++        }
++        for (const Words& words : commands) {
++            for (const uint32_t word : words) {
++                put(word);
++            }
++        }
++        for (uint32_t i = 0; i < count; ++i) {
++            put(i);
++            std::string name = sourceName.substr(0, 31);
++            name.resize(32, '\0');
++            out += name;
++            put(i + 1);
++        }
++        return out;
++    }
++
++private:
++    struct Fix {
++        size_t command;
++        size_t word;
++        int label;
++    };
++    std::vector<Words> m_commands;
++    std::vector<int> m_labels;
++    std::vector<Fix> m_fixes;
++};
++
++uint32_t Bits(float value) {
++    uint32_t bits;
++    std::memcpy(&bits, &value, 4);
++    return bits;
++}
++
++// Typed arguments.
++OpalScene::Words Int(int32_t value) { return {0x01000000u, static_cast<uint32_t>(value)}; }
++OpalScene::Words Float(float value) { return {0x02000000u, Bits(value)}; }
++OpalScene::Words Yes() { return {0x04000000u, 1u}; }
++
++OpalScene::Words operator+(OpalScene::Words a, const OpalScene::Words& b) {
++    a.insert(a.end(), b.begin(), b.end());
++    return a;
++}
++
++// The characters of the scene, as the game's scenes name them.
++constexpr uint32_t kPlayer = 0;
++constexpr uint32_t kSpouse = static_cast<uint32_t>(-10);
++constexpr uint32_t kGoddess = 52;
++constexpr uint32_t kFirstChild = 62;
++constexpr uint32_t kSecondChild = 63;
++
++// Message n of the event's message set.
++constexpr uint32_t Slot(int n) { return 0xFFFFFEC0u + static_cast<uint32_t>(n); }
++
++// The commands, by what the game's scenes use them for.
++struct Commands {
++    OpalScene& scene;
++
++    void Actor(uint32_t who) { scene.Add(0x082, {who}); }
++    void LetGo(uint32_t who) { scene.Add(0x083, {who}); }
++    void LoadMotion(uint32_t who, uint32_t motion) { scene.Add(0x08F, {who, motion}); }
++    void Place(uint32_t who, float x, float z) { scene.Add(0x086, OpalScene::Words{who} + Float(x) + Float(z)); }
++    void Turn(uint32_t who, float angle) {  // 90 faces -x, 270 faces +x
++        scene.Add(0x091, OpalScene::Words{who} + Float(0) + Float(angle) + Float(0));
++    }
++    // A motion: once (loop 0) or looping (1), then `next`, with blend times (-1: the motion's own).
++    void Motion(uint32_t who, uint32_t motion, uint32_t loop = 1, uint32_t next = 0, float in = -1, float out = -1) {
++        scene.Add(0x08B, {who, motion, loop, next, Bits(in), Bits(out)});
++    }
++    void WaitForMotion(uint32_t who) { scene.Add(0x08D, {who}); }
++    void Face(uint32_t who, uint32_t expression) { scene.Add(0x095, {who, expression}); }
++    void Appear(uint32_t who, float seconds) { scene.Add(0x09A, {who, Bits(seconds)}); }
++    void Vanish(uint32_t who, float seconds) { scene.Add(0x09B, {who, Bits(seconds)}); }
++    void Hold(uint32_t child, uint32_t by) { scene.Add(0x26B, {child, by, 0x32}); }
++    void Wait(float seconds) { scene.Add(0x022, Float(seconds)); }
++    void Camera(float x, float y, float z, float dx, float dy, float dz) {
++        // Where the camera is, and the way back from what it looks at.
++        scene.Add(0x0C2, Float(x) + Float(y) + Float(z));
++        scene.Add(0x0C3, Float(dx) + Float(dy) + Float(dz));
++    }
++    void Talkers(uint32_t first, uint32_t second) {
++        scene.Add(0x28A, Int(0) + OpalScene::Words{first, 0xFFFFFFFFu});
++        scene.Add(0x28A, Int(1) + OpalScene::Words{second, 0xFFFFFFFFu});
++    }
++    void FadeIn(float seconds) { scene.Add(0x0E2, {Bits(seconds), 0}); }
++    void FadeOut(float seconds) { scene.Add(0x0E3, {Bits(seconds), 0}); }
++    void Sparkle() {  // the Harvest Goddess's sound and light
++        scene.Add(0x28D, Int(1) + OpalScene::Words{0x33F, 1, 0xFFFFFFFFu} + Float(0) + Float(0) + Float(0));
++        scene.Add(0x2A4, {0x27D});
++    }
++    void Say(uint32_t message, uint32_t who) { scene.Add(0x0A5, {message, who, 0, 0, 1, 0}); }
++    void Notice(uint32_t message) { scene.Add(0x0A4, {message}); }
++    // A question with choices; the answer (0, 1, 2...) goes to register `answer`.
++    void Choose(uint32_t question, uint32_t choices, uint32_t answer) {
++        scene.Add(0x0A7, OpalScene::Words{question, choices, answer} + Float(-1));
++    }
++    void Goto(int label) { scene.AddJump(0x000, {0}, 0, label); }
++    // If register `reg` holds `value` go on at `yes`, otherwise at `no`.
++    void IfRegister(uint32_t reg, int32_t value, int yes, int no) {
++        scene.Add(0x008, OpalScene::Words{0, reg} + Int(value));
++        scene.AddJump(0x00B, {0}, 0, yes);
++        scene.AddJump(0x00C, {0}, 0, no);
++    }
++    // After StartSpouseTest(): if the spouse is `character` go on at `yes`, otherwise at `no`.
++    void StartSpouseTest() { scene.Add(0x347, {0, kSpouse}); }
++    void IfSpouseIs(uint32_t character, int yes, int no) {
++        scene.Add(0x347, {1, character});
++        scene.Add(0x008, OpalScene::Words{0, 0} + Yes());
++        scene.AddJump(0x00B, {0}, 0, yes);
++        scene.AddJump(0x00C, {0}, 0, no);
++    }
++    void SetFlag(uint32_t flag) { scene.Add(0x102, OpalScene::Words{flag} + Int(1)); }
++    void ChildSex(uint32_t child, int32_t sex) { scene.Add(0x382, OpalScene::Words{child, 0} + Int(sex)); }
++};
++
++// The Goddess's lines (new messages in every love pack; see kGoddessLines below).
++constexpr uint32_t kDoNotBeAfraid = 0xE000;
++constexpr uint32_t kIHaveSeenYourLove = 0xE001;
++constexpr uint32_t kIEntrustThisBaby = 0xE002;
++constexpr uint32_t kNameTheBaby = 0xE003;
++constexpr uint32_t kLoveThem = 0xE004;
++constexpr uint32_t kWeMeetAgain = 0xE005;
++constexpr uint32_t kLetUsAskTheGoddess = 0xE006;
++constexpr uint32_t kLetUsAskAgain = 0xE007;
++constexpr uint32_t kLookItIsTheGoddess = 0xE008;
++
++// The ten lines the mod adds to the question's message set, from the spouse's birth set.
++constexpr int kAddedSlot = 20;
++constexpr int kBirthSlotsAdded[10] = {6, 8, 9, 10, 11, 12, 13, 17, 15, 16};
++constexpr uint32_t kNameReaction = Slot(20);        // "%0D%... what a lovely name!"
++constexpr uint32_t kWhatWillTheyBeLike = Slot(21);
++constexpr uint32_t kLikeQuestion = Slot(22);
++constexpr uint32_t kLikeChoices = Slot(23);         // healthy / kind
++constexpr uint32_t kHealthyAnswer = Slot(24);
++constexpr uint32_t kKindAnswer = Slot(25);
++constexpr uint32_t kGoodNight = Slot(26);
++constexpr uint32_t kBookNotice = Slot(27);
++constexpr uint32_t kSecondNameReaction = Slot(28);  // "%1D%..."
++constexpr uint32_t kSecondGoodNight = Slot(29);
++
++// The spouse's own lines in the question's set (L000015 and L000029 share them).
++struct QuestionLines {
++    uint32_t ask, wantChildren, yesNotYet, boyOrGirl, whichOne, boyGirlAsk, boy, girl, notYet, healthy;
++};
++constexpr QuestionLines kFirstQuestion{Slot(0), Slot(1), Slot(2), Slot(3), Slot(4), Slot(5), Slot(6), Slot(7), Slot(10), Slot(9)};
++constexpr QuestionLines kSecondQuestion{Slot(11), Slot(1), Slot(2), Slot(12), Slot(4), Slot(5), Slot(13), Slot(14), Slot(15), Slot(9)};
++constexpr uint32_t kFirstOpinion = Slot(8);
++constexpr uint32_t kSecondOpinionBoy = Slot(16);
++constexpr uint32_t kSecondOpinionGirl = Slot(17);
++
++// The whole scene. `child` is 0 for the first child, 1 for the second; `playerIsMan` picks the
++// first child's "born" flag the way the birth scenes do (0x7DE after a wife's, 0x7DD after a
++// husband's; the second child's is 0x7EF either way).
++std::string BuildScene(int child, bool playerIsMan, const std::vector<Spouse>& spouses) {
++    OpalScene scene;
++    Commands c{scene};
++    const uint32_t baby = child == 0 ? kFirstChild : kSecondChild;
++    const QuestionLines& lines = child == 0 ? kFirstQuestion : kSecondQuestion;
++
++    // Who is in it and the motions they use.
++    scene.Add(0x2C7, {0, Bits(1)});
++    c.Actor(kPlayer);
++    c.Actor(kSpouse);
++    c.Actor(kGoddess);
++    c.Actor(baby);
++    for (const uint32_t motion : {0x00u, 0x37u, 0x8Du, 0xA1u, 0xB6u, 0xB8u}) {
++        c.LoadMotion(kPlayer, motion);
++    }
++    for (const uint32_t motion : {0x33Fu, 0x331u, 0x33Bu, 0x8Du}) {
++        c.LoadMotion(kSpouse, motion);
++    }
++    for (const uint32_t motion : {0x2D6u, 0x2F7u, 0x2F8u, 0x215u, 0x00u, 0x8Du, 0x2FDu, 0x2D5u}) {
++        c.LoadMotion(kGoddess, motion);
++    }
++    c.LoadMotion(baby, 0xA5);
++    c.LoadMotion(baby, 0x26F);
++    scene.Add(0x284, Int(0));
++    scene.Add(0x284, Int(1));
++    scene.Add(0x0A2, {0xFFFFFFFFu, 0});
++    scene.Add(0x023, {0});
++
++    // Bedtime at home: the couple face each other (as in LC_L000015), the Goddess and the baby
++    // are already in place but unseen.
++    c.Place(kPlayer, 11.740f, 2.651f);
++    c.Turn(kPlayer, 83.264f);
++    c.Place(kSpouse, 10.379f, 2.916f);
++    c.Turn(kSpouse, -88.735f);
++    c.Place(kGoddess, 12.516f, 3.650f);
++    c.Turn(kGoddess, 272.834f);
++    c.Place(baby, 12.500f, 3.700f);
++    c.Turn(baby, 272.834f);
++    c.Hold(baby, kGoddess);
++    c.Vanish(kGoddess, 0.1f);
++    c.Vanish(baby, 0.1f);
++    c.Camera(12.532f, 1.643f, 2.962f, 0.988f, 0.150f, 0.029f);
++    scene.Add(0x28A, Int(0) + OpalScene::Words{kPlayer, 0});
++    scene.Add(0x28A, Int(1) + OpalScene::Words{kSpouse, 0});
++    c.FadeIn(1);
++    c.Wait(0.5f);
++
++    // The spouse asks.
++    const int yes = scene.NewLabel();
++    const int no = scene.NewLabel();
++    const int end = scene.NewLabel();
++    c.Face(kSpouse, 4);
++    c.Motion(kSpouse, 0x33F, 1, 0x331, -1, 0.3f);
++    c.Say(lines.ask, kSpouse);
++    c.Motion(kSpouse, 0x00, 0, 0, 0.3f, -1);
++    c.Face(kSpouse, 1);
++    c.Motion(kSpouse, 0x33B);
++    c.Choose(lines.wantChildren, lines.yesNotYet, 0);
++    c.IfRegister(0, 0, yes, no);
++
++    scene.Mark(no);
++    c.Face(kSpouse, 0);
++    c.Say(lines.notYet, kSpouse);
++    scene.Add(0x145, OpalScene::Words{kSpouse, 1} + Int(50));  // a little disappointed
++    c.Goto(end);
++
++    // A boy, a girl, or what the spouse would like.
++    scene.Mark(yes);
++    const int boy = scene.NewLabel();
++    const int notBoy = scene.NewLabel();
++    const int girl = scene.NewLabel();
++    const int opinion = scene.NewLabel();
++    const int wish = scene.NewLabel();
++    c.Face(kSpouse, 1);
++    c.Motion(kSpouse, 0x8D);
++    c.Say(lines.boyOrGirl, kSpouse);
++    c.Choose(lines.whichOne, lines.boyGirlAsk, 1);
++    c.IfRegister(1, 0, boy, notBoy);
++    scene.Mark(boy);
++    c.Say(lines.boy, kSpouse);
++    c.ChildSex(baby, 0);
++    c.Goto(wish);
++    scene.Mark(notBoy);
++    c.IfRegister(1, 1, girl, opinion);
++    scene.Mark(girl);
++    c.Say(lines.girl, kSpouse);
++    c.ChildSex(baby, 1);
++    c.Goto(wish);
++    scene.Mark(opinion);
++    if (child == 0) {
++        // Each spouse wants the child their own line names (as LC_L000015 sets it).
++        c.Say(kFirstOpinion, kSpouse);
++        c.StartSpouseTest();
++        for (const Spouse& spouse : spouses) {
++            const int match = scene.NewLabel();
++            const int next = scene.NewLabel();
++            c.IfSpouseIs(spouse.character, match, next);
++            scene.Mark(match);
++            c.ChildSex(baby, spouse.preferredSex);
++            c.Goto(wish);
++            scene.Mark(next);
++        }
++        c.ChildSex(baby, 0);
++    } else {
++        // The other sex from the first child's (as LC_L000029 does).
++        const int firstIsBoy = scene.NewLabel();
++        const int firstIsGirl = scene.NewLabel();
++        scene.Add(0x383, {1, kFirstChild, 0});
++        c.IfRegister(1, 0, firstIsBoy, firstIsGirl);
++        scene.Mark(firstIsBoy);
++        c.Say(kSecondOpinionGirl, kSpouse);
++        c.ChildSex(baby, 1);
++        c.Goto(wish);
++        scene.Mark(firstIsGirl);
++        c.Say(kSecondOpinionBoy, kSpouse);
++        c.ChildSex(baby, 0);
++    }
++    scene.Mark(wish);
++    c.Say(lines.healthy, kSpouse);
++    c.Face(kSpouse, 0);
++    c.Say(child == 0 ? kLetUsAskTheGoddess : kLetUsAskAgain, kSpouse);
++    c.FadeOut(1);
++    c.Wait(1);
++
++    // The Harvest Goddess appears with the baby (staged like GDSS_L000016).
++    c.Place(kPlayer, 13.835f, 3.383f);
++    c.Turn(kPlayer, 90.064f);
++    c.Motion(kPlayer, 0x00);
++    c.Place(kSpouse, 13.750f, 2.550f);
++    c.Turn(kSpouse, 48.3f);
++    c.Motion(kSpouse, 0x00);
++    c.Motion(kGoddess, 0x2D6, 1, 0x2D6, 0, -1);
++    c.Motion(baby, 0x26F, 1, 0x26F, 0, -1);
++    c.Talkers(kPlayer, kGoddess);
++    c.Face(kGoddess, 1);
++    c.Face(baby, 0xF);
++    c.Camera(14.988f, 2.154f, 6.031f, 0.580f, 0.219f, 0.784f);
++    c.FadeIn(1);
++    c.Wait(0.5f);
++    c.Sparkle();
++    c.Appear(kGoddess, 1);
++    c.Appear(baby, 1);
++    c.Wait(1);
++    c.Face(kPlayer, 4);
++    c.Face(kSpouse, 4);
++    c.Say(kLookItIsTheGoddess, kSpouse);
++    c.Camera(15.535f, 1.687f, 3.770f, 0.991f, 0.127f, 0.048f);
++    c.Face(kGoddess, 0);
++    if (child == 0) {
++        c.Say(kDoNotBeAfraid, kGoddess);
++        c.Face(kGoddess, 1);
++        c.Say(kIHaveSeenYourLove, kGoddess);
++        c.Say(kIEntrustThisBaby, kGoddess);
++    } else {
++        c.Face(kGoddess, 1);
++        c.Say(kWeMeetAgain, kGoddess);
++    }
++
++    // She hands the baby over.
++    c.Motion(kGoddess, 0x2F7, 1, 0);
++    c.WaitForMotion(kGoddess);
++    c.Motion(kGoddess, 0x2F8, 1, 0);
++    c.FadeOut(1);
++    c.Hold(baby, kPlayer);
++    c.Motion(kPlayer, 0xB8, 0, 0, 0, -1);
++    c.Camera(14.988f, 2.154f, 6.031f, 0.580f, 0.219f, 0.784f);
++    c.FadeIn(1);
++    c.Face(kPlayer, 1);
++    c.Face(baby, 1);
++    c.Motion(baby, 0xA5, 1, 0x26F);
++    c.Wait(0.8f);
++    c.Motion(kPlayer, 0xB6, 1, 0xB8, 0.2f, 0.2f);
++    c.Face(kSpouse, 1);
++    c.Wait(1);
++
++    // The baby's name.
++    c.Face(kGoddess, 0);
++    c.Motion(kGoddess, 0x215, 1, 0, 1, -1);
++    c.Say(kNameTheBaby, kGoddess);
++    c.Motion(kGoddess, 0x00, 1, 0, 1, -1);
++    scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
++    scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
++    c.Say(child == 0 ? kNameReaction : kSecondNameReaction, kSpouse);
++
++    // The Goddess says goodbye and goes.
++    c.Face(kGoddess, 1);
++    c.Motion(kGoddess, 0x2FD, 1, 0x215, -1, 1);
++    c.Say(kLoveThem, kGoddess);
++    c.Motion(kGoddess, 0x2D5, 1, 0, 1, -1);
++    c.Sparkle();
++    c.Vanish(kGoddess, 3);
++    c.Wait(2);
++
++    // What the baby will be like (as the birth scenes ask).
++    const int healthy = scene.NewLabel();
++    const int checkKind = scene.NewLabel();
++    const int kind = scene.NewLabel();
++    const int decided = scene.NewLabel();
++    c.Face(kSpouse, 0);
++    c.Say(kWhatWillTheyBeLike, kSpouse);
++    c.Choose(kLikeQuestion, kLikeChoices, 0);
++    scene.Add(0x00D, {0});
++    scene.AddJump(0x00E, {0, 0}, 1, healthy);
++    c.Goto(checkKind);
++    scene.Mark(healthy);
++    c.Face(kSpouse, 1);
++    c.Say(kHealthyAnswer, kSpouse);
++    scene.Add(0x30B, {baby, 0, 1});
++    scene.Mark(checkKind);
++    scene.AddJump(0x00E, {1, 0}, 1, kind);
++    c.Goto(decided);
++    scene.Mark(kind);
++    c.Face(kSpouse, 1);
++    c.Say(kKindAnswer, kSpouse);
++    scene.Add(0x30B, {baby, 3, 1});
++    scene.Mark(decided);
++    c.Say(child == 0 ? kGoodNight : kSecondGoodNight, kSpouse);
++
++    // What the birth does: the book (first child), the spouse's hearts, the baby in the family.
++    if (child == 0) {
++        scene.Add(0x0E4, {Bits(1), 0, 0xFF});
++        c.Wait(1);
++        c.Notice(kBookNotice);
++        scene.Add(0x0E3, {Bits(0.3f), 0});
++        scene.Add(0x0E5, {Bits(-1), 0, 0xFF});
++        scene.Add(0x30C, {0x1B});
++    }
++    scene.Add(0x144, OpalScene::Words{kSpouse, 1} + Int(100));
++    scene.Add(0x142, OpalScene::Words{baby, 0} + Int(1));
++    scene.Add(0x3A2, OpalScene::Words{7} + Int(0));
++    scene.Add(0x31A, {0});
++    scene.Add(0x307, {0x14, 0, 0});
++
++    // The spouse's question and birth are done (each spouse has their own flags).
++    const int flagsDone = scene.NewLabel();
++    c.StartSpouseTest();
++    for (const Spouse& spouse : spouses) {
++        const int match = scene.NewLabel();
++        const int next = scene.NewLabel();
++        c.IfSpouseIs(spouse.character, match, next);
++        scene.Mark(match);
++        c.SetFlag(spouse.askFlag[child]);
++        c.SetFlag(spouse.birthFlag[child]);
++        c.Goto(flagsDone);
++        scene.Mark(next);
++    }
++    scene.Mark(flagsDone);
++    c.SetFlag(child == 1 ? 0x7EF : (playerIsMan ? 0x7DE : 0x7DD));
++
++    // Bedtime ends the day (as LC_L000015 ends).
++    scene.Mark(end);
++    scene.Add(0x319, {0});
++    scene.Add(0x2C3, {0xFFFFFFFFu, Bits(1)});
++    c.FadeOut(1);
++    scene.Add(0x3A2, OpalScene::Words{6} + Int(0));
++    c.LetGo(kPlayer);
++    c.LetGo(kSpouse);
++    c.LetGo(kGoddess);
++    c.LetGo(baby);
++    scene.Add(0x285, Int(0));
++    scene.Add(0x285, Int(1));
++    scene.Add(0x0A3, {0xFFFFFFFFu, 0});
++    return scene.Build(child == 0 ? "ADOPTION_1.op" : "ADOPTION_2.op");
++}
++
++// ---------------------------------------------------------------------------------------------
++// The Goddess's lines.
++
++struct GoddessLine {
++    uint32_t id;
++    const char* spanishMen;    // msglang/spa/male: the couple are two men
++    const char* spanishWomen;  // msglang/spa/female: two women (nullptr: the same)
++    const char* english;
++};
++
++const GoddessLine kGoddessLines[] = {
++    {kDoNotBeAfraid,
++     "No os asustéis.\nSoy la Diosa de la Cosecha.\n%k%",
++     nullptr,
++     "Don't be afraid.\nI am the Harvest Goddess.\n%k%"},
++    {kIHaveSeenYourLove,
++     "Desde el manantial he visto\nel gran amor que os tenéis.\n%k%%g%Esta noche he escuchado\nvuestro deseo de formar\nuna familia.\n%k%",
++     nullptr,
++     "From my spring, I have seen\nhow much you love each other.\n%k%%g%Tonight I heard your wish\nto start a family.\n%k%"},
++    {kIEntrustThisBaby,
++     "Este bebé no tiene a nadie\nque lo cuide.\n%k%%g%Por vuestro gran amor,\nquiero confiároslo\na vosotros.\n%k%",
++     "Este bebé no tiene a nadie\nque lo cuide.\n%k%%g%Por vuestro gran amor,\nquiero confiároslo\na vosotras.\n%k%",
++     "This little one has no one\nto take care of them.\n%k%%g%Because of your great love,\nI want to entrust them\nto you both.\n%k%"},
++    {kNameTheBaby,
++     "Desde hoy forma parte de\nvuestra familia.\n%k%%g%¿Qué nombre le vais a poner?\n%k%",
++     nullptr,
++     "From today on, this child is\npart of your family.\n%k%%g%What will you name them?\n%k%"},
++    {kLoveThem,
++     "Cuidadlo con todo\nvuestro amor.\n%k%%g%Desde el manantial siempre\nos estaré cuidando.\n%k%",
++     nullptr,
++     "Raise them with all\nyour love.\n%k%%g%I will always be watching\nover you from my spring.\n%k%"},
++    {kWeMeetAgain,
++     "Volvemos a vernos.\n%k%%g%Vuestro hogar está tan lleno\nde amor que quiero confiaros\na otro pequeño.\n%k%",
++     nullptr,
++     "We meet again.\n%k%%g%Your home is so full of love\nthat I want to entrust you\nwith another little one.\n%k%"},
++    {kLetUsAskTheGoddess,
++     "Dicen que la Diosa de la\nCosecha escucha a quienes\nse quieren de verdad...\n%k%%g%Pidámosle esta noche\nque nos traiga un bebé.\n%k%",
++     nullptr,
++     "They say the Harvest Goddess\nlistens to those who truly\nlove each other...\n%k%%g%Let's ask her tonight\nto bring us a baby.\n%k%"},
++    {kLetUsAskAgain,
++     "Pidámoselo otra vez a la\nDiosa de la Cosecha...\n%k%",
++     nullptr,
++     "Let's ask the Harvest\nGoddess once more...\n%k%"},
++    {kLookItIsTheGoddess,
++     "¡%A%, mira!\n¡Es la Diosa de la Cosecha!\n%k%",
++     nullptr,
++     "%A%, look!\nIt's the Harvest Goddess!\n%k%"},
++};
++
++std::u16string Utf16(const std::string& text) {
++    std::u16string out;
++    for (size_t i = 0; i < text.size();) {
++        const uint8_t byte = static_cast<uint8_t>(text[i]);
++        uint32_t code = byte;
++        size_t length = 1;
++        if (byte >= 0xF0) {
++            code = byte & 0x07;
++            length = 4;
++        } else if (byte >= 0xE0) {
++            code = byte & 0x0F;
++            length = 3;
++        } else if (byte >= 0xC0) {
++            code = byte & 0x1F;
++            length = 2;
++        }
++        for (size_t k = 1; k < length && i + k < text.size(); ++k) {
++            code = (code << 6) | (static_cast<uint8_t>(text[i + k]) & 0x3F);
++        }
++        out.push_back(static_cast<char16_t>(code));
++        i += length;
++    }
++    return out;
++}
++
++// One message as the packs keep it, "MSGB": its line breaks, pages (split by %g%), longest line
++// and the most line breaks in a page, then the text in UTF-16. A name (%A%, %0D%) counts as 8.
++std::string MessageEntry(const std::string& text) {
++    const std::u16string utf16 = Utf16(text);
++    uint32_t breaks = 0;
++    uint32_t pages = 1;
++    uint32_t longest = 0;
++    uint32_t pageBreaks = 0;
++    uint32_t mostPageBreaks = 0;
++    uint32_t line = 0;
++    for (size_t i = 0; i < text.size(); ++i) {
++        if (text[i] == '\n') {
++            ++breaks;
++            ++pageBreaks;
++            line = 0;
++        } else if (text[i] == '%') {
++            const size_t close = text.find('%', i + 1);
++            const std::string code = text.substr(i + 1, close - i - 1);
++            if (code == "g") {
++                ++pages;
++                mostPageBreaks = std::max(mostPageBreaks, pageBreaks);
++                pageBreaks = 0;
++            } else if (code == "A" || code == "0D" || code == "1D") {
++                line += 8;
++            }
++            i = close;
++        } else if ((static_cast<uint8_t>(text[i]) & 0xC0) != 0x80) {
++            ++line;
++        }
++        longest = std::max(longest, line);
++    }
++    mostPageBreaks = std::max(mostPageBreaks, pageBreaks);
++    std::string entry;
++    const uint32_t header[8] = {0x4D534742u, 0x01000001u, breaks, pages, longest, mostPageBreaks, 0x20,
++                                static_cast<uint32_t>(2 * utf16.size())};
++    entry.resize(0x20);
++    for (int i = 0; i < 8; ++i) {
++        PutBigEndian32(entry, 4 * size_t(i), header[i]);
++    }
++    for (const char16_t unit : utf16) {
++        entry.push_back(static_cast<char>(unit >> 8));
++        entry.push_back(static_cast<char>(unit & 0xFF));
++    }
++    return entry;
++}
++
++// A message pack ("MSGP": a count at 8, the rows {message, offset, size} from 0x14, then the
++// messages from the offset at 0x10) with the Goddess's lines added; empty if it is not a pack or
++// already has them.
++std::string WithGoddessLines(const std::string& pack, bool spanish, bool women) {
++    if (pack.size() < 0x14 || pack.compare(0, 4, "MSGP") != 0) {
++        return {};
++    }
++    const uint32_t count = ReadBigEndian32(pack, 8);
++    const uint32_t data = ReadBigEndian32(pack, 0x10);
++    if (data > pack.size() || 0x14 + 12 * size_t(count) > data) {
++        return {};
++    }
++    std::string rows = pack.substr(0x14, 12 * size_t(count));
++    std::string messages = pack.substr(data);
++    for (uint32_t i = 0; i < count; ++i) {
++        if (ReadBigEndian32(rows, 12 * size_t(i)) == kDoNotBeAfraid) {
++            return {};
++        }
++    }
++    for (const GoddessLine& line : kGoddessLines) {
++        const char* text = spanish ? (women && line.spanishWomen ? line.spanishWomen : line.spanishMen) : line.english;
++        const std::string entry = MessageEntry(text);
++        std::string row(12, '\0');
++        PutBigEndian32(row, 0, line.id);
++        PutBigEndian32(row, 4, static_cast<uint32_t>(messages.size()));
++        PutBigEndian32(row, 8, static_cast<uint32_t>(entry.size()));
++        rows += row;
++        messages += entry;
++    }
++    const uint32_t newCount = count + static_cast<uint32_t>(std::size(kGoddessLines));
++    std::string out = pack.substr(0, 0x14);
++    PutBigEndian32(out, 8, newCount);
++    PutBigEndian32(out, 0xC, 0x14);
++    PutBigEndian32(out, 0x10, 0x14 + 12 * newCount);
++    return out + rows + messages;
++}
++
++// ---------------------------------------------------------------------------------------------
++// Reading what the scene needs from the disc.
++
++// Each event's own "done" flag: the flag its conditions (prm_love.epc) want at 0.
++std::map<long, uint32_t> OwnFlags(const std::string& data) {
++    std::map<long, uint32_t> flags;
++    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
++        return flags;
++    }
++    const uint32_t count = ReadBigEndian32(data, 8);
++    const size_t blocks = 20 + 12 * size_t(count);
++    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
++        const size_t row = 20 + 12 * size_t(i);
++        const size_t block = blocks + ReadBigEndian32(data, row + 4);
++        const size_t size = ReadBigEndian32(data, row + 8);
++        if (block + size > data.size() || size < 0x14) {
++            continue;
++        }
++        const uint32_t conditions = ReadBigEndian32(data, block + 8);
++        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
++            const size_t at = block + 0x14 + 24 * size_t(c);
++            if (ReadBigEndian32(data, at) == 0 && ReadBigEndian32(data, at + 12) == 0 &&
++                ReadBigEndian32(data, at + 20) == 0) {
++                flags[static_cast<long>(ReadBigEndian32(data, row))] = ReadBigEndian32(data, at + 4);
++                break;
++            }
++        }
++    }
++    return flags;
++}
++
++// The child each spouse asks for when the player lets them choose, from LC_L000015: "is the
++// spouse n" (0x347 1 n) followed by "the child is" (0x382 62 0 sex).
++std::map<uint32_t, int> PreferredSexes(const std::string& data) {
++    std::map<uint32_t, int> sexes;
++    if (data.size() < 0x1C || data.compare(0, 4, "OPAL") != 0) {
++        return sexes;
++    }
++    const uint32_t table = ReadBigEndian32(data, 0xC);
++    const uint32_t code = ReadBigEndian32(data, 0x10);
++    const uint32_t count = ReadBigEndian32(data, 0x14);
++    long spouse = -1;
++    int since = 0;
++    for (uint32_t i = 0; i < count && table + 4 * size_t(i + 1) <= data.size(); ++i) {
++        const size_t at = code + ReadBigEndian32(data, table + 4 * size_t(i));
++        if (at + 24 > data.size()) {
++            break;
++        }
++        const uint32_t command = ReadBigEndian32(data, at) & 0xFFF;
++        if (command == 0x347 && ReadBigEndian32(data, at + 4) == 1) {
++            spouse = static_cast<long>(ReadBigEndian32(data, at + 8));
++            since = 0;
++        } else if (command == 0x382 && spouse >= 0 && since < 6 && ReadBigEndian32(data, at + 4) == kFirstChild) {
++            sexes[static_cast<uint32_t>(spouse)] = static_cast<int>(ReadBigEndian32(data, at + 16));
++            spouse = -1;
++        }
++        ++since;
++    }
++    return sexes;
++}
++
++// A message set file with the ten birth lines added to the question sets (slots 20 to 29).
++std::string WithBirthLines(const std::string& text, const std::map<std::string, std::vector<long>>& sets) {
++    static const std::regex question("msgSet\\s+\"([A-Z]+)_L0000(15|29)\"");
++    const std::string newline = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
++    std::string out;
++    size_t at = 0;
++    while (true) {
++        const size_t start = text.find('{', at);
++        const size_t end = start == std::string::npos ? std::string::npos : text.find('}', start);
++        if (end == std::string::npos) {
++            out += text.substr(at);
++            break;
++        }
++        out += text.substr(at, start - at);
++        std::string block = text.substr(start, end - start);
++        std::smatch match;
++        if (std::regex_search(block, match, question)) {
++            const std::string own = match[1].str() + "_L0000" + match[2].str();
++            const std::string birth = match[1].str() + (match[2].str() == "15" ? "_L000016" : "_L000030");
++            const auto mine = sets.find(own);
++            const auto births = sets.find(birth);
++            if (mine != sets.end() && births != sets.end() && !mine->second.empty() && !births->second.empty() &&
++                mine->second.size() <= size_t(kAddedSlot)) {
++                while (!block.empty() && (block.back() == ' ' || block.back() == '\t')) {
++                    block.pop_back();
++                }
++                if (block.size() < newline.size() || block.compare(block.size() - newline.size(), newline.size(), newline) != 0) {
++                    block += newline;
++                }
++                for (size_t slot = mine->second.size(); slot < size_t(kAddedSlot); ++slot) {
++                    block += "  msg" + std::to_string(slot) + "  " + std::to_string(mine->second[0]) + newline;
++                }
++                for (int i = 0; i < 10; ++i) {
++                    const size_t from = size_t(kBirthSlotsAdded[i]);
++                    const long id = from < births->second.size() ? births->second[from] : births->second[0];
++                    block += "  msg" + std::to_string(kAddedSlot + i) + "  " + std::to_string(id) + newline;
++                }
++            }
++        }
++        out += block + "}";
++        at = end + 1;
++    }
++    return out;
++}
++
++void PrepareAdoption() {
++    if (!Enabled() || ::GuestRegion::ForeignGameAddress("RBIEE9", 1u) == 0) {
++        return;
++    }
++    const std::filesystem::path files = RuntimeConfigFile::ResolvedDvdRoot() / "files";
++    const std::filesystem::path events = files / "event";
++
++    // The spouses' child events, from the names of their message sets.
++    std::map<uint32_t, Spouse> byCharacter;
++    static const std::regex childEvent("msg0_0\\s+\"[A-Z]+_L0000(15|16|29|30)\"");
++    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
++        for (const std::string& block : Blocks(ReadFile(events / name))) {
++            std::smatch match;
++            const long character = Number(block, "chara0");
++            if (!std::regex_search(block, match, childEvent) || character < 0 ||
++                NaturalPartnerSex(static_cast<uint32_t>(character)) < 0 || character == 52 || character == 60) {
++                continue;
++            }
++            Spouse& spouse = byCharacter[static_cast<uint32_t>(character)];
++            spouse.character = static_cast<uint32_t>(character);
++            const long event = Number(block, "evtNo");
++            const std::string which = match[1].str();
++            (which == "15" ? spouse.askEvent[0] : which == "29" ? spouse.askEvent[1]
++             : which == "16" ? spouse.birthEvent[0] : spouse.birthEvent[1]) = event;
++        }
++    }
++    const std::map<long, uint32_t> flags = OwnFlags(ReadFile(events / "prm_love.epc"));
++    const std::map<uint32_t, int> sexes =
++        PreferredSexes(ReadFile(files / "script" / "love" / "loveCommon" / "LC_L000015.opb"));
++    g_spouses.clear();
++    g_adoptions.clear();
++    for (auto& [character, spouse] : byCharacter) {
++        bool complete = true;
++        for (int child = 0; child < 2; ++child) {
++            const auto ask = flags.find(spouse.askEvent[child]);
++            const auto birth = flags.find(spouse.birthEvent[child]);
++            complete = complete && ask != flags.end() && birth != flags.end();
++            if (complete) {
++                spouse.askFlag[child] = ask->second;
++                spouse.birthFlag[child] = birth->second;
++            }
++        }
++        if (!complete) {
++            std::fprintf(stderr, "[mod %s] adoption: character %u's child events are incomplete; skipped\n", kMod,
++                         character);
++            continue;
++        }
++        const auto sex = sexes.find(character);
++        spouse.preferredSex = sex != sexes.end() ? sex->second : 0;
++        g_spouses.push_back(spouse);
++        g_adoptions[static_cast<uint32_t>(spouse.askEvent[0])] = {character, 0};
++        g_adoptions[static_cast<uint32_t>(spouse.askEvent[1])] = {character, 1};
++    }
++    if (g_spouses.empty()) {
++        std::fprintf(stderr, "[mod %s] adoption: no child events found; the scene is off\n", kMod);
++        return;
++    }
++
++    const std::filesystem::path root = GameMods::Folder(std::string(kMod) + "_adoption");
++    std::error_code ec;
++    std::filesystem::create_directories(root / "script" / "test" / "sample", ec);
++    std::filesystem::create_directories(root / "event", ec);
++    const std::filesystem::path scenes = root / "script" / "test" / "sample";
++    std::ofstream(scenes / "sample_125.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, true, g_spouses);
++    std::ofstream(scenes / "sample_126.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, false, g_spouses);
++    std::ofstream(scenes / "sample_127.opb", std::ios::binary | std::ios::trunc) << BuildScene(1, true, g_spouses);
++
++    // The message sets, with the birth lines added to the questions'.
++    std::map<std::string, std::vector<long>> sets;
++    for (const char* name : {"msgSet_loveM.db", "msgSet_loveW.db"}) {
++        static const std::regex setName("msgSet\\s+\"([^\"]+)\"");
++        for (const std::string& block : Blocks(ReadFile(events / name))) {
++            std::smatch match;
++            if (!std::regex_search(block, match, setName)) {
++                continue;
++            }
++            std::vector<long>& ids = sets[match[1].str()];
++            for (int slot = 0;; ++slot) {
++                const long id = Number(block, ("msg" + std::to_string(slot)).c_str());
++                if (id < 0) {
++                    break;
++                }
++                ids.push_back(id);
++            }
++        }
++    }
++    for (const char* name : {"msgSet_loveM.db", "msgSet_loveW.db"}) {
++        const std::string original = ReadFile(events / name);
++        if (!original.empty()) {
++            std::ofstream(root / "event" / name, std::ios::binary | std::ios::trunc) << WithBirthLines(original, sets);
++        }
++    }
++
++    // The Goddess's lines in every love message pack.
++    int packs = 0;
++    for (const auto& language : std::filesystem::directory_iterator(files / "msglang", ec)) {
++        for (const char* sex : {"male", "female"}) {
++            const std::filesystem::path folder = language.path() / sex;
++            for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
++                const std::string file = entry.path().filename().string();
++                if (file.rfind("love", 0) != 0 || entry.path().extension() != ".mpc") {
++                    continue;
++                }
++                const std::string pack = WithGoddessLines(ReadFile(entry.path()),
++                                                          language.path().filename() == "spa",
++                                                          std::string(sex) == "female");
++                if (pack.empty()) {
++                    continue;
++                }
++                const std::filesystem::path target = root / "msglang" / language.path().filename() / sex;
++                std::filesystem::create_directories(target, ec);
++                std::ofstream(target / file, std::ios::binary | std::ios::trunc) << pack;
++                ++packs;
++            }
++        }
++    }
++    GameMods::RegisterDiscOverlay(root);
++    std::fprintf(stderr, "[mod %s] adoption: %zu spouses, %d message packs\n", kMod, g_spouses.size(), packs);
++}
++
++const GameMods::Registration kRegistration(PrepareAdoption);
++
++} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..c931d58
+index 0000000..bd9d0ba
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,627 @@
+@@ -0,0 +1,620 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -1893,9 +2877,8 @@ index 0000000..c931d58
 +//   man, and characters 9-16, the Harvest King (60) and the Wizard (61) for a woman.
 +// - Each candidate's heart events start from event/trig_love.db, a text file on the disc. Every
 +//   event there has `attr "man"` or `attr "woman"`, and the event only starts for a player of that
-+//   sex (checked at 0x8012E07C). The mod writes a copy of the file without that line for the
-+//   candidates' own events, so they start for either sex; events about the player's own wedding
-+//   and children keep theirs.
++//   sex (checked at 0x8012E07C). The mod writes a copy of the file without that line for every
++//   event of a candidate (those event/varSet_love*.db gives to one), so they start for either sex.
 +// - Several functions ask "is this character my candidate?" by the player's sex. The mod wraps
 +//   them so they answer for the character instead: a character's natural partner is the sex the
 +//   original game pairs them with, and while one of these functions runs for a candidate, the
@@ -1904,6 +2887,10 @@ index 0000000..c931d58
 +// The dialogue needs nothing new: the disc has every candidate's love text in a version for a male
 +// and for a female player (msglang/<language>/male and female), and the game picks the folder by
 +// the player's sex.
++//
++// A couple of the same sex adopts their children instead: that part is romance_adoption.cpp.
++
++#include "romance_any_gender.h"
 +
 +#include "game_mods.h"
 +#include "guest_abi/cpu_context.h"
@@ -1925,9 +2912,7 @@ index 0000000..c931d58
 +#include <string>
 +#include <vector>
 +
-+namespace {
-+
-+constexpr const char* kMod = "romance_any_gender";
++namespace RomanceAnyGender {
 +
 +bool Enabled() {
 +    static const bool enabled = RuntimeConfigFile::ModEnabled(kMod);
@@ -1936,9 +2921,6 @@ index 0000000..c931d58
 +
 +// ---------------------------------------------------------------------------------------------
 +// Who pairs with whom in the original game.
-+
-+constexpr int kMan = 0;
-+constexpr int kWoman = 1;
 +
 +// The sex the original game pairs a character with, or -1 for anyone who is not a candidate.
 +int NaturalPartnerSex(uint32_t character) {
@@ -1950,6 +2932,65 @@ index 0000000..c931d58
 +    }
 +    return -1;
 +}
++
++// ---------------------------------------------------------------------------------------------
++// The disc's text files (.db): blocks of "{", lines of "key  value", "}".
++
++std::string ReadFile(const std::filesystem::path& path) {
++    std::ifstream file(path, std::ios::binary);
++    std::ostringstream text;
++    text << file.rdbuf();
++    return text.str();
++}
++
++std::vector<std::string> Blocks(const std::string& text) {
++    std::vector<std::string> blocks;
++    size_t at = 0;
++    while ((at = text.find('{', at)) != std::string::npos) {
++        const size_t end = text.find('}', at);
++        if (end == std::string::npos) {
++            break;
++        }
++        blocks.push_back(text.substr(at, end + 1 - at));
++        at = end + 1;
++    }
++    return blocks;
++}
++
++long Number(const std::string& block, const char* key) {
++    const std::regex pattern(std::string("\\b") + key + "\\s+\"?(-?\\d+)");
++    std::smatch match;
++    return std::regex_search(block, match, pattern) ? std::stol(match[1]) : -1;
++}
++
++void PutBigEndian32(std::string& data, size_t at, uint32_t value) {
++    for (int i = 0; i < 4; ++i) {
++        data[at + i] = static_cast<char>(value >> (24 - 8 * i));
++    }
++}
++
++uint32_t ReadBigEndian32(const std::string& data, size_t at) {
++    return (uint32_t(uint8_t(data[at])) << 24) | (uint32_t(uint8_t(data[at + 1])) << 16) |
++           (uint32_t(uint8_t(data[at + 2])) << 8) | uint32_t(uint8_t(data[at + 3]));
++}
++
++// ---------------------------------------------------------------------------------------------
++// The game's state in memory (see romance_any_gender.h).
++
++uint32_t TableOffset(uint32_t table, uint32_t entry) {
++    const uint32_t base = Memory::Read32(Memory::Read32(table + 0xC) + 4) + Memory::Read32(table);
++    return Memory::Read32(base + 4 * entry) - Memory::Read32(base);
++}
++
++uint32_t VariableAddress(uint32_t variable) {
++    return Memory::Read32(kGameState) + 0x1398 + TableOffset(kVariableTable, variable);
++}
++
++} // namespace RomanceAnyGender
++
++using namespace RomanceAnyGender;
++
++namespace {
 +
 +// While a wrapped function runs for a candidate, the player's sex reads as this (-1: the real one).
 +thread_local int t_playerSexSeenAs = -1;
@@ -2031,35 +3072,6 @@ index 0000000..c931d58
 +// ---------------------------------------------------------------------------------------------
 +// The copy of event/trig_love.db.
 +
-+std::string ReadFile(const std::filesystem::path& path) {
-+    std::ifstream file(path, std::ios::binary);
-+    std::ostringstream text;
-+    text << file.rdbuf();
-+    return text.str();
-+}
-+
-+// The blocks of a .db file: "{", lines of "key  value", "}".
-+std::vector<std::string> Blocks(const std::string& text) {
-+    std::vector<std::string> blocks;
-+    size_t at = 0;
-+    while ((at = text.find('{', at)) != std::string::npos) {
-+        const size_t end = text.find('}', at);
-+        if (end == std::string::npos) {
-+            break;
-+        }
-+        blocks.push_back(text.substr(at, end + 1 - at));
-+        at = end + 1;
-+    }
-+    return blocks;
-+}
-+
-+// A block's value for key, or -1.
-+long Number(const std::string& block, const char* key) {
-+    const std::regex pattern(std::string("\\b") + key + "\\s+\"?(-?\\d+)");
-+    std::smatch match;
-+    return std::regex_search(block, match, pattern) ? std::stol(match[1]) : -1;
-+}
-+
 +// The events that belong to a candidate: those whose messages (varSet_love*.db) are a candidate's,
 +// plus the Harvest Goddess's and the Harvest King's, whose events have no messages listed there.
 +std::set<long> CandidateEvents(const std::filesystem::path& eventFolder) {
@@ -2130,17 +3142,6 @@ index 0000000..c931d58
 +    trigger += "    preMapCtg  1" + newline + "    preMapId  0" + newline;
 +    trigger += "    timeS  6" + newline + "    timeE  22" + newline;
 +    return trigger + "}";
-+}
-+
-+void PutBigEndian32(std::string& data, size_t at, uint32_t value) {
-+    for (int i = 0; i < 4; ++i) {
-+        data[at + i] = static_cast<char>(value >> (24 - 8 * i));
-+    }
-+}
-+
-+uint32_t ReadBigEndian32(const std::string& data, size_t at) {
-+    return (uint32_t(uint8_t(data[at])) << 24) | (uint32_t(uint8_t(data[at + 1])) << 16) |
-+           (uint32_t(uint8_t(data[at + 2])) << 8) | uint32_t(uint8_t(data[at + 3]));
 +}
 +
 +// prm_love.epc with the Blue Feather condition {10, 1269, 0, >=, 0, 1} of these events turned into
@@ -2242,41 +3243,17 @@ index 0000000..c931d58
 +// candidate, without playing the weeks it takes, so the mod can be tried. It writes the game's
 +// state directly; save in the game afterwards to keep it.
 +//
-+// Where the game keeps what the proposal checks (event/prm_love.epc, the conditions of each
-+// candidate's proposal event, for example Gill's 1797):
-+// - The game's state: the structure at *(0x806B3B80).
-+// - Event flags: one byte each, at state + 0x118 + flag (read by 0x80111754).
-+// - Game variables: state + 0x1398 + offset, the offset from the table at 0x8050AA10 (0x80110148).
-+//   Variable 85 has to be at least 1: the house built up once.
-+// - Each villager's values: state + (character - 1) * 0x400 + 0x1B98 + offset, the offset from the
-+//   table at 0x8050AA24 (0x801118E8). Value 1 is the heart points: 900 is the proposal's minimum,
-+//   1000 the most (0x8010A2E4 caps it there).
-+// - The Blue Feather is item 1269 (0x4F5); the gift code at 0x801D5E1C reads the item the player
-+//   holds from the player's object, *(0x80501D58 + 0x50), at + 0x650.
++// What the proposal checks are the conditions of each candidate's proposal event in
++// event/prm_love.epc (for example Gill's 1797); where the game keeps them is described in
++// romance_any_gender.h. The Blue Feather is item 1269 (0x4F5); the gift code at 0x801D5E1C reads
++// the item the player holds from the player's object, *(0x80501D58 + 0x50), at + 0x650.
 +
-+constexpr uint32_t kGameState = 0x806B3B80u;
-+constexpr uint32_t kVariableTable = 0x8050AA10u;
 +constexpr uint32_t kVillagerTable = 0x8050AA24u;
 +constexpr uint32_t kPlayerObject = 0x80501D58u + 0x50u;
 +constexpr uint32_t kBlueFeather = 1269;
 +
-+// An entry's offset in one of the game's value tables (what 0x80150134 works out).
-+uint32_t TableOffset(uint32_t table, uint32_t entry) {
-+    const uint32_t base = Memory::Read32(Memory::Read32(table + 0xC) + 4) + Memory::Read32(table);
-+    return Memory::Read32(base + 4 * entry) - Memory::Read32(base);
-+}
-+
-+uint32_t VariableAddress(uint32_t variable) {
-+    return Memory::Read32(kGameState) + 0x1398 + TableOffset(kVariableTable, variable);
-+}
-+
 +uint32_t VillagerValueAddress(uint32_t character, uint32_t value) {
 +    return Memory::Read32(kGameState) + (character - 1) * 0x400 + 0x1B98 + TableOffset(kVillagerTable, value);
-+}
-+
-+uint32_t BigEndian32(const std::string& data, size_t at) {
-+    return (uint32_t(uint8_t(data[at])) << 24) | (uint32_t(uint8_t(data[at + 1])) << 16) |
-+           (uint32_t(uint8_t(data[at + 2])) << 8) | uint32_t(uint8_t(data[at + 3]));
 +}
 +
 +// The event flags a candidate's heart events before the proposal expect to be set: every flag that
@@ -2315,30 +3292,30 @@ index 0000000..c931d58
 +    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
 +        return {};
 +    }
-+    const uint32_t count = BigEndian32(data, 8);
++    const uint32_t count = ReadBigEndian32(data, 8);
 +    const size_t blocks = 20 + 12 * size_t(count);
 +    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
 +        const size_t row = 20 + 12 * size_t(i);
-+        const long event = static_cast<long>(BigEndian32(data, row));
++        const long event = static_cast<long>(ReadBigEndian32(data, row));
 +        if (events.count(event) == 0 && replayed.count(event) == 0) {
 +            continue;
 +        }
-+        const size_t block = blocks + BigEndian32(data, row + 4);
-+        const size_t size = BigEndian32(data, row + 8);
++        const size_t block = blocks + ReadBigEndian32(data, row + 4);
++        const size_t size = ReadBigEndian32(data, row + 8);
 +        if (block + size > data.size() || size < 0x14) {
 +            continue;
 +        }
-+        const uint32_t conditions = BigEndian32(data, block + 8);
++        const uint32_t conditions = ReadBigEndian32(data, block + 8);
 +        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
 +            const size_t at = block + 0x14 + 24 * size_t(c);
-+            if (BigEndian32(data, at) != 0) {
++            if (ReadBigEndian32(data, at) != 0) {
 +                continue;
 +            }
-+            if (events.count(event) != 0 && BigEndian32(data, at + 20) == 1) {
-+                flags.insert(BigEndian32(data, at + 4));
++            if (events.count(event) != 0 && ReadBigEndian32(data, at + 20) == 1) {
++                flags.insert(ReadBigEndian32(data, at + 4));
 +            }
-+            if (replayed.count(event) != 0 && BigEndian32(data, at + 20) == 0) {
-+                cleared.insert(BigEndian32(data, at + 4));
++            if (replayed.count(event) != 0 && ReadBigEndian32(data, at + 20) == 0) {
++                cleared.insert(ReadBigEndian32(data, at + 4));
 +            }
 +        }
 +    }
@@ -2395,23 +3372,23 @@ index 0000000..c931d58
 +    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
 +        return {};
 +    }
-+    const uint32_t count = BigEndian32(data, 8);
++    const uint32_t count = ReadBigEndian32(data, 8);
 +    const size_t blocks = 20 + 12 * size_t(count);
 +    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
 +        const size_t row = 20 + 12 * size_t(i);
-+        if (events.count(static_cast<long>(BigEndian32(data, row))) == 0) {
++        if (events.count(static_cast<long>(ReadBigEndian32(data, row))) == 0) {
 +            continue;
 +        }
-+        const size_t block = blocks + BigEndian32(data, row + 4);
-+        const size_t size = BigEndian32(data, row + 8);
++        const size_t block = blocks + ReadBigEndian32(data, row + 4);
++        const size_t size = ReadBigEndian32(data, row + 8);
 +        if (block + size > data.size() || size < 0x14) {
 +            continue;
 +        }
-+        const uint32_t conditions = BigEndian32(data, block + 8);
++        const uint32_t conditions = ReadBigEndian32(data, block + 8);
 +        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
 +            const size_t at = block + 0x14 + 24 * size_t(c);
-+            const uint32_t flag = BigEndian32(data, at + 4);
-+            if (BigEndian32(data, at) == 0 && BigEndian32(data, at + 20) <= 1 && flag >= 1400) {
++            const uint32_t flag = ReadBigEndian32(data, at + 4);
++            if (ReadBigEndian32(data, at) == 0 && ReadBigEndian32(data, at + 20) <= 1 && flag >= 1400) {
 +                flags.insert(flag);
 +            }
 +        }
@@ -2508,6 +3485,63 @@ index 0000000..c931d58
 +const bool kPanel = (GameMods::RegisterSettingsPanel({"Romance for everyone (testing)", Enabled, DrawTestPanel}), true);
 +
 +} // namespace
+diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
+new file mode 100644
+index 0000000..712f8b8
+--- /dev/null
++++ b/runtime/src/hle/game_mods/romance_any_gender.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++// Shared by the two source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
++// romance_any_gender.cpp (who can fall in love with the player, and the testing panel) and
++// romance_adoption.cpp (the Harvest Goddess's adoption scene for couples of the same sex).
++
++#include <cstddef>
++#include <cstdint>
++#include <filesystem>
++#include <string>
++#include <vector>
++
++namespace RomanceAnyGender {
++
++inline constexpr const char* kMod = "romance_any_gender";
++
++// Whether Config.toml [mods] turns the mod on.
++bool Enabled();
++
++// The player's sex as the game keeps it in variable 0x23.
++inline constexpr int kMan = 0;
++inline constexpr int kWoman = 1;
++
++// The sex the original game pairs a character with, or -1 for anyone who is not a candidate:
++// a man marries characters 1-8, the Harvest Goddess (52) or the Witch Princess (59); a woman
++// characters 9-16, the Harvest King (60) or the Wizard (61).
++int NaturalPartnerSex(uint32_t character);
++
++// The disc's text files (.db) are blocks of "{", lines of "key  value", "}".
++std::string ReadFile(const std::filesystem::path& path);
++std::vector<std::string> Blocks(const std::string& text);
++long Number(const std::string& block, const char* key);  // a block's number for key, or -1
++
++// The disc's other files are big-endian.
++uint32_t ReadBigEndian32(const std::string& data, size_t at);
++void PutBigEndian32(std::string& data, size_t at, uint32_t value);
++
++// The game's state in memory:
++// - The state is the structure at *(0x806B3B80).
++// - Event flags are one byte each, at state + 0x118 + flag (read by 0x80111754).
++// - Game variables are at state + 0x1398 + an offset from the table at 0x8050AA10 (0x80110148).
++//   Variable 0x23 is the player's sex, variable 85 how many times the house was built up.
++// - Each villager's values are at state + (character - 1) * 0x400 + 0x1B98 + an offset from the
++//   table at 0x8050AA24 (0x801118E8). Value 0 says the player has met them, value 1 is the heart
++//   points: 900 is the proposal's minimum, 1000 the most (0x8010A2E4 caps it there).
++inline constexpr uint32_t kGameState = 0x806B3B80u;
++inline constexpr uint32_t kVariableTable = 0x8050AA10u;
++uint32_t TableOffset(uint32_t table, uint32_t entry);  // what 0x80150134 works out
++uint32_t VariableAddress(uint32_t variable);
++
++} // namespace RomanceAnyGender
 diff --git a/runtime/src/hle/gx/gx_copy.cpp b/runtime/src/hle/gx/gx_copy.cpp
 index 3dbdc8d..be45c92 100644
 --- a/runtime/src/hle/gx/gx_copy.cpp

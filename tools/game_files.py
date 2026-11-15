@@ -24,17 +24,24 @@ Formats / Formatos
   (`msgPack`) and message set (`msg0_0`, for example "GIL_L000005"); `event/msgSet_*.db` lists a
   set's message numbers (`msg0`, `msg1`...).
 - `msglang/<language>/<male|female>/*.mpc` "MSGP": a count at 8, {message, offset, size} rows from
-  0x14, then the messages. Each is "MSGB": its line count at 8, its longest line at 0x10, the text's
-  offset at 0x18 and byte size at 0x1C; the text is UTF-16 with `\\n` between lines and `%...%`
-  codes (`%A%` the player's name, `%k%` wait for a button).
-- `script/**/*.opb` "OPAL": at 0xC the table of command offsets, at 0x10 the commands, at 0x14 their
-  count and at 0x18 their size; after them, debug information (the source line of each command).
-  A command is a word 0x80000000 + number and its arguments; 0x01000000 and 0x02000000 before a
-  word mark an integer and a float. Characters: 0 the player, -10 the spouse, 62 and 63 the
-  children. A message argument -320 - n is message n of the event's set. The game runs command
-  n with the function at 0x804ABA08 + 4n (992 of them). Some commands seen so far: 0x0A5 a
-  character says a message, 0x08B plays a motion, 0x086/0x087 put a character somewhere,
-  0x0C2/0x0C3 the camera's position and aim, 0x022 wait (seconds, float), 0x0E2/0x0E3 fade in/out.
+  0x14, then the messages from the offset at 0x10. Each is "MSGB": its line breaks at 8, its pages
+  at 0xC, its longest line at 0x10, the most line breaks in a page at 0x14, the text's offset at
+  0x18 and byte size at 0x1C; the text is UTF-16 with `\\n` between lines and `%...%` codes (`%A%`
+  the player's name, `%0D%`/`%1D%` the children's, `%k%` wait for a button, `%g%` a new page).
+- `script/**/*.opb` "OPAL": at 4 the version 0x01040000, at 0xC the table of command offsets, at 0x10
+  the commands, at 0x14 their count and at 0x18 where the debug section starts (right after the
+  commands); the debug section has, for each command, its number, a 32-byte source name and a
+  source line. A command is a word 0x80000000 + number and its arguments; 0x01000000,
+  0x02000000 and 0x04000000 before a word mark an integer, a float and a yes/no. Characters: 0
+  the player, -10 the spouse, 52 the Harvest Goddess, 62 and 63 the children. A message argument
+  is a message number, or -320 + n for message n of the event's message set (32 per set; a second
+  character's set starts at -288). The game runs command n with the function at 0x804ABA08 + 4n
+  (992 of them). Some commands seen so far: 0x000 go to a command (by its number), 0x008 test a
+  register, then 0x00B where to go if true and 0x00C if not; 0x082 a character in the scene,
+  0x08F a motion it uses, 0x08B play a motion, 0x086/0x087 put a character somewhere, 0x091 turn
+  it, 0x095 its face, 0x09A/0x09B make it appear/vanish; 0x0A5 a character says a message, 0x0A4 a
+  notice, 0x0A7 a question with choices (the answer goes to a register); 0x0C2/0x0C3 the camera's
+  position and aim, 0x022 wait (seconds, float), 0x0E2/0x0E3 fade in/out; 0x102 set an event flag.
 """
 
 import argparse
@@ -89,8 +96,8 @@ def messages(path: Path) -> dict[int, str]:
 def script(path: Path) -> list[list[int]]:
     """A scene's commands, each as its words."""
     data = path.read_bytes()
-    table, code, count, size = struct.unpack(">IIII", data[0xC:0x1C])
-    offsets = [struct.unpack(">I", data[table + 4 * i:table + 4 * i + 4])[0] for i in range(count)] + [size]
+    table, code, count, debug = struct.unpack(">IIII", data[0xC:0x1C])
+    offsets = [struct.unpack(">I", data[table + 4 * i:table + 4 * i + 4])[0] for i in range(count)] + [debug - code]
     return [
         [struct.unpack(">I", data[k:k + 4])[0] for k in range(code + offsets[i], code + offsets[i + 1], 4)]
         for i in range(count)
