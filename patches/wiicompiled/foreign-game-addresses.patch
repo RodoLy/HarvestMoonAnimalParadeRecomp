@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..c3c3151
+index 0000000..bf6694b
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,409 @@
+@@ -0,0 +1,410 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2167,9 +2167,10 @@ index 0000000..c3c3151
 +}
 +
 +// The event flags a candidate's heart events before the proposal expect to be set: every flag that
-+// one of those events needs to be 1 in its conditions (prm_love.epc). A candidate's events are the
++// one of those events, or the proposal itself, needs to be 1 in its conditions (prm_love.epc): the
++// proposal asks for the confession's flag, which no earlier event does. A candidate's events are the
 +// ones varSet_love*.db gives that character's messages; their message names count up, and number
-+// 5 (GIL_L000005 for Gill) is the proposal, so the ones before it are L000000 to L000004. The file is
++// 5 (GIL_L000005 for Gill) is the proposal, so these are L000000 to L000005. The file is
 +// "EVTP", a count and {event, offset, size} rows, then each event's "EVCD" block: a count at 8 and
 +// from 0x14 conditions of six numbers; {0, flag, -1, 0, 0, value} asks for a flag.
 +std::vector<uint32_t> HeartEventFlags(uint32_t character) {
@@ -2177,7 +2178,7 @@ index 0000000..c3c3151
 +    std::set<long> events;
 +    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
 +        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
-+            static const std::regex beforeProposal("msg0_0\\s+\"[A-Z]+_L00000[0-4]");
++            static const std::regex beforeProposal("msg0_0\\s+\"[A-Z]+_L00000[0-5]");
 +            if (Number(block, "chara0") == static_cast<long>(character) &&
 +                std::regex_search(block, beforeProposal)) {
 +                events.insert(Number(block, "evtNo"));
