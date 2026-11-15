@@ -1836,6 +1836,238 @@ index 0000000..c9c7fe6
 +}
 +
 +} // namespace GameMods
+diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
+new file mode 100644
+index 0000000..5ad10ea
+--- /dev/null
++++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
+@@ -0,0 +1,226 @@
++// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
++// with the player, whether the player is a man or a woman. Off unless Config.toml says
++//   [mods]
++//   romance_any_gender = true
++//
++// How the game decides who can be your partner, and what this mod changes:
++//
++// - The player's sex is game variable 0x23 (0 man, 1 woman), read through 0x801071A8.
++// - The candidates are characters 1-8, the Harvest Goddess (52) and the Witch Princess (59) for a
++//   man, and characters 9-16, the Harvest King (60) and the Wizard (61) for a woman.
++// - Each candidate's heart events start from event/trig_love.db, a text file on the disc. Every
++//   event there has `attr "man"` or `attr "woman"`, and the event only starts for a player of that
++//   sex (checked at 0x8012E07C). The mod writes a copy of the file without that line for the
++//   candidates' own events, so they start for either sex; events about the player's own wedding
++//   and children keep theirs.
++// - Several functions ask "is this character my candidate?" by the player's sex. The mod wraps
++//   them so they answer for the character instead: a character's natural partner is the sex the
++//   original game pairs them with, and while one of these functions runs for a candidate, the
++//   player's sex reads as that partner's.
++//
++// The dialogue needs nothing new: the disc has every candidate's love text in a version for a male
++// and for a female player (msglang/<language>/male and female), and the game picks the folder by
++// the player's sex.
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "runtime_config.h"
++
++#include <cstdint>
++#include <cstdio>
++#include <fstream>
++#include <regex>
++#include <set>
++#include <sstream>
++#include <string>
++#include <vector>
++
++namespace {
++
++constexpr const char* kMod = "romance_any_gender";
++
++bool Enabled() {
++    static const bool enabled = RuntimeConfigFile::ModEnabled(kMod);
++    return enabled;
++}
++
++// ---------------------------------------------------------------------------------------------
++// Who pairs with whom in the original game.
++
++constexpr int kMan = 0;
++constexpr int kWoman = 1;
++
++// The sex the original game pairs a character with, or -1 for anyone who is not a candidate.
++int NaturalPartnerSex(uint32_t character) {
++    if ((character >= 1 && character <= 8) || character == 52 || character == 59) {
++        return kMan;
++    }
++    if ((character >= 9 && character <= 16) || character == 60 || character == 61) {
++        return kWoman;
++    }
++    return -1;
++}
++
++// While a wrapped function runs for a candidate, the player's sex reads as this (-1: the real one).
++thread_local int t_playerSexSeenAs = -1;
++
++// Runs the game's own function at `address` as if the player were the character's natural partner.
++void RunAsNaturalPartner(uint32_t address, uint32_t character, CpuContext* ctx) {
++    const int previous = t_playerSexSeenAs;
++    const int partner = NaturalPartnerSex(character);
++    if (partner >= 0) {
++        t_playerSexSeenAs = partner;
++    }
++    GuestFunctions::BaseTranslation(address)(ctx);
++    t_playerSexSeenAs = previous;
++}
++
++} // namespace
++
++// 0x801071A8: the player's sex (game variable 0x23).
++extern "C" void AnimalParadePlayerSex(CpuContext* ctx) {
++    GuestFunctions::BaseTranslation(0x801071A8u)(ctx);
++    if (t_playerSexSeenAs >= 0) {
++        ctx->gpr[3] = static_cast<uint32_t>(t_playerSexSeenAs);
++    }
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 801071A8, AnimalParadePlayerSex);
++
++// 0x801DA2EC (character in r3): whether the character is in love with the player, read from that
++// character's own event flag; the original only looks at the flags of the player's candidates.
++extern "C" void AnimalParadeCandidateInLove(CpuContext* ctx) {
++    if (!Enabled()) {
++        GuestFunctions::BaseTranslation(0x801DA2ECu)(ctx);
++        return;
++    }
++    RunAsNaturalPartner(0x801DA2ECu, ctx->gpr[3], ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 801DA2EC, AnimalParadeCandidateInLove);
++
++// 0x801DA5BC (character in r3): whether the character can still be courted - not married to a
++// rival, the player not married, and a candidate for the player. The talk menu uses it to offer
++// the courting choices.
++extern "C" void AnimalParadeCanCourt(CpuContext* ctx) {
++    if (!Enabled()) {
++        GuestFunctions::BaseTranslation(0x801DA5BCu)(ctx);
++        return;
++    }
++    RunAsNaturalPartner(0x801DA5BCu, ctx->gpr[3], ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 801DA5BC, AnimalParadeCanCourt);
++
++// 0x8010F0B0 (character in r3): whether the character is one of the eight villagers the player can
++// marry (1-8 for a man, 9-16 for a woman). It reads variable 0x23 itself, so it is answered here.
++extern "C" void AnimalParadeIsVillageCandidate(CpuContext* ctx) {
++    if (!Enabled()) {
++        GuestFunctions::BaseTranslation(0x8010F0B0u)(ctx);
++        return;
++    }
++    const uint32_t character = ctx->gpr[3];
++    ctx->gpr[3] = (character >= 1 && character <= 16) ? 1u : 0u;
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 8010F0B0, AnimalParadeIsVillageCandidate);
++
++namespace {
++
++// ---------------------------------------------------------------------------------------------
++// The copy of event/trig_love.db.
++
++std::string ReadFile(const std::filesystem::path& path) {
++    std::ifstream file(path, std::ios::binary);
++    std::ostringstream text;
++    text << file.rdbuf();
++    return text.str();
++}
++
++// The blocks of a .db file: "{", lines of "key  value", "}".
++std::vector<std::string> Blocks(const std::string& text) {
++    std::vector<std::string> blocks;
++    size_t at = 0;
++    while ((at = text.find('{', at)) != std::string::npos) {
++        const size_t end = text.find('}', at);
++        if (end == std::string::npos) {
++            break;
++        }
++        blocks.push_back(text.substr(at, end + 1 - at));
++        at = end + 1;
++    }
++    return blocks;
++}
++
++// A block's value for key, or -1.
++long Number(const std::string& block, const char* key) {
++    const std::regex pattern(std::string("\\b") + key + "\\s+\"?(-?\\d+)");
++    std::smatch match;
++    return std::regex_search(block, match, pattern) ? std::stol(match[1]) : -1;
++}
++
++// The events that belong to a candidate: those whose messages (varSet_love*.db) are a candidate's,
++// plus the Harvest Goddess's and the Harvest King's, whose events have no messages listed there.
++std::set<long> CandidateEvents(const std::filesystem::path& eventFolder) {
++    std::set<long> events;
++    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
++        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
++            const long character = Number(block, "chara0");
++            if (character >= 0 && NaturalPartnerSex(static_cast<uint32_t>(character)) >= 0) {
++                events.insert(Number(block, "evtNo"));
++            }
++        }
++    }
++    for (long event = 2815; event <= 2861; ++event) {
++        events.insert(event);  // the Harvest Goddess (for a man in the original)
++    }
++    for (long event = 3069; event <= 3115; ++event) {
++        events.insert(event);  // the Harvest King (for a woman in the original)
++    }
++    return events;
++}
++
++void PrepareFiles() {
++    if (!Enabled() || ::GuestRegion::ForeignGameAddress("RBIEE9", 1u) == 0) {
++        return;
++    }
++    const std::filesystem::path eventFolder = RuntimeConfigFile::ResolvedDvdRoot() / "files" / "event";
++    const std::string original = ReadFile(eventFolder / "trig_love.db");
++    if (original.empty()) {
++        std::fprintf(stderr, "[mod %s] no event/trig_love.db on the disc; the mod is off\n", kMod);
++        return;
++    }
++    const std::set<long> events = CandidateEvents(eventFolder);
++
++    // Copy the file, leaving out the attr line of every candidate event.
++    const std::regex attrLine("[ \\t]*attr[ \\t]+\"(man|woman)\"[ \\t]*\\r?\\n");
++    std::string copy;
++    size_t at = 0;
++    int opened = 0;
++    while (true) {
++        const size_t start = original.find('{', at);
++        const size_t end = start == std::string::npos ? std::string::npos : original.find('}', start);
++        if (end == std::string::npos) {
++            copy += original.substr(at);
++            break;
++        }
++        copy += original.substr(at, start - at);
++        std::string block = original.substr(start, end + 1 - start);
++        if (events.count(Number(block, "evtNo")) != 0) {
++            const std::string before = block;
++            block = std::regex_replace(block, attrLine, "");
++            opened += block != before ? 1 : 0;
++        }
++        copy += block;
++        at = end + 1;
++    }
++
++    const std::filesystem::path root = GameMods::Folder(kMod);
++    std::error_code ec;
++    std::filesystem::create_directories(root / "event", ec);
++    std::ofstream(root / "event" / "trig_love.db", std::ios::binary | std::ios::trunc) << copy;
++    GameMods::RegisterDiscOverlay(root);
++    std::fprintf(stderr, "[mod %s] on: %d candidate events start for either sex\n", kMod, opened);
++}
++
++const GameMods::Registration kRegistration(PrepareFiles);
++
++} // namespace
 diff --git a/runtime/src/hle/gx/gx_copy.cpp b/runtime/src/hle/gx/gx_copy.cpp
 index 3dbdc8d..be45c92 100644
 --- a/runtime/src/hle/gx/gx_copy.cpp
