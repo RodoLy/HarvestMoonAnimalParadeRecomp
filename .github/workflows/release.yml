@@ -1,0 +1,55 @@
+name: Release
+
+# Makes a release (as a draft, to look over before publishing) from the packages that "Windows ...
+# package" runs kept as artifacts. Its notes are docs/releases/<tag>.md.
+#
+# Crea un release (como borrador, para revisarlo antes de publicarlo) con los paquetes que las
+# corridas de "Windows ... package" guardaron como artefactos. Sus notas son docs/releases/<tag>.md.
+#
+# Actions tab > Release > Run workflow, with the tag (e.g. v0.1.0) and the numbers of the package
+# runs separated by spaces.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag, e.g. v0.1.0 (its notes are docs/releases/<tag>.md)
+        required: true
+      run_ids:
+        description: Numbers of the package runs, separated by spaces
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    name: Make the draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      RUN_IDS: ${{ inputs.run_ids }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download the packages of those runs
+        # Each artifact's download is the package zip itself (it is uploaded unzipped).
+        run: |
+          mkdir -p package
+          for run in $RUN_IDS; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" \
+              --jq '.artifacts[] | "\(.id) \(.name)"' | while read -r id name; do
+              gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "package/$name"
+            done
+          done
+          ls -l package
+
+      - name: Make the release
+        run: |
+          notes="docs/releases/$TAG.md"
+          test -f "$notes" || { echo "No notes at $notes"; exit 1; }
+          gh release create "$TAG" package/*.zip --repo "$GITHUB_REPOSITORY" --draft \
+            --target "$GITHUB_SHA" --title "Harvest Moon: Animal Parade $TAG" --notes-file "$notes"
