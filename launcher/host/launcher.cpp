@@ -13,6 +13,7 @@
 //   setPad       bind a controller button to a button ([controller] in Config.toml) or to fast-forward
 //   setKeyboard  turn the keyboard on or off as the first player's controller
 //   resetControls  put every key and controller button back as they start
+//   setMod       turn a game mod on or off ([mods] in Config.toml)
 //   setUiLanguage, minimize, drag, exit
 //
 // Built with the llvm-mingw compiler that comes with the package (see launcher/build.ps1). The
@@ -730,6 +731,10 @@ int ConnectedControllers() {
     return count;
 }
 
+// The game's mods (runtime/src/hle/game_mods in WiiCompiled's patch): each is a line in [mods] of
+// Config.toml, off unless it says true. The page has their names and descriptions.
+const char* const kMods[] = {"romance_any_gender"};
+
 std::wstring StateJson(const wchar_t* status) {
     const ConfigFile config = ConfigFile::Load();
     std::wostringstream json;
@@ -744,7 +749,12 @@ std::wstring StateJson(const wchar_t* status) {
         json << (first ? L"" : L",") << L"\"" << Wide(option.page) << L"\":" << PageValue(option, config);
         first = false;
     }
-    json << L"},\"controls\":" << ControlsJson(config) << L"}";
+    json << L"},\"controls\":" << ControlsJson(config) << L",\"mods\":{";
+    for (size_t i = 0; i < std::size(kMods); ++i) {
+        json << (i ? L"," : L"") << L"\"" << Wide(kMods[i]) << L"\":"
+             << (config.Get("mods", kMods[i]).value_or("false") == "true" ? L"true" : L"false");
+    }
+    json << L"}}";
     return json.str();
 }
 
@@ -814,6 +824,14 @@ void OnPageMessage(const std::wstring& json) {
         PostToPage(StateJson(CurrentStatus()));
     } else if (cmd == L"setKeyboard") {
         SetKeyboardOn(message[L"value"] == L"true");
+        PostToPage(StateJson(CurrentStatus()));
+    } else if (cmd == L"setMod") {
+        const std::string name = Utf8(message[L"name"]);
+        if (std::find_if(std::begin(kMods), std::end(kMods), [&](const char* mod) { return name == mod; }) != std::end(kMods)) {
+            ConfigFile config = ConfigFile::Load();
+            config.Set("mods", name, message[L"value"] == L"true" ? "true" : "false");
+            config.Save();
+        }
         PostToPage(StateJson(CurrentStatus()));
     } else if (cmd == L"resetControls") {
         ResetControls();

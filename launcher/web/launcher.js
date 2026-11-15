@@ -4,7 +4,7 @@
 //
 // Messages to the program:   { cmd: 'hello' | 'prepare' | 'play' | 'cancel' | 'chooseDisc' |
 //                               'openLog' | 'exit' | 'minimize' | 'drag' | 'setOption' | 'setUiLanguage' |
-//                               'setKey' | 'setPad' | 'setKeyboard' | 'resetControls', ... }
+//                               'setKey' | 'setPad' | 'setKeyboard' | 'resetControls' | 'setMod', ... }
 // Messages from the program: { type: 'state', ... }      everything the page shows about the game
 //                            { type: 'progress', ... }   a step of the preparation and how far it is
 //                            { type: 'finished', ... }   the preparation ended: ok, or the error
@@ -34,7 +34,7 @@ const T = {
     prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
     hintMove: 'Elegir', hintChange: 'Cambiar', f10: 'Menú en el juego',
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
-    noMods: 'No hay mods en la carpeta Mods.', modNoSettings: 'Este mod no tiene ajustes.', noManifest: 'sin manifiesto',
+    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
     keyboard: 'Teclado', keyboardHint: 'El teclado como el control del jugador 1. Apagado, se juega solo con un control o un Wii Remote real.',
     controller: 'Control', controllerHint: 'Conecta un control y el juego lo toma en lugar del teclado.',
@@ -69,7 +69,7 @@ const T = {
     prepared: 'The game is ready.', opening: 'Opening the game…',
     hintMove: 'Select', hintChange: 'Change', f10: 'Menu in the game',
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
-    noMods: 'There are no mods in the Mods folder.', modNoSettings: 'This mod has no settings.', noManifest: 'no manifest',
+    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
     keyboard: 'Keyboard', keyboardHint: 'The keyboard as player 1\'s controller. Off, the game is played only with a controller or a real Wii Remote.',
     controller: 'Controller', controllerHint: 'Connect a controller and the game uses it instead of the keyboard.',
@@ -166,6 +166,14 @@ const PAD_LABEL = { south: 'A', east: 'B', west: 'X', north: 'Y', left_shoulder:
   disabled: '—', unmapped: '—' };
 function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 
+// The game's mods: each one is a switch in Config.toml [mods] (host/launcher.cpp kMods), off until
+// it is turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods).
+const MODS = [
+  { id: 'romance_any_gender', es: 'Amor para todos', en: 'Romance for everyone',
+    hint: { es: 'Cualquier candidato o candidata puede enamorarse de ti y casarse contigo, seas chico o chica. En pruebas.',
+      en: 'Any bachelor or bachelorette can fall in love with you and marry you, whether you play as a boy or a girl. Being tested.' } },
+];
+
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
 const GAMEPAD = '<svg viewBox="0 0 24 16" width="1.15em" height="0.8em" style="display:block" fill="currentColor">' +
   '<mask id="gamepadHoles"><rect width="24" height="16" fill="#fff"/>' +
@@ -192,7 +200,7 @@ const state = {
   controllers: 0,
   controls: { keyboard: true, keys: {}, pad: {}, fastForwardKey: 43, fastForwardButton: 'disabled' },
   capture: null,         // the button waiting for a key or a controller button: { action, until }
-  mods: [], modsOn: {},
+  mods: MODS, modsOn: {},
   version: 'dev',
 };
 
@@ -312,6 +320,14 @@ function rows() {
       { label: w.wiimote, value: w.inF10, tone: 'value', hint: w.wiimoteHint });
     return list;
   }
+  if (state.tab === 2) {
+    return MODS.map((m) => {
+      const on = !!state.modsOn[m.id];
+      const toggle = () => { state.modsOn[m.id] = !on; send({ cmd: 'setMod', name: m.id, value: !on }); };
+      return { label: m[state.lang], value: on ? w.on : w.off, tone: on ? 'on' : 'off', arrows: true,
+        hint: m.hint[state.lang] + ' ' + w.modNext, change: toggle, activate: toggle };
+    });
+  }
   return [];
 }
 
@@ -321,7 +337,7 @@ function overall() {
   return starts[state.stage] + sizes[state.stage] * state.fraction;
 }
 
-function count() { return state.tab === 2 ? state.mods.length : rows().length; }
+function count() { return rows().length; }
 function move(step) {
   const n = count();
   if (!n) return;
@@ -421,13 +437,12 @@ function render() {
 
   // The list (or the mods).
   let html = '';
-  if (tab !== 2) {
+  if (list.length) {
     html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
       '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:1124px">' +
       list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
-  if (tab === 2) {
-    // This port has no mods yet: the Mods folder is read when it does.
+  if (!list.length) {
     html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + w.noMods + '</div>';
   }
   $('content').innerHTML = html;
@@ -437,7 +452,7 @@ function render() {
   // The message box: what just happened, or what the chosen row does.
   let message = state.toast;
   if (state.capture) message = (state.capture.action.keyOnly ? w.captureKeyOnly : w.capture)(state.capture.action[state.lang]);
-  if (!message && tab === 2) message = w.noMods;
+  if (!message && !list.length) message = w.noMods;
   if (!message && list[sel]) message = list[sel].hint || '';
   $('message').textContent = message;
   $('message').style.fontSize = message.length > 105 ? '22px' : '27px';
@@ -639,6 +654,7 @@ function receive(message) {
   const w = t();
   if (message.type === 'state') {
     for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version', 'controls']) if (key in message) state[key] = message[key];
+    if (message.mods) state.modsOn = message.mods;
 
     if (message.options) {
       for (const o of OPTS) {
