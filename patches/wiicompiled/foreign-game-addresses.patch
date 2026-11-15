@@ -4771,7 +4771,7 @@ index 00659d0..ad2c6cf 100644
  }
  
 diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
-index cd236a9..25dc1eb 100644
+index cd236a9..f551c3f 100644
 --- a/runtime/src/hle/vi.cpp
 +++ b/runtime/src/hle/vi.cpp
 @@ -9,6 +9,11 @@
@@ -5101,6 +5101,56 @@ index cd236a9..25dc1eb 100644
      } else {
          // Retrace-context presents (VI black, boot) have no display period of
          // their own to subdivide; present as soon as the frame is ready. The
+@@ -817,6 +1021,7 @@ PPC_NATIVE_OVERRIDE_VOID(801BAAB8, VISetNextFrameBuffer_HLE_801baab8, (CpuContex
+ 
+ extern "C" void VIGetNextFrameBuffer_HLE_801bab24(CpuContext* ctx)
+ {
++    VI_HLE_PollRetrace(ctx);  // first, as in VIGetRetraceCount below
+     uint32_t fb = 0;
+     {
+         std::lock_guard<std::mutex> lock(g_viMutex);
+@@ -825,7 +1030,6 @@ extern "C" void VIGetNextFrameBuffer_HLE_801bab24(CpuContext* ctx)
+         fb = g_vi.pendingNextFrameBuffer;
+     }
+     ViSetR3(ctx, fb);
+-    VI_HLE_PollRetrace(ctx);
+ }
+ PPC_NATIVE_OVERRIDE_VOID(801BAB24, VIGetNextFrameBuffer_HLE_801bab24, (CpuContext* ctx), (ctx));
+ 
+@@ -844,6 +1048,11 @@ PPC_NATIVE_OVERRIDE_VOID(801BAB2C, VISetBlack_HLE_801bab2c, (CpuContext* ctx), (
+ 
+ extern "C" void VIGetRetraceCount_HLE_801baba4(CpuContext* ctx)
+ {
++    // A retrace that is already due is delivered first. VI_HLE_PollRetrace runs the guest's retrace
++    // callbacks on this context, and they overwrite r3, so the answer is read and returned after it:
++    // polling after setting r3 handed the caller a callback's leftover (a frame loop that waits for
++    // "the retrace count + 1" then waited for a garbage count, and the game froze on a slow PC).
++    VI_HLE_PollRetrace(ctx);
+     uint32_t count = 0;
+     {
+         std::lock_guard<std::mutex> lock(g_viMutex);
+@@ -851,12 +1060,12 @@ extern "C" void VIGetRetraceCount_HLE_801baba4(CpuContext* ctx)
+         count = g_vi.retraceCount;
+     }
+     ViSetR3(ctx, count);
+-    VI_HLE_PollRetrace(ctx);
+ }
+ PPC_NATIVE_OVERRIDE_VOID(801BABA4, VIGetRetraceCount_HLE_801baba4, (CpuContext* ctx), (ctx));
+ 
+ extern "C" void VIGetNextField_HLE_801babac(CpuContext* ctx)
+ {
++    VI_HLE_PollRetrace(ctx);  // first, as in VIGetRetraceCount below
+     bool fieldOdd = false;
+     {
+         std::lock_guard<std::mutex> lock(g_viMutex);
+@@ -864,7 +1073,6 @@ extern "C" void VIGetNextField_HLE_801babac(CpuContext* ctx)
+         fieldOdd = g_vi.fieldOdd;
+     }
+     ViSetR3(ctx, fieldOdd ? 1 : 0);
+-    VI_HLE_PollRetrace(ctx);
+ }
+ PPC_NATIVE_OVERRIDE_VOID(801BABAC, VIGetNextField_HLE_801babac, (CpuContext* ctx), (ctx));
+ 
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
 index 56bec9f..75414c0 100644
 --- a/runtime/src/main.cpp
