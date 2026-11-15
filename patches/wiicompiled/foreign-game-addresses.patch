@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..bf6694b
+index 0000000..5be1174
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,410 @@
+@@ -0,0 +1,468 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2236,6 +2236,53 @@ index 0000000..bf6694b
 +    return true;
 +}
 +
++// "Finish the story": the story's events are event/trig_main.db, with `attr "main1"` and "main2" for
++// its first two parts (ringing the bells) and "main3" for what comes after; the part the game is in
++// is entry 0 of the story table, state + 0x1798 + offset (table 0x8050AAB0, read by 0x80112308), and
++// 0x8012E07C compares it (0, 1, 2) with those attrs. The button sets every event flag the first two
++// parts' conditions (prm_main.epc) look at, as if all of it had happened, and moves the story on to
++// the third part. Small flag numbers (below 1400) are counters shared with the rest of the game and
++// are left alone, as are flags the conditions want at 2 or more.
++constexpr uint32_t kStoryTable = 0x8050AAB0u;
++
++std::vector<uint32_t> StoryFlags() {
++    const std::filesystem::path eventFolder = RuntimeConfigFile::ResolvedDvdRoot() / "files" / "event";
++    std::set<long> events;
++    static const std::regex firstParts("attr\\s+\"main[12]\"");
++    for (const std::string& block : Blocks(ReadFile(eventFolder / "trig_main.db"))) {
++        if (std::regex_search(block, firstParts)) {
++            events.insert(Number(block, "evtNo"));
++        }
++    }
++    std::set<uint32_t> flags;
++    const std::string data = ReadFile(eventFolder / "prm_main.epc");
++    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
++        return {};
++    }
++    const uint32_t count = BigEndian32(data, 8);
++    const size_t blocks = 20 + 12 * size_t(count);
++    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
++        const size_t row = 20 + 12 * size_t(i);
++        if (events.count(static_cast<long>(BigEndian32(data, row))) == 0) {
++            continue;
++        }
++        const size_t block = blocks + BigEndian32(data, row + 4);
++        const size_t size = BigEndian32(data, row + 8);
++        if (block + size > data.size() || size < 0x14) {
++            continue;
++        }
++        const uint32_t conditions = BigEndian32(data, block + 8);
++        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
++            const size_t at = block + 0x14 + 24 * size_t(c);
++            const uint32_t flag = BigEndian32(data, at + 4);
++            if (BigEndian32(data, at) == 0 && BigEndian32(data, at + 20) <= 1 && flag >= 1400) {
++                flags.insert(flag);
++            }
++        }
++    }
++    return {flags.begin(), flags.end()};
++}
++
 +bool GameLoaded() {
 +    const uint32_t state = Memory::Read32(kGameState);
 +    return state != 0 && Memory::Contains(state, 0x1000);
@@ -2280,6 +2327,17 @@ index 0000000..bf6694b
 +        result = HoldBlueFeather()
 +            ? "The player holds a Blue Feather (it may not show in the hands). Give it to the candidate."
 +            : "The player is not on screen.";
++        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
++    }
++    if (ImGui::Button("Finish the story (all bells rung)")) {
++        const std::vector<uint32_t> flags = StoryFlags();
++        const uint32_t state = Memory::Read32(kGameState);
++        for (const uint32_t flag : flags) {
++            Memory::Write8(state + 0x118 + flag, 1);
++        }
++        Memory::Write32(state + 0x1798 + TableOffset(kStoryTable, 0), 2);
++        result = std::to_string(flags.size()) + " story flags set, story moved to its last part. Save, sleep "
++                 "and see who is in town.";
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
 +    ImGui::EndDisabled();
