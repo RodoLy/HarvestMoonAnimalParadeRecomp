@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..9be7f17
+index 0000000..c3c3151
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,409 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2225,6 +2225,16 @@ index 0000000..9be7f17
 +    {6, "Character 6 (KTMI)"}, {7, "Anissa"}, {8, "Luna"},
 +};
 +
++// Puts a Blue Feather in the player's hands; false while the player is not on screen.
++bool HoldBlueFeather() {
++    const uint32_t player = Memory::Read32(kPlayerObject);
++    if (player == 0 || !Memory::Contains(player + 0x650, 4)) {
++        return false;
++    }
++    Memory::Write32(player + 0x650, kBlueFeather);
++    return true;
++}
++
 +bool GameLoaded() {
 +    const uint32_t state = Memory::Read32(kGameState);
 +    return state != 0 && Memory::Contains(state, 0x1000);
@@ -2233,8 +2243,9 @@ index 0000000..9be7f17
 +void DrawTestPanel() {
 +    static int chosen = 0;
 +    static std::string result;
-+    ImGui::TextWrapped("For testing the mod. Load a game, choose a candidate and press the button; then "
-+                       "save in the game. It changes that game's progress.");
++    ImGui::TextWrapped("For testing the mod. Load a game, choose a candidate and press Ready to propose: "
++                       "all hearts, the heart events up to the confession, the house built up and a Blue "
++                       "Feather in your hands. Then save in the game. It changes that game's progress.");
 +    if (ImGui::BeginCombo("Candidate", kCandidates[chosen].name)) {
 +        for (int i = 0; i < static_cast<int>(std::size(kCandidates)); ++i) {
 +            if (ImGui::Selectable(kCandidates[i].name, i == chosen)) {
@@ -2256,19 +2267,18 @@ index 0000000..9be7f17
 +        if (static_cast<int32_t>(Memory::Read32(house)) < 1) {
 +            Memory::Write32(house, 1);
 +        }
++        const bool feather = HoldBlueFeather();
 +        result = std::string(kCandidates[chosen].name) + ": 10 hearts, " + std::to_string(flags.size()) +
-+                 " heart event flags set, house built up. Now hold a Blue Feather and give it to them.";
++                 " heart event flags set, house built up" +
++                 (feather ? ", Blue Feather in your hands. Save, then give it to them."
++                          : ". Save; then, on the farm or in town, press Hold a Blue Feather and give it to them.");
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
 +    ImGui::SameLine();
 +    if (ImGui::Button("Hold a Blue Feather")) {
-+        const uint32_t player = Memory::Read32(kPlayerObject);
-+        if (player != 0 && Memory::Contains(player + 0x650, 4)) {
-+            Memory::Write32(player + 0x650, kBlueFeather);
-+            result = "The player holds a Blue Feather (it may not show in the hands). Give it to the candidate.";
-+        } else {
-+            result = "The player is not on screen.";
-+        }
++        result = HoldBlueFeather()
++            ? "The player holds a Blue Feather (it may not show in the hands). Give it to the candidate."
++            : "The player is not on screen.";
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
 +    ImGui::EndDisabled();
