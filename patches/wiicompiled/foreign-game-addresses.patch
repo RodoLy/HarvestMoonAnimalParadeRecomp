@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..728e5b5
+index 0000000..c931d58
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,624 @@
+@@ -0,0 +1,627 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2451,6 +2451,9 @@ index 0000000..728e5b5
 +        for (const uint32_t flag : toClear) {
 +            Memory::Write8(state + 0x118 + flag, 0);
 +        }
++        // Flag 1270: the player already has a sweetheart. Every candidate's date and confession
++        // invitations need it at 0 (prm_love.epc), and the confession sets it again for this one.
++        Memory::Write8(state + 0x118 + 1270, 0);
 +        const uint32_t house = VariableAddress(85);
 +        if (static_cast<int32_t>(Memory::Read32(house)) < 1) {
 +            Memory::Write32(house, 1);
