@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..933f4f0
+index 0000000..7750459
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,478 @@
+@@ -0,0 +1,587 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -1914,9 +1914,11 @@ index 0000000..933f4f0
 +
 +#include <imgui.h>
 +
++#include <algorithm>
 +#include <cstdint>
 +#include <cstdio>
 +#include <fstream>
++#include <map>
 +#include <regex>
 +#include <set>
 +#include <sstream>
@@ -2079,6 +2081,92 @@ index 0000000..933f4f0
 +    return events;
 +}
 +
++// ---------------------------------------------------------------------------------------------
++// Testing: the proposal at home. With [mods] romance_any_gender_test_proposal = true (F10 > Mods),
++// a candidate's proposal starts when the player steps out of the house in the morning or the day,
++// instead of when the player gives them the Blue Feather, so there is no need to find them. Each
++// villager's proposal is their event whose messages are L000005 (GIL_L000005 for Gill): its
++// trigger becomes the one the morning gift events use (the farm, coming from the house), and its
++// condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at 900).
++
++constexpr const char* kTestProposalKey = "romance_any_gender_test_proposal";
++
++std::set<long> ProposalEvents(const std::filesystem::path& eventFolder, std::map<long, long>& characters) {
++    std::set<long> events;
++    static const std::regex proposal("msg0_0\\s+\"[A-Z]+_L000005\"");
++    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
++        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
++            const long character = Number(block, "chara0");
++            if (character >= 0 && NaturalPartnerSex(static_cast<uint32_t>(character)) >= 0 &&
++                std::regex_search(block, proposal)) {
++                events.insert(Number(block, "evtNo"));
++                characters[Number(block, "evtNo")] = character;
++            }
++        }
++    }
++    return events;
++}
++
++// The proposal's trigger as the morning gift's: on the farm (map 0, 0), coming from the house (1, 0).
++std::string ProposalAtHomeTrigger(const std::string& block, const std::string& newline) {
++    std::string trigger = "{" + newline;
++    trigger += "    class  \"trig\"" + newline;
++    trigger += "    evtNo  " + std::to_string(Number(block, "evtNo")) + newline;
++    for (const char* key : {"fdOut", "fdIn", "bgm"}) {
++        trigger += std::string("    ") + key + "  " + std::to_string(std::max(0L, Number(block, key))) + newline;
++    }
++    trigger += "    oneShot  1" + newline;
++    trigger += "    type  \"map\"" + newline;
++    trigger += "    nowMapCtg  0" + newline + "    nowMapId  0" + newline;
++    trigger += "    preMapCtg  1" + newline + "    preMapId  0" + newline;
++    trigger += "    timeS  6" + newline + "    timeE  22" + newline;
++    return trigger + "}";
++}
++
++void PutBigEndian32(std::string& data, size_t at, uint32_t value) {
++    for (int i = 0; i < 4; ++i) {
++        data[at + i] = static_cast<char>(value >> (24 - 8 * i));
++    }
++}
++
++uint32_t ReadBigEndian32(const std::string& data, size_t at) {
++    return (uint32_t(uint8_t(data[at])) << 24) | (uint32_t(uint8_t(data[at + 1])) << 16) |
++           (uint32_t(uint8_t(data[at + 2])) << 8) | uint32_t(uint8_t(data[at + 3]));
++}
++
++// prm_love.epc with the Blue Feather condition {10, 1269, 0, >=, 0, 1} of these events turned into
++// {2, 1, character, >=, 0, 900}: the character's hearts at 900, which the proposal also asks for.
++std::string WithoutFeatherCondition(std::string data, const std::map<long, long>& characters) {
++    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
++        return {};
++    }
++    const uint32_t count = ReadBigEndian32(data, 8);
++    const size_t blocks = 20 + 12 * size_t(count);
++    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
++        const size_t row = 20 + 12 * size_t(i);
++        const auto found = characters.find(static_cast<long>(ReadBigEndian32(data, row)));
++        if (found == characters.end()) {
++            continue;
++        }
++        const size_t block = blocks + ReadBigEndian32(data, row + 4);
++        const size_t size = ReadBigEndian32(data, row + 8);
++        if (block + size > data.size() || size < 0x14) {
++            continue;
++        }
++        const uint32_t conditions = ReadBigEndian32(data, block + 8);
++        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
++            const size_t at = block + 0x14 + 24 * size_t(c);
++            if (ReadBigEndian32(data, at) == 10 && ReadBigEndian32(data, at + 4) == 1269) {
++                const uint32_t hearts[6] = {2, 1, static_cast<uint32_t>(found->second), 4, 0, 900};
++                for (int w = 0; w < 6; ++w) {
++                    PutBigEndian32(data, at + 4 * w, hearts[w]);
++                }
++            }
++        }
++    }
++    return data;
++}
++
 +void PrepareFiles() {
 +    if (!Enabled() || ::GuestRegion::ForeignGameAddress("RBIEE9", 1u) == 0) {
 +        return;
@@ -2090,6 +2178,9 @@ index 0000000..933f4f0
 +        return;
 +    }
 +    const std::set<long> events = CandidateEvents(eventFolder);
++    const bool testProposal = RuntimeConfigFile::ModEnabled(kTestProposalKey);
++    std::map<long, long> proposalCharacters;
++    const std::set<long> proposals = ProposalEvents(eventFolder, proposalCharacters);
 +
 +    // Copy the file, leaving out the attr line of every candidate event.
 +    const std::regex attrLine("[ \\t]*attr[ \\t]+\"(man|woman)\"[ \\t]*\\r?\\n");
@@ -2110,6 +2201,9 @@ index 0000000..933f4f0
 +            block = std::regex_replace(block, attrLine, "");
 +            opened += block != before ? 1 : 0;
 +        }
++        if (testProposal && proposals.count(Number(block, "evtNo")) != 0) {
++            block = ProposalAtHomeTrigger(block, block.find("\r\n") != std::string::npos ? "\r\n" : "\n");
++        }
 +        copy += block;
 +        at = end + 1;
 +    }
@@ -2118,6 +2212,16 @@ index 0000000..933f4f0
 +    std::error_code ec;
 +    std::filesystem::create_directories(root / "event", ec);
 +    std::ofstream(root / "event" / "trig_love.db", std::ios::binary | std::ios::trunc) << copy;
++    std::filesystem::remove(root / "event" / "prm_love.epc", ec);
++    if (testProposal) {
++        const std::string conditions =
++            WithoutFeatherCondition(ReadFile(eventFolder / "prm_love.epc"), proposalCharacters);
++        if (!conditions.empty()) {
++            std::ofstream(root / "event" / "prm_love.epc", std::ios::binary | std::ios::trunc) << conditions;
++            std::fprintf(stderr, "[mod %s] test: %zu proposals start on leaving the house\n", kMod,
++                         proposals.size());
++        }
++    }
 +    GameMods::RegisterDiscOverlay(root);
 +    std::fprintf(stderr, "[mod %s] on: %d candidate events start for either sex\n", kMod, opened);
 +}
@@ -2329,6 +2433,11 @@ index 0000000..933f4f0
 +            : "The player is not on screen.";
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
++    static bool s_atHome = RuntimeConfigFile::ModEnabled(kTestProposalKey);
++    if (ImGui::Checkbox("Proposal when leaving the house (next start)", &s_atHome)) {
++        RuntimeConfigFile::SetModEnabled(kTestProposalKey, s_atHome);
++    }
++    ImGui::TextDisabled("The candidate comes to propose as you step out, without the Blue Feather.");
 +    if (ImGui::Button("Finish the story (all bells rung)")) {
 +        const std::vector<uint32_t> flags = StoryFlags();
 +        const uint32_t state = Memory::Read32(kGameState);
