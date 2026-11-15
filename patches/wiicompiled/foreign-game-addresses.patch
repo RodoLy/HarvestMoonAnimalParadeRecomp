@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..217cb4b
+index 0000000..6628dfb
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1041 @@
+@@ -0,0 +1,1043 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -2230,7 +2230,7 @@ index 0000000..217cb4b
 +// husband's; the second child's is 0x7EF either way).
 +//
 +// A preview (`previewCharacter` not 0) is the same scene with that character in the spouse's place
-+// and nothing the game keeps: no child, no name, no flags, no hearts. It is for trying the scene
++// and nothing the game keeps: no child, no flags, no hearts (only the name entry shows). It is for trying the scene
 +// in any game (see kTestAdoptionKey in romance_any_gender.h).
 +std::string BuildScene(int child, bool playerIsMan, const std::vector<Spouse>& spouses,
 +                       uint32_t previewCharacter = 0) {
@@ -2428,8 +2428,10 @@ index 0000000..217cb4b
 +    c.Camera(kGoddessSide);
 +    c.Say(kNameTheBaby, kGoddess);
 +    c.Motion(kGoddess, 0x00, 1, 0, 1, -1);
++    // The name entry (the preview shows it too: the name only stays if that game is saved, and
++    // there it belongs to no child).
++    scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
 +    if (!preview) {
-+        scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
 +        scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
 +    }
 +    c.Camera(kCouple);
