@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..ad9c062
+index 0000000..1a499db
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,38 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -258,6 +258,16 @@ index 0000000..ad9c062
 +// Every enabled mod prepares its files the first time this is called (the DVD layer calls it while
 +// it looks for overlays), so a mod's preparation runs once and before the disc is read.
 +const std::vector<std::filesystem::path>& DiscOverlayRoots();
++
++// A mod's part of the F10 menu (a "Mods" menu appears when any mod has one available).
++struct SettingsPanel {
++    const char* name;
++    bool (*available)();
++    void (*draw)();
++};
++void RegisterSettingsPanel(SettingsPanel panel);
++bool HasSettings();
++void DrawSettings();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
 +using PrepareFn = void (*)();
@@ -1786,15 +1796,17 @@ index 0000000..be149bd
 +FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..c9c7fe6
+index 0000000..e9bc399
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,75 @@
 +// The list of game mods' disc overlays (see game_mods.h).
 +
 +#include "game_mods.h"
 +
 +#include "runtime_config.h"
++
++#include <imgui.h>
 +
 +#include <mutex>
 +
@@ -1811,7 +1823,34 @@ index 0000000..c9c7fe6
 +    return roots;
 +}
 +
++std::vector<SettingsPanel>& Panels() {
++    static std::vector<SettingsPanel> panels;
++    return panels;
++}
++
 +} // namespace
++
++void RegisterSettingsPanel(SettingsPanel panel) {
++    Panels().push_back(panel);
++}
++
++bool HasSettings() {
++    for (const SettingsPanel& panel : Panels()) {
++        if (panel.available()) {
++            return true;
++        }
++    }
++    return false;
++}
++
++void DrawSettings() {
++    for (const SettingsPanel& panel : Panels()) {
++        if (panel.available()) {
++            ImGui::SeparatorText(panel.name);
++            panel.draw();
++        }
++    }
++}
 +
 +Registration::Registration(PrepareFn prepare) {
 +    Preparations().push_back(prepare);
@@ -1838,10 +1877,10 @@ index 0000000..c9c7fe6
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..c42d8a7
+index 0000000..9be7f17
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,399 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -1870,7 +1909,10 @@ index 0000000..c42d8a7
 +#include "guest_abi/cpu_context.h"
 +#include "guest_function_imports.h"
 +#include "hle_stubs.h"
++#include "memory.h"
 +#include "runtime_config.h"
++
++#include <imgui.h>
 +
 +#include <cstdint>
 +#include <cstdio>
@@ -2081,6 +2123,161 @@ index 0000000..c42d8a7
 +}
 +
 +const GameMods::Registration kRegistration(PrepareFiles);
++
++// ---------------------------------------------------------------------------------------------
++// Testing: F10 > Mods > "Ready to propose" puts the loaded game where the player can propose to a
++// candidate, without playing the weeks it takes, so the mod can be tried. It writes the game's
++// state directly; save in the game afterwards to keep it.
++//
++// Where the game keeps what the proposal checks (event/prm_love.epc, the conditions of each
++// candidate's proposal event, for example Gill's 1797):
++// - The game's state: the structure at *(0x806B3B80).
++// - Event flags: one byte each, at state + 0x118 + flag (read by 0x80111754).
++// - Game variables: state + 0x1398 + offset, the offset from the table at 0x8050AA10 (0x80110148).
++//   Variable 85 has to be at least 1: the house built up once.
++// - Each villager's values: state + (character - 1) * 0x400 + 0x1B98 + offset, the offset from the
++//   table at 0x8050AA24 (0x801118E8). Value 1 is the heart points: 900 is the proposal's minimum,
++//   1000 the most (0x8010A2E4 caps it there).
++// - The Blue Feather is item 1269 (0x4F5); the gift code at 0x801D5E1C reads the item the player
++//   holds from the player's object, *(0x80501D58 + 0x50), at + 0x650.
++
++constexpr uint32_t kGameState = 0x806B3B80u;
++constexpr uint32_t kVariableTable = 0x8050AA10u;
++constexpr uint32_t kVillagerTable = 0x8050AA24u;
++constexpr uint32_t kPlayerObject = 0x80501D58u + 0x50u;
++constexpr uint32_t kBlueFeather = 1269;
++
++// An entry's offset in one of the game's value tables (what 0x80150134 works out).
++uint32_t TableOffset(uint32_t table, uint32_t entry) {
++    const uint32_t base = Memory::Read32(Memory::Read32(table + 0xC) + 4) + Memory::Read32(table);
++    return Memory::Read32(base + 4 * entry) - Memory::Read32(base);
++}
++
++uint32_t VariableAddress(uint32_t variable) {
++    return Memory::Read32(kGameState) + 0x1398 + TableOffset(kVariableTable, variable);
++}
++
++uint32_t VillagerValueAddress(uint32_t character, uint32_t value) {
++    return Memory::Read32(kGameState) + (character - 1) * 0x400 + 0x1B98 + TableOffset(kVillagerTable, value);
++}
++
++uint32_t BigEndian32(const std::string& data, size_t at) {
++    return (uint32_t(uint8_t(data[at])) << 24) | (uint32_t(uint8_t(data[at + 1])) << 16) |
++           (uint32_t(uint8_t(data[at + 2])) << 8) | uint32_t(uint8_t(data[at + 3]));
++}
++
++// The event flags a candidate's heart events before the proposal expect to be set: every flag that
++// one of those events needs to be 1 in its conditions (prm_love.epc). A candidate's events are the
++// ones varSet_love*.db gives that character's messages; their message names count up, and number
++// 5 (GIL_L000005 for Gill) is the proposal, so the ones before it are L000000 to L000004. The file is
++// "EVTP", a count and {event, offset, size} rows, then each event's "EVCD" block: a count at 8 and
++// from 0x14 conditions of six numbers; {0, flag, -1, 0, 0, value} asks for a flag.
++std::vector<uint32_t> HeartEventFlags(uint32_t character) {
++    const std::filesystem::path eventFolder = RuntimeConfigFile::ResolvedDvdRoot() / "files" / "event";
++    std::set<long> events;
++    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
++        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
++            static const std::regex beforeProposal("msg0_0\\s+\"[A-Z]+_L00000[0-4]");
++            if (Number(block, "chara0") == static_cast<long>(character) &&
++                std::regex_search(block, beforeProposal)) {
++                events.insert(Number(block, "evtNo"));
++            }
++        }
++    }
++    std::set<uint32_t> flags;
++    const std::string data = ReadFile(eventFolder / "prm_love.epc");
++    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
++        return {};
++    }
++    const uint32_t count = BigEndian32(data, 8);
++    const size_t blocks = 20 + 12 * size_t(count);
++    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
++        const size_t row = 20 + 12 * size_t(i);
++        if (events.count(static_cast<long>(BigEndian32(data, row))) == 0) {
++            continue;
++        }
++        const size_t block = blocks + BigEndian32(data, row + 4);
++        const size_t size = BigEndian32(data, row + 8);
++        if (block + size > data.size() || size < 0x14) {
++            continue;
++        }
++        const uint32_t conditions = BigEndian32(data, block + 8);
++        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
++            const size_t at = block + 0x14 + 24 * size_t(c);
++            if (BigEndian32(data, at) == 0 && BigEndian32(data, at + 20) == 1) {
++                flags.insert(BigEndian32(data, at + 4));
++            }
++        }
++    }
++    return {flags.begin(), flags.end()};
++}
++
++struct Candidate {
++    uint32_t id;
++    const char* name;
++};
++
++// The candidates by the game's numbers (the msg names of varSet_love*.db: GIL, WONG for Jin, TAO for
++// Toby, OSE for Owen, JULI for Julius, CHYA for Chase, CLVN for Calvin...).
++constexpr Candidate kCandidates[] = {
++    {9, "Gill"}, {10, "Jin"}, {11, "Toby"}, {12, "Owen"}, {13, "Luke"}, {14, "Julius"}, {15, "Chase"},
++    {16, "Calvin"}, {1, "Renee"}, {2, "Kathy"}, {3, "Maya"}, {4, "Selena"}, {5, "Character 5 (PUTT)"},
++    {6, "Character 6 (KTMI)"}, {7, "Anissa"}, {8, "Luna"},
++};
++
++bool GameLoaded() {
++    const uint32_t state = Memory::Read32(kGameState);
++    return state != 0 && Memory::Contains(state, 0x1000);
++}
++
++void DrawTestPanel() {
++    static int chosen = 0;
++    static std::string result;
++    ImGui::TextWrapped("For testing the mod. Load a game, choose a candidate and press the button; then "
++                       "save in the game. It changes that game's progress.");
++    if (ImGui::BeginCombo("Candidate", kCandidates[chosen].name)) {
++        for (int i = 0; i < static_cast<int>(std::size(kCandidates)); ++i) {
++            if (ImGui::Selectable(kCandidates[i].name, i == chosen)) {
++                chosen = i;
++            }
++        }
++        ImGui::EndCombo();
++    }
++    ImGui::BeginDisabled(!GameLoaded());
++    if (ImGui::Button("Ready to propose")) {
++        const uint32_t character = kCandidates[chosen].id;
++        Memory::Write32(VillagerValueAddress(character, 1), 1000);
++        const std::vector<uint32_t> flags = HeartEventFlags(character);
++        const uint32_t state = Memory::Read32(kGameState);
++        for (const uint32_t flag : flags) {
++            Memory::Write8(state + 0x118 + flag, 1);
++        }
++        const uint32_t house = VariableAddress(85);
++        if (static_cast<int32_t>(Memory::Read32(house)) < 1) {
++            Memory::Write32(house, 1);
++        }
++        result = std::string(kCandidates[chosen].name) + ": 10 hearts, " + std::to_string(flags.size()) +
++                 " heart event flags set, house built up. Now hold a Blue Feather and give it to them.";
++        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
++    }
++    ImGui::SameLine();
++    if (ImGui::Button("Hold a Blue Feather")) {
++        const uint32_t player = Memory::Read32(kPlayerObject);
++        if (player != 0 && Memory::Contains(player + 0x650, 4)) {
++            Memory::Write32(player + 0x650, kBlueFeather);
++            result = "The player holds a Blue Feather (it may not show in the hands). Give it to the candidate.";
++        } else {
++            result = "The player is not on screen.";
++        }
++        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
++    }
++    ImGui::EndDisabled();
++    if (!result.empty()) {
++        ImGui::TextWrapped("%s", result.c_str());
++    }
++}
++
++const bool kPanel = (GameMods::RegisterSettingsPanel({"Romance for everyone (testing)", Enabled, DrawTestPanel}), true);
 +
 +} // namespace
 diff --git a/runtime/src/hle/gx/gx_copy.cpp b/runtime/src/hle/gx/gx_copy.cpp
@@ -3649,7 +3846,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..37cdb65 100644
+index 6c2083a..43fe8da 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -3660,15 +3857,16 @@ index 6c2083a..37cdb65 100644
  #include "gx_worker.h"
  #include "audio_backend.h"
  #include "aurora_events.h"
-@@ -9,6 +12,7 @@
+@@ -9,6 +12,8 @@
  #include "game_graphics_options.h"
  #include "music_attenuation.h"
  #include "runtime_config.h"
++#include "game_mods.h"
 +#include "hle_stubs.h"
  #include "runtime_log.h"
  #include "wiimote_host.h"
  
-@@ -92,10 +96,12 @@ bool g_audioMixWorker = RuntimeConfigFile::AudioMixWorkerEnabled(true);
+@@ -92,10 +97,12 @@ bool g_audioMixWorker = RuntimeConfigFile::AudioMixWorkerEnabled(true);
  bool g_attenuateMusicWhenMediaPlays = RuntimeConfigFile::AttenuateMusicWhenMediaPlays(false);
  int g_frameInterpolationMode = [] {
      switch (RuntimeConfigFile::FrameInterpolationFps(0)) {
@@ -3683,7 +3881,7 @@ index 6c2083a..37cdb65 100644
      default:
          return 0;
      }
-@@ -115,7 +121,7 @@ bool g_vsync = RuntimeConfigFile::Vsync();
+@@ -115,7 +122,7 @@ bool g_vsync = RuntimeConfigFile::Vsync();
  bool g_disableCopyFilter = RuntimeConfigFile::DisableCopyFilter(true);
  bool g_showFps = RuntimeConfigFile::ShowFps(true);
  bool g_forceAspect = RuntimeConfigFile::ForceAspectEnabled();
@@ -3692,7 +3890,7 @@ index 6c2083a..37cdb65 100644
  #if defined(__APPLE__)
  bool g_metalFxSpatialUpscaling = RuntimeConfigFile::MetalFxSpatialUpscaling(false);
  #endif
-@@ -182,7 +188,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
+@@ -182,7 +189,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
      {"3x", 3.0f}, {"4x", 4.0f}, {"6x", 6.0f}, {"8x", 8.0f},
  }};
  
@@ -3701,7 +3899,7 @@ index 6c2083a..37cdb65 100644
  
  bool IsHighResolutionScale(float scale) {
      return std::fabs(scale - 6.0f) < 0.001f || std::fabs(scale - 8.0f) < 0.001f;
-@@ -435,7 +441,19 @@ const char* KeyBindingName(int scancode) {
+@@ -435,7 +442,19 @@ const char* KeyBindingName(int scancode) {
      }
  }
  
@@ -3722,7 +3920,7 @@ index 6c2083a..37cdb65 100644
  struct RebindState {
      bool active = false;
      bool openPopup = false;
-@@ -467,7 +485,7 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
+@@ -467,7 +486,7 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
      std::copy_n(keys, std::min(count, static_cast<int>(g_rebind.keys.size())), g_rebind.keys.begin());
      g_rebind.mouse = SDL_GetMouseState(nullptr, nullptr);
      const int index = PADGetIndexForPort(g_rebind.port);
@@ -3731,7 +3929,7 @@ index 6c2083a..37cdb65 100644
          if (auto* pad = PADGetSDLGamepadForIndex(index)) {
              g_rebind.instance = SDL_GetGamepadID(pad);
              for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
-@@ -480,6 +498,18 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
+@@ -480,6 +499,18 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
  
  void CompleteRebind(uint32_t value) {
      const auto& capture = g_rebind;
@@ -3750,7 +3948,7 @@ index 6c2083a..37cdb65 100644
      if (capture.kind == RebindKind::Controller) {
          const int index = PADGetIndexForPort(capture.port);
          auto* pad = index >= 0 ? PADGetSDLGamepadForIndex(index) : nullptr;
-@@ -526,9 +556,9 @@ void DrawRebindPrompt() {
+@@ -526,9 +557,9 @@ void DrawRebindPrompt() {
      }
      if (g_rebind.active) {
          ImGui::Text("Rebind: %s", g_rebind.label.c_str());
@@ -3762,7 +3960,7 @@ index 6c2083a..37cdb65 100644
                  ? "Press a keyboard key."
                  : "Press a keyboard key or click a mouse button.");
          ImGui::TextUnformatted("Release any held input first. Backspace or Delete clears the mapping.");
-@@ -541,9 +571,9 @@ void DrawRebindPrompt() {
+@@ -541,9 +572,9 @@ void DrawRebindPrompt() {
          // UI clicks must not become mouse bindings (buttons activate on release).
          const bool overControl = ImGui::IsAnyItemHovered();
          if (g_rebind.active && (clear || remaining <= 0.0f)) {
@@ -3774,7 +3972,7 @@ index 6c2083a..37cdb65 100644
              int count = 0;
              const bool* keys = SDL_GetKeyboardState(&count);
              for (int i = 1; i < std::min(count, static_cast<int>(SDL_SCANCODE_COUNT)) && g_rebind.active; ++i) {
-@@ -553,9 +583,10 @@ void DrawRebindPrompt() {
+@@ -553,9 +584,10 @@ void DrawRebindPrompt() {
              const uint32_t mouse = SDL_GetMouseState(nullptr, nullptr);
              for (int i = 1; i <= 5 && g_rebind.active; ++i)
                  if (!overControl && g_rebind.kind != RebindKind::MuteHotkey &&
@@ -3786,7 +3984,7 @@ index 6c2083a..37cdb65 100644
              auto* pad = SDL_GetGamepadFromID(g_rebind.instance);
              if (pad != nullptr) {
                  for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && g_rebind.active; ++i) {
-@@ -586,17 +617,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
+@@ -586,17 +618,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
  }
  
  void ApplyKeyboardPreset(uint32_t port) {
@@ -3819,7 +4017,7 @@ index 6c2083a..37cdb65 100644
      };
      uint32_t axisCount = 0;
      auto* mappings = PADGetKeyAxisBindings(port, &axisCount);
-@@ -625,11 +665,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
+@@ -625,11 +666,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
  
  void DrawKeyboardSettings(uint32_t port) {
      PushMenuTextWrap();
@@ -3838,7 +4036,7 @@ index 6c2083a..37cdb65 100644
      uint32_t count = 0;
      auto* buttons = PADGetKeyButtonBindings(port, &count);
      ImGui::SeparatorText("Buttons");
-@@ -727,6 +772,37 @@ void DrawExpressionSettings() {
+@@ -727,6 +773,37 @@ void DrawExpressionSettings() {
      }
  }
  
@@ -3876,7 +4074,7 @@ index 6c2083a..37cdb65 100644
  void DrawRumbleSettings() {
      ImGui::Separator();
      if (ImGui::Checkbox("Controller vibration", &g_rumbleEnabled)) {
-@@ -1064,6 +1140,7 @@ void DrawControllerSettings() {
+@@ -1064,6 +1141,7 @@ void DrawControllerSettings() {
      ImGui::Spacing();
      controller_mapping_wizard::DrawSetupList();
      DrawWiiRemoteSetup();
@@ -3884,7 +4082,7 @@ index 6c2083a..37cdb65 100644
      DrawRumbleSettings();
  }
  
-@@ -1074,22 +1151,25 @@ void DrawAudioSettings() {
+@@ -1074,22 +1152,25 @@ void DrawAudioSettings() {
          AudioBackend::Instance().SetMasterVolume(volume);
          RuntimeConfigFile::SetAudioVolume(volume);
      }
@@ -3914,7 +4112,7 @@ index 6c2083a..37cdb65 100644
          const float volume = static_cast<float>(g_voicesVolumePercent) / 100.0f;
          MusicAttenuation::SetVoicesVolume(volume);
          RuntimeConfigFile::SetVoicesVolume(volume);
-@@ -1114,6 +1194,9 @@ void DrawAudioSettings() {
+@@ -1114,6 +1195,9 @@ void DrawAudioSettings() {
              "Runs the AX/DSP voice mix off the game thread. Turn this off if you "
              "suspect an audio problem; the mix then runs inline as it used to.");
      }
@@ -3924,7 +4122,7 @@ index 6c2083a..37cdb65 100644
      ImGui::Separator();
      if (ImGui::Checkbox("Mute game music while external media is playing",
                          &g_attenuateMusicWhenMediaPlays)) {
-@@ -1144,24 +1227,145 @@ void DrawAudioSettings() {
+@@ -1144,24 +1228,145 @@ void DrawAudioSettings() {
      }
  }
  
@@ -3966,10 +4164,7 @@ index 6c2083a..37cdb65 100644
 +            if (saved == kChoices[i].configName) {
 +                return static_cast<int>(i);
 +            }
-         }
--        if (ImGui::Selectable("4:3", !g_widescreen)) {
--            g_widescreen = false;
--            RuntimeConfigFile::SetWidescreen(false);
++        }
 +        return 0;
 +    }();
 +    static const int atLaunch = selected;
@@ -3985,7 +4180,10 @@ index 6c2083a..37cdb65 100644
 +            if (isSelected) {
 +                ImGui::SetItemDefaultFocus();
 +            }
-+        }
+         }
+-        if (ImGui::Selectable("4:3", !g_widescreen)) {
+-            g_widescreen = false;
+-            RuntimeConfigFile::SetWidescreen(false);
 +        ImGui::EndCombo();
 +    }
 +    if (selected != atLaunch) {
@@ -4083,7 +4281,7 @@ index 6c2083a..37cdb65 100644
      ImGui::Separator();
      struct EffectFlag {
          const char* label;
-@@ -1172,6 +1376,9 @@ void DrawGraphicsSettings() {
+@@ -1172,6 +1377,9 @@ void DrawGraphicsSettings() {
      }};
  
      for (const auto& effect : kEffectFlags) {
@@ -4093,7 +4291,7 @@ index 6c2083a..37cdb65 100644
          bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
          if (ImGui::Checkbox(effect.label, &disabled)) {
              if (disabled) {
-@@ -1183,8 +1390,10 @@ void DrawGraphicsSettings() {
+@@ -1183,8 +1391,10 @@ void DrawGraphicsSettings() {
              RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
          }
      }
@@ -4106,7 +4304,7 @@ index 6c2083a..37cdb65 100644
      static constexpr const char* kDisplayModes[] = {
          "Windowed",
          "Borderless fullscreen",
-@@ -1205,13 +1414,13 @@ void DrawGraphicsSettings() {
+@@ -1205,13 +1415,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -4123,7 +4321,7 @@ index 6c2083a..37cdb65 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1285,8 +1494,13 @@ void DrawGraphicsSettings() {
+@@ -1285,8 +1495,13 @@ void DrawGraphicsSettings() {
      if (ImGui::Checkbox("Show FPS", &g_showFps)) {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
@@ -4138,7 +4336,20 @@ index 6c2083a..37cdb65 100644
  }
  
  void DrawFpsOverlay() {
-@@ -1660,9 +1874,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1533,6 +1748,12 @@ void DrawTopBar() {
+         ImGui::EndMenu();
+     }
+ 
++    // Game mods that are on and have something to show (hle/game_mods/).
++    if (GameMods::HasSettings() && ImGui::BeginMenu("Mods")) {
++        GameMods::DrawSettings();
++        ImGui::EndMenu();
++    }
++
+     const ImGuiStyle& style = ImGui::GetStyle();
+     const float hideWidth = ImGui::CalcTextSize("Hide (F10)").x + style.FramePadding.x * 2.0f;
+     const float exitWidth = ImGui::CalcTextSize("X").x + style.FramePadding.x * 2.0f;
+@@ -1660,9 +1881,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
          controller_mapping_wizard::HandleSdlEvent(ev->sdl);
          if (g_rebind.active && (IsToggleKey(ev->sdl, SDL_SCANCODE_BACKSPACE) ||
                                  IsToggleKey(ev->sdl, SDL_SCANCODE_DELETE))) {
@@ -4153,7 +4364,7 @@ index 6c2083a..37cdb65 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1950,12 @@ void Draw() noexcept {
+@@ -1732,6 +1957,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
