@@ -84,6 +84,11 @@ already comes by magic.
 
 The scene's files are written at start-up to `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
+To see it without a marriage, turn on *Adoption scene at bedtime (next start)* in F10 > Mods and
+restart: going to bed at home plays a preview with one of the candidates in the spouse's place, in
+any game, and changes nothing in it (no child, no flags). It is
+`romance_any_gender_test_adoption = true` in Config.toml.
+
 **Still to do:**
 - Try it all in the game: the proposal, the wedding, the spouse at home and both adoptions.
 - Check the rest of the places that read the player's sex: the wedding, the spouse at home and the
@@ -174,6 +179,11 @@ Con la Diosa o el Rey de la Cosecha como pareja no cambia nada: su hijo ya llega
 | Banderas | Las de "hecho" de la pregunta y del parto de cada pareja (su propia condición en `prm_love.epc`) y la del juego de "primer hijo" o "segundo hijo" |
 
 Los archivos de la escena se escriben al abrir el juego en `UserData\Cache\Mods\romance_any_gender_adoption\`.
+
+Para verla sin casarse, activa *Adoption scene at bedtime (next start)* en F10 > Mods y reinicia: al
+irse a dormir en casa se ve una versión de prueba con uno de los candidatos en el lugar de la
+pareja, en cualquier partida, y no cambia nada en ella (ni hijo ni banderas). Es
+`romance_any_gender_test_adoption = true` en Config.toml.
 
 **Falta:**
 - Probarlo todo en el juego: la pedida, la boda, la pareja en casa y las dos adopciones.

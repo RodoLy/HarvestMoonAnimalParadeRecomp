@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..5dbf1a1
+index 0000000..c266f3c
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,978 @@
+@@ -0,0 +1,1021 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -1949,6 +1949,8 @@ index 0000000..5dbf1a1
 +constexpr uint32_t kFirstChildForMenFile = 18426;    // sample_125.opb
 +constexpr uint32_t kFirstChildForWomenFile = 18427;  // sample_126.opb
 +constexpr uint32_t kSecondChildFile = 18428;         // sample_127.opb
++// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on).
++constexpr uint32_t kFirstPreviewFile = 18401;
 +
 +// A spouse's events about the children, and what the scene needs to know of them.
 +struct Spouse {
@@ -1964,9 +1966,11 @@ index 0000000..5dbf1a1
 +
 +struct Adoption {
 +    uint32_t character;
-+    int child;  // 0 the first, 1 the second
++    int child;    // 0 the first, 1 the second
++    int preview;  // which preview file shows this character
 +};
 +std::map<uint32_t, Adoption> g_adoptions;  // by the question's event
++bool g_testAdoption = false;
 +
 +} // namespace
 +
@@ -1979,6 +1983,10 @@ index 0000000..5dbf1a1
 +    }
 +    const auto found = g_adoptions.find(event);
 +    if (found == g_adoptions.end() || Memory::Read32(kGameState) == 0) {
++        return;
++    }
++    if (g_testAdoption && found->second.child == 0) {
++        ctx->gpr[3] = kFirstPreviewFile + static_cast<uint32_t>(found->second.preview);
 +        return;
 +    }
 +    const int playerSex = static_cast<int>(Memory::Read32(VariableAddress(0x23)));
@@ -2208,23 +2216,30 @@ index 0000000..5dbf1a1
 +// The whole scene. `child` is 0 for the first child, 1 for the second; `playerIsMan` picks the
 +// first child's "born" flag the way the birth scenes do (0x7DE after a wife's, 0x7DD after a
 +// husband's; the second child's is 0x7EF either way).
-+std::string BuildScene(int child, bool playerIsMan, const std::vector<Spouse>& spouses) {
++//
++// A preview (`previewCharacter` not 0) is the same scene with that character in the spouse's place
++// and nothing the game keeps: no child, no name, no flags, no hearts. It is for trying the scene
++// in any game (see kTestAdoptionKey in romance_any_gender.h).
++std::string BuildScene(int child, bool playerIsMan, const std::vector<Spouse>& spouses,
++                       uint32_t previewCharacter = 0) {
 +    OpalScene scene;
 +    Commands c{scene};
++    const bool preview = previewCharacter != 0;
++    const uint32_t partner = preview ? previewCharacter : kSpouse;
 +    const uint32_t baby = child == 0 ? kFirstChild : kSecondChild;
 +    const QuestionLines& lines = child == 0 ? kFirstQuestion : kSecondQuestion;
 +
 +    // Who is in it and the motions they use.
 +    scene.Add(0x2C7, {0, Bits(1)});
 +    c.Actor(kPlayer);
-+    c.Actor(kSpouse);
++    c.Actor(partner);
 +    c.Actor(kGoddess);
 +    c.Actor(baby);
 +    for (const uint32_t motion : {0x00u, 0x37u, 0x8Du, 0xA1u, 0xB6u, 0xB8u}) {
 +        c.LoadMotion(kPlayer, motion);
 +    }
 +    for (const uint32_t motion : {0x33Fu, 0x331u, 0x33Bu, 0x8Du}) {
-+        c.LoadMotion(kSpouse, motion);
++        c.LoadMotion(partner, motion);
 +    }
 +    for (const uint32_t motion : {0x2D6u, 0x2F7u, 0x2F8u, 0x215u, 0x00u, 0x8Du, 0x2FDu, 0x2D5u}) {
 +        c.LoadMotion(kGoddess, motion);
@@ -2240,8 +2255,8 @@ index 0000000..5dbf1a1
 +    // are already in place but unseen.
 +    c.Place(kPlayer, 11.740f, 2.651f);
 +    c.Turn(kPlayer, 83.264f);
-+    c.Place(kSpouse, 10.379f, 2.916f);
-+    c.Turn(kSpouse, -88.735f);
++    c.Place(partner, 10.379f, 2.916f);
++    c.Turn(partner, -88.735f);
 +    c.Place(kGoddess, 12.516f, 3.650f);
 +    c.Turn(kGoddess, 272.834f);
 +    c.Place(baby, 12.500f, 3.700f);
@@ -2251,7 +2266,7 @@ index 0000000..5dbf1a1
 +    c.Vanish(baby, 0.1f);
 +    c.Camera(12.532f, 1.643f, 2.962f, 0.988f, 0.150f, 0.029f);
 +    scene.Add(0x28A, Int(0) + OpalScene::Words{kPlayer, 0});
-+    scene.Add(0x28A, Int(1) + OpalScene::Words{kSpouse, 0});
++    scene.Add(0x28A, Int(1) + OpalScene::Words{partner, 0});
 +    c.FadeIn(1);
 +    c.Wait(0.5f);
 +
@@ -2259,19 +2274,21 @@ index 0000000..5dbf1a1
 +    const int yes = scene.NewLabel();
 +    const int no = scene.NewLabel();
 +    const int end = scene.NewLabel();
-+    c.Face(kSpouse, 4);
-+    c.Motion(kSpouse, 0x33F, 1, 0x331, -1, 0.3f);
-+    c.Say(lines.ask, kSpouse);
-+    c.Motion(kSpouse, 0x00, 0, 0, 0.3f, -1);
-+    c.Face(kSpouse, 1);
-+    c.Motion(kSpouse, 0x33B);
++    c.Face(partner, 4);
++    c.Motion(partner, 0x33F, 1, 0x331, -1, 0.3f);
++    c.Say(lines.ask, partner);
++    c.Motion(partner, 0x00, 0, 0, 0.3f, -1);
++    c.Face(partner, 1);
++    c.Motion(partner, 0x33B);
 +    c.Choose(lines.wantChildren, lines.yesNotYet, 0);
 +    c.IfRegister(0, 0, yes, no);
 +
 +    scene.Mark(no);
-+    c.Face(kSpouse, 0);
-+    c.Say(lines.notYet, kSpouse);
-+    scene.Add(0x145, OpalScene::Words{kSpouse, 1} + Int(50));  // a little disappointed
++    c.Face(partner, 0);
++    c.Say(lines.notYet, partner);
++    if (!preview) {
++        scene.Add(0x145, OpalScene::Words{partner, 1} + Int(50));  // a little disappointed
++    }
 +    c.Goto(end);
 +
 +    // A boy, a girl, or what the spouse would like.
@@ -2281,25 +2298,31 @@ index 0000000..5dbf1a1
 +    const int girl = scene.NewLabel();
 +    const int opinion = scene.NewLabel();
 +    const int wish = scene.NewLabel();
-+    c.Face(kSpouse, 1);
-+    c.Motion(kSpouse, 0x8D);
-+    c.Say(lines.boyOrGirl, kSpouse);
++    c.Face(partner, 1);
++    c.Motion(partner, 0x8D);
++    c.Say(lines.boyOrGirl, partner);
 +    c.Choose(lines.whichOne, lines.boyGirlAsk, 1);
 +    c.IfRegister(1, 0, boy, notBoy);
 +    scene.Mark(boy);
-+    c.Say(lines.boy, kSpouse);
-+    c.ChildSex(baby, 0);
++    c.Say(lines.boy, partner);
++    if (!preview) {
++        c.ChildSex(baby, 0);
++    }
 +    c.Goto(wish);
 +    scene.Mark(notBoy);
 +    c.IfRegister(1, 1, girl, opinion);
 +    scene.Mark(girl);
-+    c.Say(lines.girl, kSpouse);
-+    c.ChildSex(baby, 1);
++    c.Say(lines.girl, partner);
++    if (!preview) {
++        c.ChildSex(baby, 1);
++    }
 +    c.Goto(wish);
 +    scene.Mark(opinion);
-+    if (child == 0) {
++    if (preview) {
++        c.Say(child == 0 ? kFirstOpinion : kSecondOpinionBoy, partner);
++    } else if (child == 0) {
 +        // Each spouse wants the child their own line names (as LC_L000015 sets it).
-+        c.Say(kFirstOpinion, kSpouse);
++        c.Say(kFirstOpinion, partner);
 +        c.StartSpouseTest();
 +        for (const Spouse& spouse : spouses) {
 +            const int match = scene.NewLabel();
@@ -2318,17 +2341,17 @@ index 0000000..5dbf1a1
 +        scene.Add(0x383, {1, kFirstChild, 0});
 +        c.IfRegister(1, 0, firstIsBoy, firstIsGirl);
 +        scene.Mark(firstIsBoy);
-+        c.Say(kSecondOpinionGirl, kSpouse);
++        c.Say(kSecondOpinionGirl, partner);
 +        c.ChildSex(baby, 1);
 +        c.Goto(wish);
 +        scene.Mark(firstIsGirl);
-+        c.Say(kSecondOpinionBoy, kSpouse);
++        c.Say(kSecondOpinionBoy, partner);
 +        c.ChildSex(baby, 0);
 +    }
 +    scene.Mark(wish);
-+    c.Say(lines.healthy, kSpouse);
-+    c.Face(kSpouse, 0);
-+    c.Say(child == 0 ? kLetUsAskTheGoddess : kLetUsAskAgain, kSpouse);
++    c.Say(lines.healthy, partner);
++    c.Face(partner, 0);
++    c.Say(child == 0 ? kLetUsAskTheGoddess : kLetUsAskAgain, partner);
 +    c.FadeOut(1);
 +    c.Wait(1);
 +
@@ -2336,9 +2359,9 @@ index 0000000..5dbf1a1
 +    c.Place(kPlayer, 13.835f, 3.383f);
 +    c.Turn(kPlayer, 90.064f);
 +    c.Motion(kPlayer, 0x00);
-+    c.Place(kSpouse, 13.750f, 2.550f);
-+    c.Turn(kSpouse, 48.3f);
-+    c.Motion(kSpouse, 0x00);
++    c.Place(partner, 13.750f, 2.550f);
++    c.Turn(partner, 48.3f);
++    c.Motion(partner, 0x00);
 +    c.Motion(kGoddess, 0x2D6, 1, 0x2D6, 0, -1);
 +    c.Motion(baby, 0x26F, 1, 0x26F, 0, -1);
 +    c.Talkers(kPlayer, kGoddess);
@@ -2352,8 +2375,8 @@ index 0000000..5dbf1a1
 +    c.Appear(baby, 1);
 +    c.Wait(1);
 +    c.Face(kPlayer, 4);
-+    c.Face(kSpouse, 4);
-+    c.Say(kLookItIsTheGoddess, kSpouse);
++    c.Face(partner, 4);
++    c.Say(kLookItIsTheGoddess, partner);
 +    c.Camera(15.535f, 1.687f, 3.770f, 0.991f, 0.127f, 0.048f);
 +    c.Face(kGoddess, 0);
 +    if (child == 0) {
@@ -2380,7 +2403,7 @@ index 0000000..5dbf1a1
 +    c.Motion(baby, 0xA5, 1, 0x26F);
 +    c.Wait(0.8f);
 +    c.Motion(kPlayer, 0xB6, 1, 0xB8, 0.2f, 0.2f);
-+    c.Face(kSpouse, 1);
++    c.Face(partner, 1);
 +    c.Wait(1);
 +
 +    // The baby's name.
@@ -2388,9 +2411,11 @@ index 0000000..5dbf1a1
 +    c.Motion(kGoddess, 0x215, 1, 0, 1, -1);
 +    c.Say(kNameTheBaby, kGoddess);
 +    c.Motion(kGoddess, 0x00, 1, 0, 1, -1);
-+    scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
-+    scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
-+    c.Say(child == 0 ? kNameReaction : kSecondNameReaction, kSpouse);
++    if (!preview) {
++        scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
++        scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
++    }
++    c.Say(child == 0 ? kNameReaction : kSecondNameReaction, partner);
 +
 +    // The Goddess says goodbye and goes.
 +    c.Face(kGoddess, 1);
@@ -2406,71 +2431,79 @@ index 0000000..5dbf1a1
 +    const int checkKind = scene.NewLabel();
 +    const int kind = scene.NewLabel();
 +    const int decided = scene.NewLabel();
-+    c.Face(kSpouse, 0);
-+    c.Say(kWhatWillTheyBeLike, kSpouse);
++    c.Face(partner, 0);
++    c.Say(kWhatWillTheyBeLike, partner);
 +    c.Choose(kLikeQuestion, kLikeChoices, 0);
 +    scene.Add(0x00D, {0});
 +    scene.AddJump(0x00E, {0, 0}, 1, healthy);
 +    c.Goto(checkKind);
 +    scene.Mark(healthy);
-+    c.Face(kSpouse, 1);
-+    c.Say(kHealthyAnswer, kSpouse);
-+    scene.Add(0x30B, {baby, 0, 1});
++    c.Face(partner, 1);
++    c.Say(kHealthyAnswer, partner);
++    if (!preview) {
++        scene.Add(0x30B, {baby, 0, 1});
++    }
 +    scene.Mark(checkKind);
 +    scene.AddJump(0x00E, {1, 0}, 1, kind);
 +    c.Goto(decided);
 +    scene.Mark(kind);
-+    c.Face(kSpouse, 1);
-+    c.Say(kKindAnswer, kSpouse);
-+    scene.Add(0x30B, {baby, 3, 1});
++    c.Face(partner, 1);
++    c.Say(kKindAnswer, partner);
++    if (!preview) {
++        scene.Add(0x30B, {baby, 3, 1});
++    }
 +    scene.Mark(decided);
-+    c.Say(child == 0 ? kGoodNight : kSecondGoodNight, kSpouse);
++    c.Say(child == 0 ? kGoodNight : kSecondGoodNight, partner);
 +
-+    // What the birth does: the book (first child), the spouse's hearts, the baby in the family.
-+    if (child == 0) {
-+        scene.Add(0x0E4, {Bits(1), 0, 0xFF});
-+        c.Wait(1);
-+        c.Notice(kBookNotice);
-+        scene.Add(0x0E3, {Bits(0.3f), 0});
-+        scene.Add(0x0E5, {Bits(-1), 0, 0xFF});
-+        scene.Add(0x30C, {0x1B});
-+    }
-+    scene.Add(0x144, OpalScene::Words{kSpouse, 1} + Int(100));
-+    scene.Add(0x142, OpalScene::Words{baby, 0} + Int(1));
-+    scene.Add(0x3A2, OpalScene::Words{7} + Int(0));
-+    scene.Add(0x31A, {0});
-+    scene.Add(0x307, {0x14, 0, 0});
++    if (!preview) {
++        // What the birth does: the book (first child), the spouse's hearts, the baby in the family.
++        if (child == 0) {
++            scene.Add(0x0E4, {Bits(1), 0, 0xFF});
++            c.Wait(1);
++            c.Notice(kBookNotice);
++            scene.Add(0x0E3, {Bits(0.3f), 0});
++            scene.Add(0x0E5, {Bits(-1), 0, 0xFF});
++            scene.Add(0x30C, {0x1B});
++        }
++        scene.Add(0x144, OpalScene::Words{partner, 1} + Int(100));
++        scene.Add(0x142, OpalScene::Words{baby, 0} + Int(1));
++        scene.Add(0x3A2, OpalScene::Words{7} + Int(0));
++        scene.Add(0x31A, {0});
++        scene.Add(0x307, {0x14, 0, 0});
 +
-+    // The spouse's question and birth are done (each spouse has their own flags).
-+    const int flagsDone = scene.NewLabel();
-+    c.StartSpouseTest();
-+    for (const Spouse& spouse : spouses) {
-+        const int match = scene.NewLabel();
-+        const int next = scene.NewLabel();
-+        c.IfSpouseIs(spouse.character, match, next);
-+        scene.Mark(match);
-+        c.SetFlag(spouse.askFlag[child]);
-+        c.SetFlag(spouse.birthFlag[child]);
-+        c.Goto(flagsDone);
-+        scene.Mark(next);
++        // The spouse's question and birth are done (each spouse has their own flags).
++        const int flagsDone = scene.NewLabel();
++        c.StartSpouseTest();
++        for (const Spouse& spouse : spouses) {
++            const int match = scene.NewLabel();
++            const int next = scene.NewLabel();
++            c.IfSpouseIs(spouse.character, match, next);
++            scene.Mark(match);
++            c.SetFlag(spouse.askFlag[child]);
++            c.SetFlag(spouse.birthFlag[child]);
++            c.Goto(flagsDone);
++            scene.Mark(next);
++        }
++        scene.Mark(flagsDone);
++        c.SetFlag(child == 1 ? 0x7EF : (playerIsMan ? 0x7DE : 0x7DD));
 +    }
-+    scene.Mark(flagsDone);
-+    c.SetFlag(child == 1 ? 0x7EF : (playerIsMan ? 0x7DE : 0x7DD));
 +
 +    // Bedtime ends the day (as LC_L000015 ends).
 +    scene.Mark(end);
 +    scene.Add(0x319, {0});
 +    scene.Add(0x2C3, {0xFFFFFFFFu, Bits(1)});
 +    c.FadeOut(1);
-+    scene.Add(0x3A2, OpalScene::Words{6} + Int(0));
++    if (!preview) {
++        scene.Add(0x3A2, OpalScene::Words{6} + Int(0));
++    }
 +    c.LetGo(kPlayer);
-+    c.LetGo(kSpouse);
++    c.LetGo(partner);
 +    c.LetGo(kGoddess);
 +    c.LetGo(baby);
 +    scene.Add(0x285, Int(0));
 +    scene.Add(0x285, Int(1));
 +    scene.Add(0x0A3, {0xFFFFFFFFu, 0});
-+    return scene.Build(child == 0 ? "ADOPTION_1.op" : "ADOPTION_2.op");
++    return scene.Build(preview ? "ADOPTION_PREVIEW.op" : child == 0 ? "ADOPTION_1.op" : "ADOPTION_2.op");
 +}
 +
 +// ---------------------------------------------------------------------------------------------
@@ -2785,9 +2818,10 @@ index 0000000..5dbf1a1
 +        }
 +        const auto sex = sexes.find(character);
 +        spouse.preferredSex = sex != sexes.end() ? sex->second : 0;
++        const int preview = static_cast<int>(g_spouses.size());
 +        g_spouses.push_back(spouse);
-+        g_adoptions[static_cast<uint32_t>(spouse.askEvent[0])] = {character, 0};
-+        g_adoptions[static_cast<uint32_t>(spouse.askEvent[1])] = {character, 1};
++        g_adoptions[static_cast<uint32_t>(spouse.askEvent[0])] = {character, 0, preview};
++        g_adoptions[static_cast<uint32_t>(spouse.askEvent[1])] = {character, 1, preview};
 +    }
 +    if (g_spouses.empty()) {
 +        std::fprintf(stderr, "[mod %s] adoption: no child events found; the scene is off\n", kMod);
@@ -2802,6 +2836,15 @@ index 0000000..5dbf1a1
 +    std::ofstream(scenes / "sample_125.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, true, g_spouses);
 +    std::ofstream(scenes / "sample_126.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, false, g_spouses);
 +    std::ofstream(scenes / "sample_127.opb", std::ios::binary | std::ios::trunc) << BuildScene(1, true, g_spouses);
++    g_testAdoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
++    if (g_testAdoption) {
++        for (size_t i = 0; i < g_spouses.size(); ++i) {
++            const std::string name = "sample_" + std::to_string(100 + i) + ".opb";
++            std::ofstream(scenes / name, std::ios::binary | std::ios::trunc)
++                << BuildScene(0, true, g_spouses, g_spouses[i].character);
++        }
++        std::fprintf(stderr, "[mod %s] test: the adoption scene plays at bedtime, with any candidate\n", kMod);
++    }
 +
 +    // The message sets, with the birth lines added to the questions'.
 +    std::map<std::string, std::vector<long>> sets;
@@ -2861,10 +2904,10 @@ index 0000000..5dbf1a1
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..bd9d0ba
+index 0000000..b05cead
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,620 @@
+@@ -0,0 +1,679 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -3105,8 +3148,6 @@ index 0000000..bd9d0ba
 +// proposal's condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at
 +// 900).
 +
-+constexpr const char* kTestProposalKey = "romance_any_gender_test_proposal";
-+
 +std::set<long> ProposalEvents(const std::filesystem::path& eventFolder, std::map<long, long>& characters) {
 +    std::set<long> events;
 +    static const std::regex proposal("msg0_0\\s+\"[A-Z]+_L000005\"");
@@ -3177,6 +3218,55 @@ index 0000000..bd9d0ba
 +    return data;
 +}
 +
++// Testing the adoption: each candidate's question about a child (L000015, as GIL_L000015).
++std::set<long> ChildQuestionEvents(const std::filesystem::path& eventFolder) {
++    std::set<long> events;
++    static const std::regex question("msg0_0\\s+\"[A-Z]+_L000015\"");
++    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
++        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
++            const long character = Number(block, "chara0");
++            if (character >= 0 && NaturalPartnerSex(static_cast<uint32_t>(character)) >= 0 &&
++                std::regex_search(block, question)) {
++                events.insert(Number(block, "evtNo"));
++            }
++        }
++    }
++    return events;
++}
++
++// prm_love.epc with every condition of these events turned into their own first one, the event's
++// "done" flag at 0, so they only need that flag (never set while testing).
++std::string OnlyOwnFlag(std::string data, const std::set<long>& events) {
++    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
++        return {};
++    }
++    const uint32_t count = ReadBigEndian32(data, 8);
++    const size_t blocks = 20 + 12 * size_t(count);
++    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
++        const size_t row = 20 + 12 * size_t(i);
++        if (events.count(static_cast<long>(ReadBigEndian32(data, row))) == 0) {
++            continue;
++        }
++        const size_t block = blocks + ReadBigEndian32(data, row + 4);
++        const size_t size = ReadBigEndian32(data, row + 8);
++        if (block + size > data.size() || size < 0x14) {
++            continue;
++        }
++        const uint32_t conditions = ReadBigEndian32(data, block + 8);
++        size_t own = 0;
++        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
++            const size_t at = block + 0x14 + 24 * size_t(c);
++            if (own == 0 && ReadBigEndian32(data, at) == 0 && ReadBigEndian32(data, at + 20) == 0) {
++                own = at;
++            }
++        }
++        for (uint32_t c = 0; own != 0 && c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
++            data.replace(block + 0x14 + 24 * size_t(c), 24, data.substr(own, 24));
++        }
++    }
++    return data;
++}
++
 +void PrepareFiles() {
 +    if (!Enabled() || ::GuestRegion::ForeignGameAddress("RBIEE9", 1u) == 0) {
 +        return;
@@ -3191,6 +3281,7 @@ index 0000000..bd9d0ba
 +    const bool testProposal = RuntimeConfigFile::ModEnabled(kTestProposalKey);
 +    std::map<long, long> proposalCharacters;
 +    const std::set<long> proposals = ProposalEvents(eventFolder, proposalCharacters);
++    const bool testAdoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
 +
 +    // Copy the file, leaving out the attr line of every candidate event.
 +    const std::regex attrLine("[ \\t]*attr[ \\t]+\"(man|woman)\"[ \\t]*\\r?\\n");
@@ -3223,13 +3314,18 @@ index 0000000..bd9d0ba
 +    std::filesystem::create_directories(root / "event", ec);
 +    std::ofstream(root / "event" / "trig_love.db", std::ios::binary | std::ios::trunc) << copy;
 +    std::filesystem::remove(root / "event" / "prm_love.epc", ec);
-+    if (testProposal) {
-+        const std::string conditions =
-+            WithoutFeatherCondition(ReadFile(eventFolder / "prm_love.epc"), proposalCharacters);
-+        if (!conditions.empty()) {
-+            std::ofstream(root / "event" / "prm_love.epc", std::ios::binary | std::ios::trunc) << conditions;
++    if (testProposal || testAdoption) {
++        std::string conditions = ReadFile(eventFolder / "prm_love.epc");
++        if (testProposal) {
++            conditions = WithoutFeatherCondition(conditions, proposalCharacters);
 +            std::fprintf(stderr, "[mod %s] test: %zu confessions and proposals start on leaving the house\n", kMod,
 +                         proposals.size());
++        }
++        if (testAdoption) {
++            conditions = OnlyOwnFlag(conditions, ChildQuestionEvents(eventFolder));
++        }
++        if (!conditions.empty()) {
++            std::ofstream(root / "event" / "prm_love.epc", std::ios::binary | std::ios::trunc) << conditions;
 +        }
 +    }
 +    GameMods::RegisterDiscOverlay(root);
@@ -3455,6 +3551,12 @@ index 0000000..bd9d0ba
 +    }
 +    ImGui::TextDisabled("Step out of the house: first the candidate's confession, the next time the proposal "
 +                        "(no Blue Feather needed).");
++    static bool s_adoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
++    if (ImGui::Checkbox("Adoption scene at bedtime (next start)", &s_adoption)) {
++        RuntimeConfigFile::SetModEnabled(kTestAdoptionKey, s_adoption);
++    }
++    ImGui::TextDisabled("Go to bed at home: a preview of the Harvest Goddess's adoption scene plays with one of "
++                        "the candidates, in any game. It changes nothing in the game.");
 +    if (ImGui::Button("Finish the story (all bells rung)")) {
 +        const std::vector<uint32_t> flags = StoryFlags();
 +        const uint32_t state = Memory::Read32(kGameState);
@@ -3487,10 +3589,10 @@ index 0000000..bd9d0ba
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
 new file mode 100644
-index 0000000..712f8b8
+index 0000000..1f1ae7a
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.h
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,60 @@
 +#pragma once
 +
 +// Shared by the two source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
@@ -3509,6 +3611,15 @@ index 0000000..712f8b8
 +
 +// Whether Config.toml [mods] turns the mod on.
 +bool Enabled();
++
++// Testing (F10 > Mods), each read at the next start:
++// - kTestProposalKey: a candidate's confession and proposal start when leaving the house.
++// - kTestAdoptionKey: going to bed at home plays a preview of the adoption scene with one of the
++//   candidates in the spouse's place, in any game and changing nothing in it. The question event
++//   (L000015) of every candidate loses its conditions but its own "done" flag, and
++//   romance_adoption.cpp sends it to the preview.
++inline constexpr const char* kTestProposalKey = "romance_any_gender_test_proposal";
++inline constexpr const char* kTestAdoptionKey = "romance_any_gender_test_adoption";
 +
 +// The player's sex as the game keeps it in variable 0x23.
 +inline constexpr int kMan = 0;
