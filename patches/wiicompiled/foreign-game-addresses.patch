@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..6628dfb
+index 0000000..4afa2fd
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1043 @@
+@@ -0,0 +1,1096 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -1952,6 +1952,13 @@ index 0000000..6628dfb
 +// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on).
 +constexpr uint32_t kFirstPreviewFile = 18401;
 +
++// The characters of the scene, as the game's scenes name them.
++constexpr uint32_t kPlayer = 0;
++constexpr uint32_t kSpouse = static_cast<uint32_t>(-10);
++constexpr uint32_t kGoddess = 52;
++constexpr uint32_t kFirstChild = 62;
++constexpr uint32_t kSecondChild = 63;
++
 +// A spouse's events about the children, and what the scene needs to know of them.
 +struct Spouse {
 +    uint32_t character = 0;
@@ -1971,6 +1978,7 @@ index 0000000..6628dfb
 +};
 +std::map<uint32_t, Adoption> g_adoptions;  // by the question's event
 +bool g_testAdoption = false;
++uint32_t g_sceneBaby = 0;  // the baby of the last adoption scene started (62 or 63)
 +
 +} // namespace
 +
@@ -1987,6 +1995,7 @@ index 0000000..6628dfb
 +    }
 +    if (g_testAdoption && found->second.child == 0 && found->second.character == AdoptionPreviewCharacter()) {
 +        ctx->gpr[3] = kFirstPreviewFile + static_cast<uint32_t>(found->second.preview);
++        g_sceneBaby = kFirstChild;
 +        return;
 +    }
 +    const int playerSex = static_cast<int>(Memory::Read32(VariableAddress(0x23)));
@@ -1998,8 +2007,31 @@ index 0000000..6628dfb
 +    } else {
 +        ctx->gpr[3] = kSecondChildFile;
 +    }
++    g_sceneBaby = found->second.child == 0 ? kFirstChild : kSecondChild;
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 801320B4, AnimalParadeEventScene);
++
++// 0x8020DA98: the scene command 0x3C2, the name entry; its arguments (at r6) are what is named and
++// who. "2, -16" names the family's child 0: the character in the family table at 0x805021F0
++// (0x8010CBDC). The game fills that table when it loads its own birth scene; the adoption is a
++// bedtime scene, so the table still says 0 there, and 0 is the player: the baby's name would
++// become the player's. While an adoption scene names its baby, the table says the baby.
++extern "C" void AnimalParadeNameEntry(CpuContext* ctx) {
++    constexpr uint32_t kFamilyChildren = 0x805021F0u;
++    const uint32_t what = Memory::Read32(ctx->gpr[6]);
++    const uint32_t who = Memory::Read32(ctx->gpr[6] + 4);
++    const uint32_t child = Memory::Read32(kFamilyChildren);
++    const bool ours = Enabled() && g_sceneBaby != 0 && what == 2 && who == static_cast<uint32_t>(-16) &&
++                      child != kFirstChild && child != kSecondChild;
++    if (ours) {
++        Memory::Write32(kFamilyChildren, g_sceneBaby);
++    }
++    GuestFunctions::BaseTranslation(0x8020DA98u)(ctx);
++    if (ours) {
++        Memory::Write32(kFamilyChildren, child);
++    }
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 8020DA98, AnimalParadeNameEntry);
 +
 +namespace {
 +
@@ -2107,12 +2139,6 @@ index 0000000..6628dfb
 +    return a;
 +}
 +
-+// The characters of the scene, as the game's scenes name them.
-+constexpr uint32_t kPlayer = 0;
-+constexpr uint32_t kSpouse = static_cast<uint32_t>(-10);
-+constexpr uint32_t kGoddess = 52;
-+constexpr uint32_t kFirstChild = 62;
-+constexpr uint32_t kSecondChild = 63;
 +
 +// Message n of the event's message set.
 +constexpr uint32_t Slot(int n) { return 0xFFFFFEC0u + static_cast<uint32_t>(n); }
@@ -2141,6 +2167,10 @@ index 0000000..6628dfb
 +    void Face(uint32_t who, uint32_t expression) { scene.Add(0x095, {who, expression}); }
 +    void Appear(uint32_t who, float seconds) { scene.Add(0x09A, {who, Bits(seconds)}); }
 +    void Vanish(uint32_t who, float seconds) { scene.Add(0x09B, {who, Bits(seconds)}); }
++    // Shown or left out of the shot at once (the game's scenes leave out whoever would stand
++    // between the camera and the one who talks).
++    void Show(uint32_t who) { scene.Add(0x084, {who}); }
++    void Hide(uint32_t who) { scene.Add(0x085, {who}); }
 +    void Hold(uint32_t child, uint32_t by) { scene.Add(0x26B, {child, by, 0x32}); }
 +    void Wait(float seconds) { scene.Add(0x022, Float(seconds)); }
 +    void Camera(const Shot& shot) {
@@ -2220,17 +2250,18 @@ index 0000000..6628dfb
 +// The camera shots, from the game's own scenes.
 +constexpr Shot kBedtimeTwoShot{12.739f, 1.576f, 4.333f, 0.710f, 0.094f, 0.698f};  // LC_L000015: both, from the side
 +constexpr Shot kWholeRoom{14.988f, 2.154f, 6.031f, 0.580f, 0.219f, 0.784f};      // GDSS_L000016: everyone
-+// The Goddess from the side, so the player does not stand between her and the camera (the
-+// Goddess's own scene looks at her past the player's head).
-+constexpr Shot kGoddessSide{13.000f, 1.600f, 5.400f, 0.264f, 0.136f, 0.955f};
-+constexpr Shot kCouple{12.221f, 1.697f, 4.933f, -0.716f, 0.219f, 0.663f};        // the couple, from her side
++// The Goddess from where the player stands (GDSS_L000016 leaves the player out of these shots).
++constexpr Shot kGoddessFace{15.535f, 1.687f, 3.770f, 0.991f, 0.127f, 0.048f};
++constexpr Shot kGoddessGoodbye{14.868f, 1.854f, 3.737f, 0.985f, 0.166f, 0.048f};
++constexpr Shot kCouple{12.221f, 1.697f, 4.933f, -0.716f, 0.219f, 0.663f};        // the couple, from her place
 +
 +// The whole scene. `child` is 0 for the first child, 1 for the second; `playerIsMan` picks the
 +// first child's "born" flag the way the birth scenes do (0x7DE after a wife's, 0x7DD after a
 +// husband's; the second child's is 0x7EF either way).
 +//
 +// A preview (`previewCharacter` not 0) is the same scene with that character in the spouse's place
-+// and nothing the game keeps: no child, no flags, no hearts (only the name entry shows). It is for trying the scene
++// and nothing the game keeps: no child, no flags, no hearts (only the name typed goes on the
++// first baby's record, which no one has yet and a real birth names again). It is for trying the scene
 +// in any game (see kTestAdoptionKey in romance_any_gender.h).
 +std::string BuildScene(int child, bool playerIsMan, const std::vector<Spouse>& spouses,
 +                       uint32_t previewCharacter = 0) {
@@ -2391,9 +2422,25 @@ index 0000000..6628dfb
 +    c.Wait(1);
 +    c.Face(kPlayer, 4);
 +    c.Face(partner, 4);
-+    c.Camera(kCouple);
++    // Each shot leaves out whoever would block it: the couple's is taken from where the Goddess
++    // stands, hers from where the player stands.
++    const auto coupleShot = [&](bool babyWithGoddess) {
++        c.Camera(kCouple);
++        c.Show(kPlayer);
++        c.Hide(kGoddess);
++        if (babyWithGoddess) c.Hide(baby);
++        else c.Show(baby);
++    };
++    const auto goddessShot = [&](const Shot& shot, bool babyWithGoddess) {
++        c.Camera(shot);
++        c.Show(kGoddess);
++        c.Hide(kPlayer);
++        if (babyWithGoddess) c.Show(baby);
++        else c.Hide(baby);
++    };
++    coupleShot(true);
 +    c.Say(kLookItIsTheGoddess, partner);
-+    c.Camera(kGoddessSide);
++    goddessShot(kGoddessFace, true);
 +    c.Face(kGoddess, 0);
 +    if (child == 0) {
 +        c.Say(kDoNotBeAfraid, kGoddess);
@@ -2412,7 +2459,7 @@ index 0000000..6628dfb
 +    c.FadeOut(1);
 +    c.Hold(baby, kPlayer);
 +    c.Motion(kPlayer, 0xB8, 0, 0, 0, -1);
-+    c.Camera(kCouple);
++    coupleShot(false);
 +    c.FadeIn(1);
 +    c.Face(kPlayer, 1);
 +    c.Face(baby, 1);
@@ -2425,28 +2472,34 @@ index 0000000..6628dfb
 +    // The baby's name.
 +    c.Face(kGoddess, 0);
 +    c.Motion(kGoddess, 0x215, 1, 0, 1, -1);
-+    c.Camera(kGoddessSide);
++    goddessShot(kGoddessFace, false);
 +    c.Say(kNameTheBaby, kGoddess);
 +    c.Motion(kGoddess, 0x00, 1, 0, 1, -1);
-+    // The name entry (the preview shows it too: the name only stays if that game is saved, and
-+    // there it belongs to no child).
++    // The name entry (AnimalParadeNameEntry points it at the baby). The preview shows it too: the
++    // name goes on the baby the family does not have yet, and a real birth names it again.
 +    scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
 +    if (!preview) {
 +        scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
 +    }
-+    c.Camera(kCouple);
++    coupleShot(false);
 +    c.Say(child == 0 ? kNameReaction : kSecondNameReaction, partner);
 +
 +    // The Goddess says goodbye and goes.
 +    c.Face(kGoddess, 1);
 +    c.Motion(kGoddess, 0x2FD, 1, 0x215, -1, 1);
-+    c.Camera(kGoddessSide);
++    goddessShot(kGoddessGoodbye, false);
 +    c.Say(kLoveThem, kGoddess);
 +    c.Motion(kGoddess, 0x2D5, 1, 0, 1, -1);
 +    c.Camera(kWholeRoom);
++    c.Show(kPlayer);
++    c.Show(baby);
++    c.Show(kGoddess);
 +    c.Sparkle();
 +    c.Vanish(kGoddess, 3);
 +    c.Wait(2);
++    // Gone: her light stays where she is, so she leaves the house (as she waited at the start).
++    c.Hide(kGoddess);
++    c.Place(kGoddess, -100.0f, -100.0f);
 +
 +    // What the baby will be like (as the birth scenes ask).
 +    const int healthy = scene.NewLabel();

@@ -81,16 +81,23 @@ already comes by magic.
 | The spouse's lines | Their own: the question's message set (`event/msgSet_love*.db`) gets ten lines of the birth's set added (slots 20 to 29: the name, what the baby will be like, good night, the book) |
 | The Goddess's lines | New: messages `0xE000` on, added to every `msglang/<language>/<male|female>/love*.mpc` (Spanish in `spa`, English in the others) |
 | Flags | Each spouse's question and birth "done" flags (their own condition in `prm_love.epc`), and the game's "first child" or "second child" flag |
+| The baby's name | The name entry (scene command `0x3C2`, `0x8020DA98`) with "2, -16" names the family's child 0, the character in the table at `0x805021F0`. The game fills that table when it loads its own birth scene; the adoption is a bedtime scene, the table says 0, the player, and the name would replace the player's. The mod wraps `0x8020DA98` and, while an adoption scene names its baby, the table says the baby |
 
 The scene's files are written at start-up to `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
 To see it without a marriage, turn on *Adoption scene at bedtime (next start)* in F10 > Mods and
 restart: going to bed at home plays a preview with the candidate chosen in that panel (choose, then
-restart) in the spouse's place, in any game, and changes nothing in it (no child, no flags). It is
+restart) in the spouse's place, in any game, and changes nothing in it (no child, no flags; only the name
+typed goes on the first baby's record, which no one has yet and a real birth names again). It is
 `romance_any_gender_test_adoption = true` in Config.toml.
 
+The spouse calls the player by the name the wedding sets (game variable 0x51). A test that makes a
+marriage by changing the game's memory has to set it too (to 0), or those lines show no name.
+
 **Still to do:**
-- Try it all in the game: the proposal, the wedding, the spouse at home and both adoptions.
+- Try it all in the game: the proposal, the wedding, the spouse at home and the second adoption
+  (the first was tried in the cloud with a marriage made in memory: question, Goddess, name, book,
+  flags).
 - Check the rest of the places that read the player's sex: the wedding, the spouse at home and the
   rivals.
 
@@ -177,15 +184,23 @@ Con la Diosa o el Rey de la Cosecha como pareja no cambia nada: su hijo ya llega
 | Las frases de la pareja | Las suyas: al conjunto de mensajes de la pregunta (`event/msgSet_love*.db`) se le añaden diez frases del conjunto del parto (posiciones 20 a 29: el nombre, cómo será el bebé, buenas noches, el libro) |
 | Las frases de la Diosa | Nuevas: mensajes `0xE000` en adelante, añadidos a cada `msglang/<idioma>/<male|female>/love*.mpc` (español en `spa`, inglés en los demás) |
 | Banderas | Las de "hecho" de la pregunta y del parto de cada pareja (su propia condición en `prm_love.epc`) y la del juego de "primer hijo" o "segundo hijo" |
+| El nombre del bebé | La pantalla de nombre (orden de escena `0x3C2`, `0x8020DA98`) con "2, -16" nombra al hijo 0 de la familia, el personaje de la tabla en `0x805021F0`. El juego llena esa tabla al cargar su propia escena de parto; la adopción es una escena de antes de dormir, la tabla dice 0, quien juega, y el nombre sustituiría al suyo. El mod envuelve `0x8020DA98` y, mientras una escena de adopción nombra a su bebé, la tabla dice el bebé |
 
 Los archivos de la escena se escriben al abrir el juego en `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
 Para verla sin casarse, activa *Adoption scene at bedtime (next start)* en F10 > Mods y reinicia: al
 irse a dormir en casa se ve una versión de prueba con el candidato elegido en ese panel (elígelo y
-reinicia) en el lugar de la pareja, en cualquier partida, y no cambia nada en ella (ni hijo ni banderas). Es
-`romance_any_gender_test_adoption = true` en Config.toml.
+reinicia) en el lugar de la pareja, en cualquier partida, y no cambia nada en ella (ni hijo ni
+banderas; solo el nombre escrito queda en la ficha del primer bebé, que nadie tiene aún y que un
+parto de verdad vuelve a nombrar). Es `romance_any_gender_test_adoption = true` en Config.toml.
+
+La pareja llama a quien juega por el nombre que fija la boda (variable 0x51 del juego). Una prueba
+que hace un matrimonio cambiando la memoria del juego también tiene que fijarla (a 0), o esas frases
+salen sin nombre.
 
 **Falta:**
-- Probarlo todo en el juego: la pedida, la boda, la pareja en casa y las dos adopciones.
+- Probarlo todo en el juego: la pedida, la boda, la pareja en casa y la segunda adopción (la
+  primera se probó en la nube con un matrimonio hecho en memoria: pregunta, Diosa, nombre, libro,
+  banderas).
 - Revisar el resto de los lugares que leen el sexo de quien juega: la boda, la pareja en casa y
   los rivales.
