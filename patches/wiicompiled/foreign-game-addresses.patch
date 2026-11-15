@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..c5dbbdc
+index 0000000..728e5b5
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,598 @@
+@@ -0,0 +1,624 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2287,19 +2287,30 @@ index 0000000..c5dbbdc
 +// number 5 (GIL_L000005 for Gill) is the proposal, so these are L000000 to L000004. The file is
 +// "EVTP", a count and {event, offset, size} rows, then each event's "EVCD" block: a count at 8 and
 +// from 0x14 conditions of six numbers; {0, flag, -1, 0, 0, value} asks for a flag.
-+std::vector<uint32_t> HeartEventFlags(uint32_t character) {
++//
++// It also gives the flags to clear: the ones the confession (L000003a) and the proposal (L000005)
++// need to be 0, their own "already seen", so both play again in a game where they were marked.
++std::vector<uint32_t> HeartEventFlags(uint32_t character, std::vector<uint32_t>& toClear) {
 +    const std::filesystem::path eventFolder = RuntimeConfigFile::ResolvedDvdRoot() / "files" / "event";
 +    std::set<long> events;
++    std::set<long> replayed;
 +    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
 +        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
 +            static const std::regex beforeProposal("msg0_0\\s+\"[A-Z]+_L00000[0-4]");
-+            if (Number(block, "chara0") == static_cast<long>(character) &&
-+                std::regex_search(block, beforeProposal)) {
++            static const std::regex toReplay("msg0_0\\s+\"[A-Z]+_L00000(3a|5)\"");
++            if (Number(block, "chara0") != static_cast<long>(character)) {
++                continue;
++            }
++            if (std::regex_search(block, beforeProposal)) {
 +                events.insert(Number(block, "evtNo"));
++            }
++            if (std::regex_search(block, toReplay)) {
++                replayed.insert(Number(block, "evtNo"));
 +            }
 +        }
 +    }
 +    std::set<uint32_t> flags;
++    std::set<uint32_t> cleared;
 +    const std::string data = ReadFile(eventFolder / "prm_love.epc");
 +    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
 +        return {};
@@ -2308,7 +2319,8 @@ index 0000000..c5dbbdc
 +    const size_t blocks = 20 + 12 * size_t(count);
 +    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
 +        const size_t row = 20 + 12 * size_t(i);
-+        if (events.count(static_cast<long>(BigEndian32(data, row))) == 0) {
++        const long event = static_cast<long>(BigEndian32(data, row));
++        if (events.count(event) == 0 && replayed.count(event) == 0) {
 +            continue;
 +        }
 +        const size_t block = blocks + BigEndian32(data, row + 4);
@@ -2319,11 +2331,21 @@ index 0000000..c5dbbdc
 +        const uint32_t conditions = BigEndian32(data, block + 8);
 +        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
 +            const size_t at = block + 0x14 + 24 * size_t(c);
-+            if (BigEndian32(data, at) == 0 && BigEndian32(data, at + 20) == 1) {
++            if (BigEndian32(data, at) != 0) {
++                continue;
++            }
++            if (events.count(event) != 0 && BigEndian32(data, at + 20) == 1) {
 +                flags.insert(BigEndian32(data, at + 4));
++            }
++            if (replayed.count(event) != 0 && BigEndian32(data, at + 20) == 0) {
++                cleared.insert(BigEndian32(data, at + 4));
 +            }
 +        }
 +    }
++    for (const uint32_t flag : flags) {
++        cleared.erase(flag);
++    }
++    toClear.assign(cleared.begin(), cleared.end());
 +    return {flags.begin(), flags.end()};
 +}
 +
@@ -2420,10 +2442,14 @@ index 0000000..c5dbbdc
 +    if (ImGui::Button("Ready to propose")) {
 +        const uint32_t character = kCandidates[chosen].id;
 +        Memory::Write32(VillagerValueAddress(character, 1), 1000);
-+        const std::vector<uint32_t> flags = HeartEventFlags(character);
++        std::vector<uint32_t> toClear;
++        const std::vector<uint32_t> flags = HeartEventFlags(character, toClear);
 +        const uint32_t state = Memory::Read32(kGameState);
 +        for (const uint32_t flag : flags) {
 +            Memory::Write8(state + 0x118 + flag, 1);
++        }
++        for (const uint32_t flag : toClear) {
++            Memory::Write8(state + 0x118 + flag, 0);
 +        }
 +        const uint32_t house = VariableAddress(85);
 +        if (static_cast<int32_t>(Memory::Read32(house)) < 1) {
