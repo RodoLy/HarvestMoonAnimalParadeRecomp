@@ -57,6 +57,14 @@ male player and one for a female player (`msglang/<language>/male` and `female`)
 the folder by the player's sex, so in Spanish, for example, the lines already use the right
 gender.
 
+**The children.** After the wedding, each candidate's events go on with the family: L000015 the
+spouse asks to have a child, L000016 the birth (the spouse is taken to the clinic, then the
+baby is named), L000017 to L000020 the baby growing; L000029 to L000034 the second child. The
+birth is the only scene written twice, `script/love/loveGirl/LG_L000016.opb` for a wife and
+`loveBoy/LB_L000016.opb` for a husband (likewise the proposal, L000005, the wedding, L000007, and
+the second child, L000029 and L000030); the rest are shared (`loveCommon/LC_*`).
+`tools/game_files.py` reads the event, message and scene files (their formats are at its top).
+
 **Still to do:**
 - Check the rest of the places that read the player's sex: the wedding, the spouse at home and
   the rivals.
@@ -121,6 +129,15 @@ Los diálogos no necesitan nada nuevo. El disco trae los textos de amor de cada 
 versión para jugador hombre y otra para jugadora mujer (`msglang/<idioma>/male` y `female`). El
 juego elige la carpeta según el sexo de quien juega, así que en español, por ejemplo, las frases ya
 usan el género correcto.
+
+**Los hijos.** Después de la boda, los eventos de cada candidato siguen con la familia: L000015
+la pareja propone tener un hijo, L000016 el parto (la pareja va a la clínica y luego se le pone
+nombre al bebé), L000017 a L000020 el bebé creciendo; L000029 a L000034 el segundo hijo. El parto
+es la única escena escrita dos veces, `script/love/loveGirl/LG_L000016.opb` para una esposa y
+`loveBoy/LB_L000016.opb` para un esposo (igual que la pedida, L000005, la boda, L000007, y el
+segundo hijo, L000029 y L000030); las demás son comunes (`loveCommon/LC_*`).
+`tools/game_files.py` lee los archivos de eventos, mensajes y escenas (sus formatos están al
+principio).
 
 **Falta:**
 - Revisar el resto de los lugares que leen el sexo de quien juega: la boda, la pareja en casa y
