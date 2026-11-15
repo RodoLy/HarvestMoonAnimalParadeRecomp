@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..5be1174
+index 0000000..933f4f0
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,468 @@
+@@ -0,0 +1,478 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2242,7 +2242,7 @@ index 0000000..5be1174
 +// 0x8012E07C compares it (0, 1, 2) with those attrs. The button sets every event flag the first two
 +// parts' conditions (prm_main.epc) look at, as if all of it had happened, and moves the story on to
 +// the third part. Small flag numbers (below 1400) are counters shared with the rest of the game and
-+// are left alone, as are flags the conditions want at 2 or more.
++// are left alone, as are flags the conditions want at 2 or more. It also marks every villager as met.
 +constexpr uint32_t kStoryTable = 0x8050AAB0u;
 +
 +std::vector<uint32_t> StoryFlags() {
@@ -2336,8 +2336,18 @@ index 0000000..5be1174
 +            Memory::Write8(state + 0x118 + flag, 1);
 +        }
 +        Memory::Write32(state + 0x1798 + TableOffset(kStoryTable, 0), 2);
-+        result = std::to_string(flags.size()) + " story flags set, story moved to its last part. Save, sleep "
-+                 "and see who is in town.";
++        // Everyone met, so the game stops asking for introductions: a villager's value 0 says the
++        // player has met them (0x8010A2E4 adds no hearts while it is 0). Villagers are 1 to 63.
++        int met = 0;
++        for (uint32_t character = 1; character <= 63; ++character) {
++            const uint32_t address = VillagerValueAddress(character, 0);
++            if (Memory::Read32(address) == 0) {
++                Memory::Write32(address, 1);
++                ++met;
++            }
++        }
++        result = std::to_string(flags.size()) + " story flags set, story moved to its last part, " +
++                 std::to_string(met) + " villagers met. Save, sleep and see who is in town.";
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
 +    ImGui::EndDisabled();
