@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..c266f3c
+index 0000000..1cc6454
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1021 @@
+@@ -0,0 +1,1048 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -1949,8 +1949,10 @@ index 0000000..c266f3c
 +constexpr uint32_t kFirstChildForMenFile = 18426;    // sample_125.opb
 +constexpr uint32_t kFirstChildForWomenFile = 18427;  // sample_126.opb
 +constexpr uint32_t kSecondChildFile = 18428;         // sample_127.opb
-+// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on).
++// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on), and a scene
++// that does nothing, sample_118.opb (18419), for the other candidates' questions while testing.
 +constexpr uint32_t kFirstPreviewFile = 18401;
++constexpr uint32_t kNothingFile = 18419;
 +
 +// A spouse's events about the children, and what the scene needs to know of them.
 +struct Spouse {
@@ -1986,7 +1988,9 @@ index 0000000..c266f3c
 +        return;
 +    }
 +    if (g_testAdoption && found->second.child == 0) {
-+        ctx->gpr[3] = kFirstPreviewFile + static_cast<uint32_t>(found->second.preview);
++        ctx->gpr[3] = found->second.character == AdoptionPreviewCharacter()
++                          ? kFirstPreviewFile + static_cast<uint32_t>(found->second.preview)
++                          : kNothingFile;
 +        return;
 +    }
 +    const int playerSex = static_cast<int>(Memory::Read32(VariableAddress(0x23)));
@@ -2117,6 +2121,11 @@ index 0000000..c266f3c
 +// Message n of the event's message set.
 +constexpr uint32_t Slot(int n) { return 0xFFFFFEC0u + static_cast<uint32_t>(n); }
 +
++// A camera shot: where the camera is, then the way back from what it looks at.
++struct Shot {
++    float x, y, z, dx, dy, dz;
++};
++
 +// The commands, by what the game's scenes use them for.
 +struct Commands {
 +    OpalScene& scene;
@@ -2138,10 +2147,9 @@ index 0000000..c266f3c
 +    void Vanish(uint32_t who, float seconds) { scene.Add(0x09B, {who, Bits(seconds)}); }
 +    void Hold(uint32_t child, uint32_t by) { scene.Add(0x26B, {child, by, 0x32}); }
 +    void Wait(float seconds) { scene.Add(0x022, Float(seconds)); }
-+    void Camera(float x, float y, float z, float dx, float dy, float dz) {
-+        // Where the camera is, and the way back from what it looks at.
-+        scene.Add(0x0C2, Float(x) + Float(y) + Float(z));
-+        scene.Add(0x0C3, Float(dx) + Float(dy) + Float(dz));
++    void Camera(const Shot& shot) {
++        scene.Add(0x0C2, Float(shot.x) + Float(shot.y) + Float(shot.z));
++        scene.Add(0x0C3, Float(shot.dx) + Float(shot.dy) + Float(shot.dz));
 +    }
 +    void Talkers(uint32_t first, uint32_t second) {
 +        scene.Add(0x28A, Int(0) + OpalScene::Words{first, 0xFFFFFFFFu});
@@ -2213,6 +2221,13 @@ index 0000000..c266f3c
 +constexpr uint32_t kSecondOpinionBoy = Slot(16);
 +constexpr uint32_t kSecondOpinionGirl = Slot(17);
 +
++// The camera shots, from the game's own scenes.
++constexpr Shot kBedtimeTwoShot{12.739f, 1.576f, 4.333f, 0.710f, 0.094f, 0.698f};  // LC_L000015: both, from the side
++constexpr Shot kWholeRoom{14.988f, 2.154f, 6.031f, 0.580f, 0.219f, 0.784f};      // GDSS_L000016: everyone
++constexpr Shot kGoddessFar{15.535f, 1.687f, 3.770f, 0.991f, 0.127f, 0.048f};     // the Goddess, past the player
++constexpr Shot kGoddessNear{14.868f, 1.854f, 3.737f, 0.985f, 0.166f, 0.048f};    // the Goddess, closer
++constexpr Shot kCouple{12.221f, 1.697f, 4.933f, -0.716f, 0.219f, 0.663f};        // the couple, from her side
++
 +// The whole scene. `child` is 0 for the first child, 1 for the second; `playerIsMan` picks the
 +// first child's "born" flag the way the birth scenes do (0x7DE after a wife's, 0x7DD after a
 +// husband's; the second child's is 0x7EF either way).
@@ -2264,7 +2279,7 @@ index 0000000..c266f3c
 +    c.Hold(baby, kGoddess);
 +    c.Vanish(kGoddess, 0.1f);
 +    c.Vanish(baby, 0.1f);
-+    c.Camera(12.532f, 1.643f, 2.962f, 0.988f, 0.150f, 0.029f);
++    c.Camera(kBedtimeTwoShot);
 +    scene.Add(0x28A, Int(0) + OpalScene::Words{kPlayer, 0});
 +    scene.Add(0x28A, Int(1) + OpalScene::Words{partner, 0});
 +    c.FadeIn(1);
@@ -2367,7 +2382,7 @@ index 0000000..c266f3c
 +    c.Talkers(kPlayer, kGoddess);
 +    c.Face(kGoddess, 1);
 +    c.Face(baby, 0xF);
-+    c.Camera(14.988f, 2.154f, 6.031f, 0.580f, 0.219f, 0.784f);
++    c.Camera(kWholeRoom);
 +    c.FadeIn(1);
 +    c.Wait(0.5f);
 +    c.Sparkle();
@@ -2376,8 +2391,9 @@ index 0000000..c266f3c
 +    c.Wait(1);
 +    c.Face(kPlayer, 4);
 +    c.Face(partner, 4);
++    c.Camera(kCouple);
 +    c.Say(kLookItIsTheGoddess, partner);
-+    c.Camera(15.535f, 1.687f, 3.770f, 0.991f, 0.127f, 0.048f);
++    c.Camera(kGoddessFar);
 +    c.Face(kGoddess, 0);
 +    if (child == 0) {
 +        c.Say(kDoNotBeAfraid, kGoddess);
@@ -2396,7 +2412,7 @@ index 0000000..c266f3c
 +    c.FadeOut(1);
 +    c.Hold(baby, kPlayer);
 +    c.Motion(kPlayer, 0xB8, 0, 0, 0, -1);
-+    c.Camera(14.988f, 2.154f, 6.031f, 0.580f, 0.219f, 0.784f);
++    c.Camera(kCouple);
 +    c.FadeIn(1);
 +    c.Face(kPlayer, 1);
 +    c.Face(baby, 1);
@@ -2409,19 +2425,23 @@ index 0000000..c266f3c
 +    // The baby's name.
 +    c.Face(kGoddess, 0);
 +    c.Motion(kGoddess, 0x215, 1, 0, 1, -1);
++    c.Camera(kGoddessNear);
 +    c.Say(kNameTheBaby, kGoddess);
 +    c.Motion(kGoddess, 0x00, 1, 0, 1, -1);
 +    if (!preview) {
 +        scene.Add(0x3C2, {2, static_cast<uint32_t>(-16)});
 +        scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
 +    }
++    c.Camera(kCouple);
 +    c.Say(child == 0 ? kNameReaction : kSecondNameReaction, partner);
 +
 +    // The Goddess says goodbye and goes.
 +    c.Face(kGoddess, 1);
 +    c.Motion(kGoddess, 0x2FD, 1, 0x215, -1, 1);
++    c.Camera(kGoddessNear);
 +    c.Say(kLoveThem, kGoddess);
 +    c.Motion(kGoddess, 0x2D5, 1, 0, 1, -1);
++    c.Camera(kWholeRoom);
 +    c.Sparkle();
 +    c.Vanish(kGoddess, 3);
 +    c.Wait(2);
@@ -2432,6 +2452,7 @@ index 0000000..c266f3c
 +    const int kind = scene.NewLabel();
 +    const int decided = scene.NewLabel();
 +    c.Face(partner, 0);
++    c.Camera(kCouple);
 +    c.Say(kWhatWillTheyBeLike, partner);
 +    c.Choose(kLikeQuestion, kLikeChoices, 0);
 +    scene.Add(0x00D, {0});
@@ -2843,7 +2864,13 @@ index 0000000..c266f3c
 +            std::ofstream(scenes / name, std::ios::binary | std::ios::trunc)
 +                << BuildScene(0, true, g_spouses, g_spouses[i].character);
 +        }
-+        std::fprintf(stderr, "[mod %s] test: the adoption scene plays at bedtime, with any candidate\n", kMod);
++        OpalScene nothing;
++        nothing.Add(0x0A2, {0xFFFFFFFFu, 0});
++        nothing.Add(0x023, {0});
++        nothing.Add(0x319, {0});
++        nothing.Add(0x0A3, {0xFFFFFFFFu, 0});
++        std::ofstream(scenes / "sample_118.opb", std::ios::binary | std::ios::trunc) << nothing.Build("NOTHING.op");
++        std::fprintf(stderr, "[mod %s] test: the adoption scene plays at bedtime\n", kMod);
 +    }
 +
 +    // The message sets, with the birth lines added to the questions'.
@@ -2904,10 +2931,10 @@ index 0000000..c266f3c
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..b05cead
+index 0000000..24e1042
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,679 @@
+@@ -0,0 +1,688 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -2945,6 +2972,7 @@ index 0000000..b05cead
 +#include <imgui.h>
 +
 +#include <algorithm>
++#include <atomic>
 +#include <cstdint>
 +#include <cstdio>
 +#include <fstream>
@@ -3431,8 +3459,8 @@ index 0000000..b05cead
 +// Toby, OSE for Owen, JULI for Julius, CHYA for Chase, CLVN for Calvin...).
 +constexpr Candidate kCandidates[] = {
 +    {9, "Gill"}, {10, "Jin"}, {11, "Toby"}, {12, "Owen"}, {13, "Luke"}, {14, "Julius"}, {15, "Chase"},
-+    {16, "Calvin"}, {1, "Renee"}, {2, "Kathy"}, {3, "Maya"}, {4, "Selena"}, {5, "Character 5 (PUTT)"},
-+    {6, "Character 6 (KTMI)"}, {7, "Anissa"}, {8, "Luna"},
++    {16, "Calvin"}, {1, "Renee"}, {2, "Kathy"}, {3, "Maya"}, {4, "Selena"}, {5, "Phoebe"},
++    {6, "Candace"}, {7, "Anissa"}, {8, "Luna"},
 +};
 +
 +// Puts a Blue Feather in the player's hands; false while the player is not on screen.
@@ -3497,8 +3525,11 @@ index 0000000..b05cead
 +    return state != 0 && Memory::Contains(state, 0x1000);
 +}
 +
++// The candidate chosen in the panel; the adoption preview shows them (romance_adoption.cpp).
++std::atomic<int> g_chosenCandidate{0};
++
 +void DrawTestPanel() {
-+    static int chosen = 0;
++    int chosen = g_chosenCandidate.load();
 +    static std::string result;
 +    ImGui::TextWrapped("For testing the mod. Load a game, choose a candidate and press Ready to propose: "
 +                       "all hearts, the heart events up to the confession, the house built up and a Blue "
@@ -3507,6 +3538,7 @@ index 0000000..b05cead
 +        for (int i = 0; i < static_cast<int>(std::size(kCandidates)); ++i) {
 +            if (ImGui::Selectable(kCandidates[i].name, i == chosen)) {
 +                chosen = i;
++                g_chosenCandidate = i;
 +            }
 +        }
 +        ImGui::EndCombo();
@@ -3555,8 +3587,8 @@ index 0000000..b05cead
 +    if (ImGui::Checkbox("Adoption scene at bedtime (next start)", &s_adoption)) {
 +        RuntimeConfigFile::SetModEnabled(kTestAdoptionKey, s_adoption);
 +    }
-+    ImGui::TextDisabled("Go to bed at home: a preview of the Harvest Goddess's adoption scene plays with one of "
-+                        "the candidates, in any game. It changes nothing in the game.");
++    ImGui::TextDisabled("Go to bed at home: a preview of the Harvest Goddess's adoption scene plays with the "
++                        "candidate chosen above, in any game. It changes nothing in the game.");
 +    if (ImGui::Button("Finish the story (all bells rung)")) {
 +        const std::vector<uint32_t> flags = StoryFlags();
 +        const uint32_t state = Memory::Read32(kGameState);
@@ -3587,12 +3619,16 @@ index 0000000..b05cead
 +const bool kPanel = (GameMods::RegisterSettingsPanel({"Romance for everyone (testing)", Enabled, DrawTestPanel}), true);
 +
 +} // namespace
++
++uint32_t RomanceAnyGender::AdoptionPreviewCharacter() {
++    return kCandidates[g_chosenCandidate.load()].id;
++}
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
 new file mode 100644
-index 0000000..1f1ae7a
+index 0000000..c8b81f5
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.h
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,64 @@
 +#pragma once
 +
 +// Shared by the two source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
@@ -3615,11 +3651,15 @@ index 0000000..1f1ae7a
 +// Testing (F10 > Mods), each read at the next start:
 +// - kTestProposalKey: a candidate's confession and proposal start when leaving the house.
 +// - kTestAdoptionKey: going to bed at home plays a preview of the adoption scene with one of the
-+//   candidates in the spouse's place, in any game and changing nothing in it. The question event
++//   candidates (the one chosen in the panel) in the spouse's place, in any game and changing nothing in it. The question event
 +//   (L000015) of every candidate loses its conditions but its own "done" flag, and
 +//   romance_adoption.cpp sends it to the preview.
 +inline constexpr const char* kTestProposalKey = "romance_any_gender_test_proposal";
 +inline constexpr const char* kTestAdoptionKey = "romance_any_gender_test_adoption";
++
++// The candidate chosen in the testing panel (F10 > Mods), who the adoption preview shows; the
++// other candidates' bedtime questions play a scene that does nothing while testing.
++uint32_t AdoptionPreviewCharacter();
 +
 +// The player's sex as the game keeps it in variable 0x23.
 +inline constexpr int kMan = 0;
