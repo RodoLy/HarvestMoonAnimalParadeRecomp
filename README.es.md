@@ -17,7 +17,8 @@ Animal Parade (USA)`, ID `RBIEE9`, revisión 1 (`sys/main.dol` SHA-1
 ## Qué añade este port
 
 Recién instalado, el juego se ve y se juega como en la Wii: imagen 4:3, 30 cuadros por
-segundo, en inglés. Todo lo de abajo, menos la carga rápida, se elige en el menú **F10**.
+segundo, en inglés. Todo lo de abajo, menos la carga rápida, se elige en el launcher o en el
+menú **F10** dentro del juego.
 
 | | |
 |---|---|
@@ -42,21 +43,36 @@ El disco de EE. UU. ya trae los textos del juego en cinco idiomas: `files/msglan
 `ita` (más `bri`, inglés británico). La versión europea y la de EE. UU. comparten esos textos;
 la de EE. UU. simplemente nunca los usa, porque su función que elige el idioma (0x8010FF04)
 siempre contesta inglés. El port contesta esa función, y la `SCGetLanguage` de la Wii, con el
-idioma que elijas en *F10 > Graphics > Language*. Reinicia el juego después de cambiarlo.
+idioma que elijas en el launcher (*Idioma*) o en *F10 > Graphics > Language*. En F10, reinicia el
+juego después de cambiarlo.
 
 Problema conocido: en cualquier idioma que no sea inglés, la pantalla de título muestra el logo
 japonés. El disco de EE. UU. solo trae el logo japonés y el inglés; el europeo no viene.
 
 ## Jugar en Windows
 
-1. En la pestaña **Actions**, corre **Windows x64 package** o, en una PC con Windows en ARM,
-   **Windows ARM64 package**, y descarga el paquete (no trae datos del juego).
+1. En [Releases](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/releases), descarga
+   `HarvestMoonAnimalParade-windows-x64.zip` o, en una PC con Windows en ARM (Snapdragon X),
+   `HarvestMoonAnimalParade-windows-arm64.zip`. No traen datos del juego.
 2. Descomprímelo en una carpeta corta, como `C:\HMAP`.
-3. Haz doble clic en `play.cmd` y elige la imagen de tu disco (.rvz, .iso o .wbfs). La primera
-   vez extrae el disco, traduce el juego y lo compila; luego el juego arranca.
+3. Haz doble clic en `play.cmd`. Se abre el launcher: elige la imagen de tu disco (.rvz, .iso o
+   .wbfs) y luego **Preparar el juego**. La primera vez extrae el disco, traduce el juego y lo
+   compila, lo que tarda varios minutos; después, **Jugar** lo abre al instante.
 
 Los pasos completos están en [packaging/windows/README.txt](packaging/windows/README.txt). La
 configuración, las partidas y los registros quedan en `UserData\`.
+
+### El launcher
+
+El launcher prepara y abre el juego y tiene sus ajustes principales: el idioma, la imagen, la
+interpolación de cuadros, la resolución, la pantalla completa y la API gráfica. En
+**Controles**, a cada botón del Wii Remote y del Nunchuk, y al avance rápido, se le puede dar
+cualquier tecla o botón del control. Está en inglés o en español, y se usa con el mouse, el
+teclado o las flechas.
+
+| Juego | Opciones | Controles |
+|---|---|---|
+| ![La pestaña Juego del launcher](docs/images/launcher-game.png) | ![La pestaña Opciones del launcher](docs/images/launcher-options.png) | ![La pestaña Controles del launcher](docs/images/launcher-controls.png) |
 
 ## Preguntas frecuentes
 

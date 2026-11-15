@@ -17,7 +17,8 @@ Parade (USA)`, ID `RBIEE9`, revision 1 (`sys/main.dol` SHA-1
 ## What this port adds
 
 Out of the box the game looks and plays as it did on the Wii: 4:3 picture, 30 frames per
-second, English. Everything below except fast loading is a choice in the **F10** menu.
+second, English. Everything below except fast loading is a choice in the launcher or in the
+**F10** menu inside the game.
 
 | | |
 |---|---|
@@ -42,21 +43,35 @@ The US disc already carries the game's text in five languages: `files/msglang/`,
 (plus `bri`, British English). The European and US releases share that text; the US game
 just never uses it, because its function that picks the language (0x8010FF04) always answers
 English. The port answers it, and the Wii's own `SCGetLanguage`, with the language you choose
-in *F10 > Graphics > Language*. Restart the game after changing it.
+in the launcher (*Language*) or in *F10 > Graphics > Language*. In F10, restart the game after
+changing it.
 
 Known issue: in any language other than English the title screen shows the Japanese logo. The
 US disc only has the Japanese and the English logos; the European logo is not on it.
 
 ## Play on Windows
 
-1. In the **Actions** tab, run **Windows x64 package** or, on a Windows on ARM PC,
-   **Windows ARM64 package**, and download the package (it has no game data).
+1. From [Releases](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/releases), download
+   `HarvestMoonAnimalParade-windows-x64.zip` or, on a Windows on ARM PC (Snapdragon X),
+   `HarvestMoonAnimalParade-windows-arm64.zip`. They have no game data.
 2. Unzip it to a short folder, such as `C:\HMAP`.
-3. Double click `play.cmd` and choose your disc image (.rvz, .iso or .wbfs). The first time
-   it extracts the disc, translates the game and compiles it; then the game starts.
+3. Double click `play.cmd`. The launcher opens: choose your disc image (.rvz, .iso or .wbfs),
+   then **Prepare the game**. The first time it extracts the disc, translates the game and
+   compiles it, which takes several minutes; after that, **Play** starts it right away.
 
 The full steps are in [packaging/windows/README.txt](packaging/windows/README.txt). Settings,
 saves and logs are in `UserData\`.
+
+### The launcher
+
+The launcher prepares and starts the game and holds its main settings: the language, the
+picture, frame interpolation, resolution, fullscreen and the graphics API. In **Controls**
+every Wii Remote and Nunchuk button, and fast-forward, can be given any key or controller
+button. It speaks English or Spanish, and is driven with the mouse, the keyboard or the arrows.
+
+| Game | Options | Controls |
+|---|---|---|
+| ![The launcher's Game tab](docs/images/launcher-game.png) | ![The launcher's Options tab](docs/images/launcher-options.png) | ![The launcher's Controls tab](docs/images/launcher-controls.png) |
 
 ## Frequently asked questions
 
