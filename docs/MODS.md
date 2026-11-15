@@ -44,6 +44,7 @@ What the game does, and what the mod changes:
 | Who is a candidate | A man: characters 1-8, the Harvest Goddess (52), the Witch Princess (59). A woman: 9-16, the Harvest King (60), the Wizard (61) | All twenty, for either |
 | Heart events | `event/trig_love.db` marks each event `attr "man"` or `attr "woman"`, and `0x8012E07C` starts it only for that sex | The copy leaves that line out for the candidates' own events. The wedding and children's events keep it |
 | "Is this my candidate?" | `0x801DA2EC`, `0x801DA5BC`, `0x8010F0B0` answer by the player's sex | Wrapped: they answer for the character, as if the player were the sex the original pairs them with |
+| The spouse's clothes | `0x80181FF4` looks for the spouse in the costume table as "wife" or "husband" by the player's sex, and each candidate is only listed in one role | Wrapped: if the role finds nothing, it looks in the other one |
 
 The dialogue needs nothing new. The disc has every candidate's love text in a version for a
 male player and one for a female player (`msglang/<language>/male` and `female`). The game picks
@@ -102,6 +103,7 @@ Lo que hace el juego y lo que cambia el mod:
 | Quién es candidato | Un hombre: los personajes 1-8, la Diosa de la Cosecha (52) y la Princesa Bruja (59). Una mujer: 9-16, el Rey de la Cosecha (60) y el Mago (61) | Los veinte, para cualquiera |
 | Eventos de corazón | `event/trig_love.db` marca cada evento con `attr "man"` o `attr "woman"`, y `0x8012E07C` solo lo inicia para ese sexo | La copia quita esa línea en los eventos propios de los candidatos. La boda y los eventos de los hijos la conservan |
 | «¿Es mi candidato?» | `0x801DA2EC`, `0x801DA5BC` y `0x8010F0B0` responden según el sexo de quien juega | Envueltas: responden por el personaje, como si quien juega fuera del sexo con el que el original lo empareja |
+| La ropa de la pareja | `0x80181FF4` busca a la pareja en la tabla de vestuario como «esposa» o «esposo» según el sexo de quien juega, y cada candidato solo aparece en un papel | Envuelta: si el papel no encuentra nada, busca en el otro |
 
 Los diálogos no necesitan nada nuevo. El disco trae los textos de amor de cada candidato en una
 versión para jugador hombre y otra para jugadora mujer (`msglang/<idioma>/male` y `female`). El

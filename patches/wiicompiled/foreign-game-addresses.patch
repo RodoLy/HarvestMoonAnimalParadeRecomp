@@ -1838,10 +1838,10 @@ index 0000000..c9c7fe6
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..5ad10ea
+index 0000000..c42d8a7
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,226 @@
+@@ -0,0 +1,241 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -1966,6 +1966,21 @@ index 0000000..5ad10ea
 +    ctx->gpr[3] = (character >= 1 && character <= 16) ? 1u : 0u;
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 8010F0B0, AnimalParadeIsVillageCandidate);
++
++// 0x80181FF4 (character in r3, role in r4: 1 wife, 2 husband): the row of the costume table (the
++// "COS" file) for the spouse's clothes. The table only has each candidate in the role the original
++// gives them, so a spouse in the other role finds nothing; the mod then looks in that role.
++extern "C" void AnimalParadeSpouseCostume(CpuContext* ctx) {
++    const uint32_t character = ctx->gpr[3];
++    const uint32_t role = ctx->gpr[4];
++    GuestFunctions::BaseTranslation(0x80181FF4u)(ctx);
++    if (Enabled() && ctx->gpr[3] == 0xFFFFFFFFu && (role == 1 || role == 2)) {
++        ctx->gpr[3] = character;
++        ctx->gpr[4] = 3 - role;
++        GuestFunctions::BaseTranslation(0x80181FF4u)(ctx);
++    }
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80181FF4, AnimalParadeSpouseCostume);
 +
 +namespace {
 +
