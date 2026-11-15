@@ -264,6 +264,11 @@ NATIVES_HEADER = """\
 GAME_NATIVE = re.compile(
     r"FOREIGN_GAME_NATIVE\(\s*RBIEE9\s*,\s*(?P<address>[0-9A-Fa-f]{8})\s*,\s*(?P<rest>[^;]*?)\)\s*;"
 )
+# A wrapper around this game's own function: FOREIGN_GAME_WRAPPER(RBIEE9, 801DA5BC, Name). The
+# translator keeps the function (the wrapper calls it), so natives.cpp lists it as a wrapper.
+GAME_WRAPPER = re.compile(
+    r"FOREIGN_GAME_WRAPPER\(\s*RBIEE9\s*,\s*(?P<address>[0-9A-Fa-f]{8})\s*,\s*(?P<name>\w+)\s*\)\s*;"
+)
 
 
 def game_native_blocks(wiicompiled: Path) -> list[str]:
@@ -276,6 +281,12 @@ def game_native_blocks(wiicompiled: Path) -> list[str]:
             blocks.append(
                 f"// This game's own code at 0x{match['address'].upper()} ({where})\n"
                 f"PPC_NATIVE_OVERRIDE({match['address'].upper()}, {match['rest']});"
+            )
+        for match in GAME_WRAPPER.finditer(text):
+            where = source.relative_to(wiicompiled).as_posix()
+            blocks.append(
+                f"// A wrapper around this game's own code at 0x{match['address'].upper()} ({where})\n"
+                f"REGISTER_NATIVE_WRAPPER_AS(0x{match['address'].upper()}, {match['name']}, \"{match['name']}\");"
             )
     return blocks
 

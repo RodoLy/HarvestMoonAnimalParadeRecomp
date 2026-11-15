@@ -232,6 +232,40 @@ index 0000000..12f6789
 +RemoteHost& RemoteHostForThisGame();
 +
 +} // namespace Bluetooth
+diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
+new file mode 100644
+index 0000000..ad9c062
+--- /dev/null
++++ b/runtime/include/game_mods.h
+@@ -0,0 +1,28 @@
++#pragma once
++
++// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
++// line says true). A mod can change the game's code with FOREIGN_GAME_WRAPPER (hle_stubs.h) and its
++// files with a disc overlay: a folder shaped like the disc's files/ that the DVD layer reads on top
++// of the disc. Mods never ship the game's files; they make their copies from the player's own disc.
++
++#include <filesystem>
++#include <string>
++#include <vector>
++
++namespace GameMods {
++
++// A mod's files for this run: write them under Folder(mod), then register it.
++std::filesystem::path Folder(const std::string& mod);
++void RegisterDiscOverlay(std::filesystem::path root);
++
++// Every enabled mod prepares its files the first time this is called (the DVD layer calls it while
++// it looks for overlays), so a mod's preparation runs once and before the disc is read.
++const std::vector<std::filesystem::path>& DiscOverlayRoots();
++
++// A mod's preparation: registered at startup by each mod's source file.
++using PrepareFn = void (*)();
++struct Registration {
++    Registration(PrepareFn prepare);
++};
++
++} // namespace GameMods
 diff --git a/runtime/include/guest_abi/cpu_context.h b/runtime/include/guest_abi/cpu_context.h
 index 70e2f2b..e00b23c 100644
 --- a/runtime/include/guest_abi/cpu_context.h
@@ -552,7 +586,7 @@ index 0000000..15ca9df
 +
 +} // namespace HangWatch
 diff --git a/runtime/include/hle_stubs.h b/runtime/include/hle_stubs.h
-index e3ba175..847cf53 100644
+index e3ba175..92ea916 100644
 --- a/runtime/include/hle_stubs.h
 +++ b/runtime/include/hle_stubs.h
 @@ -17,6 +17,16 @@ void VI_HLE_WaitForNextRetracePoll();
@@ -572,7 +606,7 @@ index e3ba175..847cf53 100644
  void VI_HLE_SetXfbReady(uint32_t xfbAddr); // Called by GXCopyDisp to signal EFB→XFB copy
  void Audio_HLE_Tick(CpuContext* ctx, uint32_t deltaMicros);
  void Audio_HLE_Poll(CpuContext* ctx);
-@@ -47,3 +57,13 @@ extern "C" void OS_HLE_EndDeferredGuestCallbacks();
+@@ -47,3 +57,22 @@ extern "C" void OS_HLE_EndDeferredGuestCallbacks();
  #define PPC_NATIVE_OVERRIDE_VOID(addr_hex, name, arg_list, call_list) \
      [[maybe_unused]] static void native_signature_##addr_hex arg_list { name call_list; } \
      REGISTER_NATIVE_FUNCTION(0x##addr_hex, name)
@@ -586,8 +620,17 @@ index e3ba175..847cf53 100644
 +    static AbiTrampoline<decltype(name)> MKW_DETAIL_MAKE_UNIQUE(_abi_foreign_native_, __COUNTER__)( \
 +        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
 +        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
++
++// A wrapper around one foreign game's own function: name is void(CpuContext*), and can still run the
++// game's translated function with GuestFunctions::BaseTranslation(address)(ctx) - the translator
++// keeps it (the game's project lists it in natives.cpp as REGISTER_NATIVE_WRAPPER_AS). Game mods
++// use it to change a function only while they are on (hle/game_mods/).
++#define FOREIGN_GAME_WRAPPER(game_id, addr_hex, name) \
++    static AbiTrampoline<decltype(name)> MKW_DETAIL_MAKE_UNIQUE(_abi_foreign_wrapper_, __COUNTER__)( \
++        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
++        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..214b1c0 100644
+index ea5a12b..6508620 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
 @@ -51,6 +51,11 @@ struct RuntimeUserConfig {
@@ -602,7 +645,16 @@ index ea5a12b..214b1c0 100644
      std::optional<uint32_t> disabledPostProcessingPaths;
      std::optional<float> audioVolume;
      std::optional<float> audioMusicVolume;
-@@ -146,6 +151,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+@@ -86,6 +91,8 @@ struct RuntimeUserConfig {
+     // it here instead of copying the pack, so an asset-only update is visible on the next launch.
+     std::optional<std::string> retroRewindRoot;
+     std::vector<std::string> overlayRoots;
++    // [mods]: one line per game mod, name = true to turn it on. Every mod starts off.
++    std::map<std::string, bool, std::less<>> mods;
+     // Controller mappings use Wii/GameCube button names as keys and up to two
+     // comma-separated SDL-style physical button names ("south", or
+     // "dpad_up,left_shoulder") as values; pressing either bound button counts.
+@@ -146,6 +153,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
  
  // Must stay in step with the backend table in main.cpp, which is what actually
  // maps these to AuroraBackend.
@@ -625,7 +677,7 @@ index ea5a12b..214b1c0 100644
  inline bool IsSupportedGraphicsApi(std::string_view value) {
  #if defined(__APPLE__)
      static constexpr std::array<std::string_view, 2> values{"auto", "metal"};
-@@ -168,7 +189,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
+@@ -168,7 +191,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
  // 240 was offered by an early build and is no longer supported; a saved 240 is
  // migrated to 180 at the parse site.
  inline bool IsSupportedFrameInterpolationFps(uint32_t value) {
@@ -634,7 +686,7 @@ index ea5a12b..214b1c0 100644
  }
  
  inline std::optional<std::filesystem::path> ExecutableDirectory() {
-@@ -298,6 +319,10 @@ inline void EnsureConfigFile() {
+@@ -298,6 +321,10 @@ inline void EnsureConfigFile() {
                "# replacement would need. Both are read once, at startup.\n"
                "texture_replacements = false\n"
                "texture_dumps = false\n\n"
@@ -645,7 +697,7 @@ index ea5a12b..214b1c0 100644
                "[audio]\n"
                "volume = 1.0\n"
                "music_volume = 1.0\n"
-@@ -464,6 +489,24 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
+@@ -464,6 +491,34 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
      config.gxWorker = FindConfigValue<bool>(document, "video", "gx_worker");
      config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
      config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
@@ -665,12 +717,22 @@ index ea5a12b..214b1c0 100644
 +    }
 +    // The key is an SDL scancode, the same numbers as [audio] mute_key; 0 means no key.
 +    config.fastForwardScancode = FindConfigInt(document, "speed", "fast_forward_key");
++    try {
++        if (document.contains("mods") && document.at("mods").is_table()) {
++            for (const auto& [name, value] : document.at("mods").as_table()) {
++                if (value.is_boolean()) {
++                    config.mods[name] = value.as_boolean();
++                }
++            }
++        }
++    } catch (const std::exception&) {
++    }
 +    // The controller button uses the names of [controller], e.g. "left_shoulder" or "right_stick".
 +    config.fastForwardButton = FindConfigValue<std::string>(document, "speed", "fast_forward_button");
      config.textureReplacements = FindConfigValue<bool>(document, "video", "texture_replacements");
      config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
      if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-@@ -665,6 +708,14 @@ inline bool SetDisplayMode(std::string value) {
+@@ -665,6 +720,14 @@ inline bool SetDisplayMode(std::string value) {
      return WriteSetting("video", "display_mode", FormatString(value));
  }
  
@@ -685,7 +747,7 @@ index ea5a12b..214b1c0 100644
  inline bool SetSkipUnreadyPipelines(bool value) {
      Mutable().skipUnreadyPipelines = value;
      return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
-@@ -680,6 +731,34 @@ inline bool SetDisableCopyFilter(bool value) {
+@@ -680,6 +743,34 @@ inline bool SetDisableCopyFilter(bool value) {
      return WriteSetting("video", "disable_copy_filter", value ? "true" : "false");
  }
  
@@ -720,7 +782,7 @@ index ea5a12b..214b1c0 100644
  inline bool SetShowFps(bool value) {
      Mutable().showFps = value;
      return WriteSetting("video", "show_fps", value ? "true" : "false");
-@@ -979,6 +1058,37 @@ inline bool DisableCopyFilter(bool fallback = true) {
+@@ -979,6 +1070,49 @@ inline bool DisableCopyFilter(bool fallback = true) {
      return Get().disableCopyFilter.value_or(fallback);
  }
  
@@ -745,6 +807,18 @@ index ea5a12b..214b1c0 100644
 +
 +inline bool FastForwardKey(bool fallback = false) {
 +    return Get().fastForwardKey.value_or(fallback);
++}
++
++// A game mod's switch in [mods] (see hle/game_mods.h). A mod is off unless its line says true.
++inline bool ModEnabled(std::string_view name) {
++    const auto& mods = Get().mods;
++    const auto found = mods.find(name);
++    return found != mods.end() && found->second;
++}
++
++inline bool SetModEnabled(std::string_view name, bool value) {
++    Mutable().mods[std::string(name)] = value;
++    return WriteSetting("mods", name, value ? "true" : "false");
 +}
 +
 +inline int32_t FastForwardScancode(int32_t fallback) {
@@ -1710,6 +1784,58 @@ index 0000000..be149bd
 +}
 +
 +FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
+diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
+new file mode 100644
+index 0000000..c9c7fe6
+--- /dev/null
++++ b/runtime/src/hle/game_mods/game_mods.cpp
+@@ -0,0 +1,46 @@
++// The list of game mods' disc overlays (see game_mods.h).
++
++#include "game_mods.h"
++
++#include "runtime_config.h"
++
++#include <mutex>
++
++namespace GameMods {
++namespace {
++
++std::vector<PrepareFn>& Preparations() {
++    static std::vector<PrepareFn> preparations;
++    return preparations;
++}
++
++std::vector<std::filesystem::path>& Roots() {
++    static std::vector<std::filesystem::path> roots;
++    return roots;
++}
++
++} // namespace
++
++Registration::Registration(PrepareFn prepare) {
++    Preparations().push_back(prepare);
++}
++
++std::filesystem::path Folder(const std::string& mod) {
++    return RuntimeConfigFile::ApplicationDataDirectory() / "Cache" / "Mods" / mod;
++}
++
++void RegisterDiscOverlay(std::filesystem::path root) {
++    Roots().push_back(std::move(root));
++}
++
++const std::vector<std::filesystem::path>& DiscOverlayRoots() {
++    static std::once_flag once;
++    std::call_once(once, [] {
++        for (const PrepareFn prepare : Preparations()) {
++            prepare();
++        }
++    });
++    return Roots();
++}
++
++} // namespace GameMods
 diff --git a/runtime/src/hle/gx/gx_copy.cpp b/runtime/src/hle/gx/gx_copy.cpp
 index 3dbdc8d..be45c92 100644
 --- a/runtime/src/hle/gx/gx_copy.cpp
@@ -2744,6 +2870,31 @@ index 6111b20..ade64f0 100644
 +        }
          return ISFS_OK;
      }
+ 
+diff --git a/runtime/src/hle/storage/riivolution.cpp b/runtime/src/hle/storage/riivolution.cpp
+index 00659d0..ad2c6cf 100644
+--- a/runtime/src/hle/storage/riivolution.cpp
++++ b/runtime/src/hle/storage/riivolution.cpp
+@@ -12,6 +12,7 @@
+ #include "hle/runtime_parse_helpers.h"
+ #include "memory.h"
+ #include "nand_path.h"
++#include "game_mods.h"
+ #include "recomp_mod_loader.h"
+ #include "runtime_config.h"
+ #include "runtime_log.h"
+@@ -147,6 +148,12 @@ std::vector<RuntimeRiivolution::Overlay> RiivoDiscoverRoots() {
+         RiivoAddRoot(overlays, root, "recomp mod manifest");
+     }
+ 
++    // Game mods turned on in Config.toml [mods] (hle/game_mods/), last, so anything configured by
++    // hand outranks them.
++    for (const auto& root : GameMods::DiscOverlayRoots()) {
++        RiivoAddRoot(overlays, root, "game mod");
++    }
++
+     return overlays;
+ }
  
 diff --git a/runtime/src/hle/vi.cpp b/runtime/src/hle/vi.cpp
 index cd236a9..25dc1eb 100644
