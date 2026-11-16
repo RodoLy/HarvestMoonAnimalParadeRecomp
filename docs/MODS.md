@@ -168,8 +168,10 @@ Tried: on a Windows ARM PC, crossing several areas.
 
 ### Faster actions and faster walking (`faster_actions`, `faster_walking`)
 
-Quality of life. Each is off, or a speed (×1.5, ×2 or ×3): its line in `[mods]` holds the number,
-for instance `faster_walking = 2` (`true` means 1.5). `faster_actions` speeds up picking things up
+Quality of life. Each is turned on or off and has a speed, a percentage from 100 (the original
+game) to 300, chosen with a bar in the launcher. In `[mods]` they are two lines each, for instance
+`faster_walking = true` and `faster_walking_percent = 150` (150 when the percentage is missing).
+`faster_actions` speeds up picking things up
 and putting them down, taking them out of the rucksack and using the tools; `faster_walking`, the
 player's walking and running. The clock, the villagers and the animals keep their speed.
 
@@ -185,12 +187,13 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
   anything not listed plays as in the original game.
 - Walking advances by the time step, so `faster_walking` hands the player a longer one. The actions'
   animations move one step per update whatever the time, so `faster_actions` runs the player's update
-  more than once in the frame instead (twice for ×2, three times for ×3, twice every other frame for
-  ×1.5) and stops as soon as the action is over.
+  more than once in the frame instead (twice at 200%, three times at 300%, and in between twice in
+  some frames and once in others: at 150%, twice every other frame) and stops as soon as the action
+  is over.
 - The numbers were read from the log while playing: with either mod on, every change of action goes
   there as `[player-action] <action> for <ms> ms, then <next>`.
 
-**Being tested.** Tried at ×2 on a Windows ARM PC: walking, and the hoe, the watering can and the
+**Being tested.** Tried at 200% on a Windows ARM PC: walking, and the hoe, the watering can and the
 sickle take half the time.
 
 ---
@@ -363,8 +366,10 @@ Probado: en una PC Windows ARM, cruzando varias zonas.
 
 ### Acciones más rápidas y caminar más rápido (`faster_actions`, `faster_walking`)
 
-Calidad de vida. Cada uno está apagado o a una velocidad (×1.5, ×2 o ×3): su línea en `[mods]`
-guarda el número, por ejemplo `faster_walking = 2` (`true` es 1.5). `faster_actions` acelera
+Calidad de vida. Cada uno se activa o desactiva y tiene una velocidad, un porcentaje de 100 (el
+juego original) a 300, que se elige con una barra en el launcher. En `[mods]` son dos líneas cada
+uno, por ejemplo `faster_walking = true` y `faster_walking_percent = 150` (150 si falta el
+porcentaje). `faster_actions` acelera
 recoger y soltar cosas, sacarlas de la mochila y usar las herramientas; `faster_walking`, caminar y
 correr. El reloj, los aldeanos y los animales van a su velocidad de siempre.
 
@@ -380,10 +385,11 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
   cualquier cosa fuera de las listas va como en el juego original.
 - Caminar avanza con el paso de tiempo, así que `faster_walking` le da uno más largo. Las animaciones
   de las acciones avanzan un paso por actualización sin importar el tiempo, así que `faster_actions`
-  corre la actualización de quien juega más de una vez en el cuadro (dos veces para ×2, tres para
-  ×3, dos veces cada dos cuadros para ×1.5) y para en cuanto la acción termina.
+  corre la actualización de quien juega más de una vez en el cuadro (dos veces a 200%, tres a 300%,
+  y en medio dos veces en unos cuadros y una en otros: a 150%, dos veces cada dos cuadros) y para en
+  cuanto la acción termina.
 - Los números salieron del log jugando: con cualquiera de los dos mods activo, cada cambio de acción
   se anota ahí como `[player-action] <acción> for <ms> ms, then <siguiente>`.
 
-**En pruebas.** Probado a ×2 en una PC Windows ARM: caminar, y la azada, la regadera y la hoz tardan
+**En pruebas.** Probado a 200% en una PC Windows ARM: caminar, y la azada, la regadera y la hoz tardan
 la mitad.
