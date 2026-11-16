@@ -1923,25 +1923,31 @@ index 0000000..be149bd
 +FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
 diff --git a/runtime/src/hle/game_mods/animal_parade_cheats.cpp b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
 new file mode 100644
-index 0000000..9f52366
+index 0000000..0880694
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,129 @@
 +// Harvest Moon: Animal Parade cheats, each off unless Config.toml turns it on in [mods]:
 +//   cheat_infinite_stamina = true   the stamina stays full: work never tires the player
 +//   cheat_infinite_money = true     the money stays at 999,999 G
 +//   cheat_stop_time = true          the clock does not move (sleeping still goes on to the next day)
++//   cheat_infinite_materials = true the lumber and the material stone stay at 9,999
++//   cheat_infinite_feed = true      the fodder and the bird feed stay at 9,999
 +// The launcher lists them in the Mods tab, in a group of their own.
 +//
 +// Where the game keeps what they change:
 +//   *(0x806B3A24)            the game's state (the save data while playing)
 +//     +0x1454                the money, in G
++//     +0x1458, +0x145C       the fodder and the bird feed (items 0x4CE and 0x4CF in the shops)
++//     +0x1460, +0x1464       the lumber and the material stone (what the carpenter takes for a building)
++//                            These four are game variables 0x29 to 0x2C, each from 0 to 9,999 (the
++//                            limits the game keeps at *(0x8050AA10 + 8), 12 bytes a variable).
 +//     +0x1468, +0x146C       the stamina and its maximum (800 for a new farmer; the bar at the bottom)
 +//   0x80107944               the clock's tick: two seconds of game time each call. The field's update
 +//                            (0x801294F0) calls it every frame while the clock runs; a script that moves
 +//                            the time on calls it too (0x8010EEFC, thirty times for a minute).
 +//
-+// The money and the stamina are set once a frame, from the player's update (player_speed.cpp calls
++// The money, the stamina and the four stores are set once a frame, from the player's update (player_speed.cpp calls
 +// AnimalParadeCheatsEveryFrame). The clock is stopped by leaving out the field's tick only, so the
 +// scripts that move the time on still do.
 +
@@ -1966,6 +1972,11 @@ index 0000000..9f52366
 +constexpr uint32_t kMoneyKept = 999999u;
 +constexpr uint32_t kStamina = 0x1468u;
 +constexpr uint32_t kStaminaMaximum = 0x146Cu;
++constexpr uint32_t kFodder = 0x1458u;
++constexpr uint32_t kBirdFeed = 0x145Cu;
++constexpr uint32_t kLumber = 0x1460u;
++constexpr uint32_t kMaterialStone = 0x1464u;
++constexpr uint32_t kStoreKept = 9999u;  // the most the game lets each of the four hold
 +constexpr uint32_t kFieldTickReturn = 0x80129584u;  // right after the field's call to the tick
 +
 +bool On(const char* cheat) {
@@ -1982,6 +1993,23 @@ index 0000000..9f52366
 +    return on;
 +}
 +
++bool InfiniteMaterials() {
++    static const bool on = On("cheat_infinite_materials");
++    return on;
++}
++
++bool InfiniteFeed() {
++    static const bool on = On("cheat_infinite_feed");
++    return on;
++}
++
++// Puts one of the four stores at its most when it has less.
++void Fill(uint32_t state, uint32_t store) {
++    if (Memory::Read32(state + store) < kStoreKept) {
++        Memory::Write32(state + store, kStoreKept);
++    }
++}
++
 +bool StopTime() {
 +    static const bool on = On("cheat_stop_time");
 +    return on;
@@ -1992,7 +2020,7 @@ index 0000000..9f52366
 +
 +void AnimalParadeCheatsEveryFrame() {
 +    using namespace AnimalParadeCheats;
-+    if (!InfiniteStamina() && !InfiniteMoney()) {
++    if (!InfiniteStamina() && !InfiniteMoney() && !InfiniteMaterials() && !InfiniteFeed()) {
 +        return;
 +    }
 +    const uint32_t state = Memory::Read32(kGameState);
@@ -2007,6 +2035,14 @@ index 0000000..9f52366
 +        if (maximum != 0 && Memory::Read32(state + kStamina) != maximum) {
 +            Memory::Write32(state + kStamina, maximum);
 +        }
++    }
++    if (InfiniteMaterials()) {
++        Fill(state, kLumber);
++        Fill(state, kMaterialStone);
++    }
++    if (InfiniteFeed()) {
++        Fill(state, kFodder);
++        Fill(state, kBirdFeed);
 +    }
 +}
 +
