@@ -217,7 +217,7 @@
     {
       "id": "free_camera",
       "label": "Free camera",
-      "help": "R3 or F6 lets the camera go: the right stick looks, the left one flies, R2 and L2 go up and down.",
+      "help": "Outdoors, the right stick turns the camera around your character; R3 puts it back. You walk with the left stick as always.",
       "group": "Mods",
       "choices": [
         {

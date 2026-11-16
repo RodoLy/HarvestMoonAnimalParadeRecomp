@@ -4,8 +4,24 @@
 
 ## English
 
-A study of what a free camera mod would take. Nothing here is built yet; this branch keeps the
-notes until the work starts.
+The `free_camera` mod (off by default, in the launcher's Mods tab under Quality of life) is the
+orbit camera below: outdoors, the right stick turns the camera around the player and tilts it, R3
+puts it back, and the left stick walks as always (J L, I K and U on the keyboard). Code:
+`runtime/src/hle/game_mods/free_camera.cpp` in the WiiCompiled patch.
+
+What was learned building it:
+
+- The engine camera is an `AA_CCamera` (vtable 0x8040DDD8): the eye at +0x08..+0x10, the pitch at
+  +0x14 (positive looks down) and the yaw at +0x18 (0 looks along -z, positive turns towards +x).
+  The mod writes them in its wrapper of 0x80052778, the call every layer of the frame makes.
+- Walking follows the picture by itself: the game turns the stick by that camera's yaw, so the
+  turned camera needs nothing more.
+- The area is game variables 0x36 (0 outdoors, 1 buildings, 2 mines) and 0x37. The camera only
+  turns outdoors, and only while the game's camera looks at the player (scenes are left alone).
+- The water's reflection has a camera of its own and keeps the game's angle.
+
+A first try let the camera fly on its own while the player stood still; the orbit camera replaced
+it. The study from before follows.
 
 ### How the game's camera works
 
@@ -66,8 +82,26 @@ free camera, on top of it.
 
 ## Español
 
-Un estudio de lo que haría falta para un mod de cámara libre. Aún no hay nada hecho; esta rama
-guarda las notas hasta que empiece el trabajo.
+El mod `free_camera` (apagado de inicio, en la pestaña Mods del launcher, en Calidad de vida) es la
+cámara orbital de abajo: al aire libre, el stick derecho gira la cámara alrededor del personaje y la
+inclina, R3 la regresa, y el stick izquierdo camina como siempre (J L, I K y U con el teclado).
+Código: `runtime/src/hle/game_mods/free_camera.cpp` en el parche de WiiCompiled.
+
+Lo que se aprendió al hacerlo:
+
+- La cámara del motor es un `AA_CCamera` (vtable 0x8040DDD8): el ojo en +0x08..+0x10, la
+  inclinación en +0x14 (positiva mira hacia abajo) y el giro en +0x18 (0 mira hacia -z, positivo
+  gira hacia +x). El mod los escribe en su envoltura de 0x80052778, la llamada que hace cada capa
+  del cuadro.
+- Caminar sigue a la imagen solo: el juego gira el stick según el giro de esa cámara, así que la
+  cámara girada no necesita nada más.
+- La zona son las variables del juego 0x36 (0 al aire libre, 1 edificios, 2 minas) y 0x37. La cámara
+  solo gira al aire libre, y solo mientras la cámara del juego mira al personaje (las escenas no se
+  tocan).
+- El reflejo del agua tiene su propia cámara y se queda con el ángulo del juego.
+
+Un primer intento soltaba la cámara para volar sola mientras el personaje se quedaba quieto; la
+cámara orbital lo reemplazó. Sigue el estudio de antes.
 
 ### Cómo funciona la cámara del juego
 
