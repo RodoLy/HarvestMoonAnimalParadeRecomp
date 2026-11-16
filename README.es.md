@@ -123,6 +123,10 @@ infinita, alimento infinito (heno y pienso) y detener el tiempo (dormir sí llev
 siguiente). Cómo funcionan: [docs/MODS.md](docs/MODS.md). Los códigos que cambian
 las instrucciones del juego (Gecko, Action Replay) no pueden funcionar en un juego recompilado.
 
+**¿Funciona con RecompLauncher?** El paquete trae un `recomplauncher.json`: RecompLauncher abre el
+launcher y muestra los mods y los trucos en la página del juego. Ver
+[docs/RECOMPLAUNCHER.md](docs/RECOMPLAUNCHER.md).
+
 ## Para desarrolladores
 
 Necesitas Python 3.11+.

@@ -122,6 +122,10 @@ stone, infinite feed (fodder and bird feed) and stop time (sleeping still goes o
 next day). How they work: [docs/MODS.md](docs/MODS.md). Codes that change the game's
 instructions (Gecko, Action Replay) cannot work in a recompiled game.
 
+**Does it work with RecompLauncher?** The package carries a `recomplauncher.json`: RecompLauncher
+opens the launcher, and shows the mods and cheats on the game's page. See
+[docs/RECOMPLAUNCHER.md](docs/RECOMPLAUNCHER.md).
+
 ## For developers
 
 You need Python 3.11+.

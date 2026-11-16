@@ -188,7 +188,7 @@ jobs:
           Copy-Item (Join-Path $wc 'Launcher\NativeBuildFlags.ps1') $workspace
           Copy-Item (Join-Path $artifacts 'dependencies') (Join-Path $workspace 'Dependencies') -Recurse
 
-          foreach ($file in 'play.ps1', 'play.cmd', 'README.txt') {
+          foreach ($file in 'play.ps1', 'play.cmd', 'README.txt', 'recomplauncher.json') {
             Copy-Item "packaging\windows\$file" $env:PACKAGE
           }
           # The launcher (launcher\README.md): Launcher.exe, built with the package's own compiler,

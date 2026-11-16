@@ -1,0 +1,379 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "repo": "RodoLy/HarvestMoonAnimalParadeRecomp",
+  "name": "Harvest Moon: Animal Parade",
+  "start": {
+    "program": [
+      "Launcher.exe"
+    ]
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "toml",
+      "file": [
+        {
+          "path": "{install}/UserData/Config.toml"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "id": "romance_any_gender",
+      "label": "Romance for everyone",
+      "help": "Any bachelor or bachelorette can fall in love with you and marry you, boy or girl.",
+      "group": "Mods",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/romance_any_gender": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/romance_any_gender": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/romance_any_gender": "false"
+      }
+    },
+    {
+      "id": "no_place_sign",
+      "label": "No area sign when loading",
+      "help": "The new area shows as soon as it has loaded, without the sign with its name.",
+      "group": "Mods",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/no_place_sign": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/no_place_sign": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/no_place_sign": "false"
+      }
+    },
+    {
+      "id": "faster_actions",
+      "label": "Faster actions",
+      "help": "Tools, picking things up and putting them down, at the speed you choose. Only your character.",
+      "group": "Mods",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/faster_actions": "false"
+          }
+        },
+        {
+          "label": "×1.25",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "125"
+          }
+        },
+        {
+          "label": "×1.5",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "150"
+          }
+        },
+        {
+          "label": "×1.75",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "175"
+          }
+        },
+        {
+          "label": "×2",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "200"
+          }
+        },
+        {
+          "label": "×2.25",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "225"
+          }
+        },
+        {
+          "label": "×2.5",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "250"
+          }
+        },
+        {
+          "label": "×2.75",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "275"
+          }
+        },
+        {
+          "label": "×3",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "300"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/faster_actions": "false",
+        "mods/faster_actions_percent": "150"
+      }
+    },
+    {
+      "id": "faster_walking",
+      "label": "Faster walking",
+      "help": "Your character walks and runs at the speed you choose. Only your character.",
+      "group": "Mods",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/faster_walking": "false"
+          }
+        },
+        {
+          "label": "×1.25",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "125"
+          }
+        },
+        {
+          "label": "×1.5",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "150"
+          }
+        },
+        {
+          "label": "×1.75",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "175"
+          }
+        },
+        {
+          "label": "×2",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "200"
+          }
+        },
+        {
+          "label": "×2.25",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "225"
+          }
+        },
+        {
+          "label": "×2.5",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "250"
+          }
+        },
+        {
+          "label": "×2.75",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "275"
+          }
+        },
+        {
+          "label": "×3",
+          "set": {
+            "mods/faster_walking": "true",
+            "mods/faster_walking_percent": "300"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/faster_walking": "false",
+        "mods/faster_walking_percent": "150"
+      }
+    },
+    {
+      "id": "cheat_infinite_stamina",
+      "label": "Infinite stamina",
+      "help": "The stamina bar stays full. Also in the game's F10 menu, under Cheats.",
+      "group": "Cheats",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/cheat_infinite_stamina": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/cheat_infinite_stamina": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/cheat_infinite_stamina": "false"
+      }
+    },
+    {
+      "id": "cheat_infinite_money",
+      "label": "Infinite money",
+      "help": "Your money stays at 999,999 G.",
+      "group": "Cheats",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/cheat_infinite_money": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/cheat_infinite_money": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/cheat_infinite_money": "false"
+      }
+    },
+    {
+      "id": "cheat_infinite_lumber",
+      "label": "Infinite lumber",
+      "help": "Your lumber stays at 9,999.",
+      "group": "Cheats",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/cheat_infinite_lumber": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/cheat_infinite_lumber": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/cheat_infinite_lumber": "false"
+      }
+    },
+    {
+      "id": "cheat_infinite_stone",
+      "label": "Infinite material stone",
+      "help": "Your material stone stays at 9,999.",
+      "group": "Cheats",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/cheat_infinite_stone": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/cheat_infinite_stone": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/cheat_infinite_stone": "false"
+      }
+    },
+    {
+      "id": "cheat_infinite_feed",
+      "label": "Infinite feed",
+      "help": "Your fodder and bird feed stay at 9,999.",
+      "group": "Cheats",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/cheat_infinite_feed": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/cheat_infinite_feed": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/cheat_infinite_feed": "false"
+      }
+    },
+    {
+      "id": "cheat_stop_time",
+      "label": "Stop time",
+      "help": "The clock stands still while you play. Sleeping still takes you to the next day.",
+      "group": "Cheats",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/cheat_stop_time": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/cheat_stop_time": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/cheat_stop_time": "false"
+      }
+    }
+  ],
+  "saves": [
+    "{install}/UserData/NAND/title/00010000/52424945/data"
+  ],
+  "folders": {
+    "logs": [
+      {
+        "path": "{install}/UserData/Logs"
+      }
+    ],
+    "saves": [
+      {
+        "path": "{install}/UserData/NAND/title/00010000/52424945/data"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "id": "open_logs",
+      "label": "Open the logs",
+      "help": "The game's logs, to send with a report.",
+      "open": "logs"
+    }
+  ]
+}
