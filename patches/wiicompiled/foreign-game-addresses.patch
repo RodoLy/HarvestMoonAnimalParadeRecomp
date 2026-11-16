@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..0824700
+index 0000000..42897eb
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,53 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -274,6 +274,15 @@ index 0000000..0824700
 +void RegisterCheatsPanel(SettingsPanel panel);
 +bool HasCheats();
 +void DrawCheats();
++
++// A mod that takes the controller for itself (the free camera): while it does, the game gets no
++// input, as while F10 is open.
++void SetGameInputTaken(bool taken);
++bool GameInputTaken();
++
++// Something a mod draws over the game every frame (ImGui, on the overlay's thread).
++void RegisterOverlay(void (*draw)());
++void DrawOverlays();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
 +using PrepareFn = void (*)();
@@ -2117,12 +2126,288 @@ index 0000000..9ed4312
 +// Keeps the money and the stamina as the cheats that are on want them. Once a frame, from the
 +// player's update (player_speed.cpp).
 +void AnimalParadeCheatsEveryFrame();
+diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
+new file mode 100644
+index 0000000..56006f9
+--- /dev/null
++++ b/runtime/src/hle/game_mods/free_camera.cpp
+@@ -0,0 +1,270 @@
++// Harvest Moon: Animal Parade mod "free_camera": a camera that flies on its own, moved with a
++// controller. Off unless Config.toml says
++//   [mods]
++//   free_camera = true
++//
++// With the mod on, R3 (pressing the right stick) or F6 on the keyboard lets the camera go, and the
++// same again brings back the game's camera:
++//   right stick        look around
++//   left stick         fly forward, back and to the sides (forward is where the camera looks)
++//   R2 / L2            up / down
++//   R1 / L1 (held)     faster / slower
++// and on the keyboard: W A S D fly, the arrows look, E and Q up and down, Shift faster.
++// While it flies, the game gets no input from the controller or the keyboard, as when F10 is open,
++// so the player stands still; everything else in the world goes on.
++//
++// How the game's camera works. The engine's camera is an AA_CCamera (vtable 0x8040DDD8, 0x820
++// bytes):
++//   +0x08, +0x0C, +0x10   the eye, x y z
++//   +0x14                 the pitch, in radians: positive looks down
++//   +0x18                 the yaw: 0 looks along -z, a positive yaw turns to the left
++//   +0x1C                 the roll
++//   +0x1A8 ... +0x1B4     the field of view (vertical), the aspect, the near and far planes
++// The game's own camera code (BB_CCamera) writes the eye and the angles every frame, and the
++// engine turns them into the picture's view at 0x8005277C, reached through 0x80052778 (the four
++// layers of the frame call it, 0x8024C4E0..0x8024C510). This mod writes its own eye and angles into
++// the main camera just before that, so the view, the culling and everything drawn after it follow
++// the free camera, and the game's camera code still runs underneath: when the mod lets go, the
++// game's next frame puts its own camera back.
++//
++// The main camera is the 3D one that looks down at the world (a pitch above 0). The water's
++// reflection is drawn with a camera of its own that looks up (a negative pitch); it keeps the game's
++// view, so reflections do not follow the free camera.
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "input_bindings.h"
++#include "memory.h"
++#include "runtime_config.h"
++#include "runtime_log.h"
++
++#include <imgui.h>
++#include <SDL3/SDL_gamepad.h>
++#include <SDL3/SDL_keyboard.h>
++
++#include <algorithm>
++#include <atomic>
++#include <chrono>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <iostream>
++
++// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
++// file's translation unit.
++namespace FreeCamera {
++namespace {
++
++constexpr uint32_t kCameraVtable = 0x8040DDD8u;
++constexpr uint32_t kEye = 0x08;
++constexpr uint32_t kPitch = 0x14;
++constexpr uint32_t kYaw = 0x18;
++constexpr uint32_t kRoll = 0x1C;
++
++constexpr float kLookSpeed = 2.2f;      // radians a second, stick all the way
++constexpr float kFlySpeed = 6.0f;       // the game's units (about a metre) a second
++constexpr float kPitchLimit = 1.50f;    // just short of straight up or down
++constexpr float kDeadZone = 0.15f;
++
++bool Enabled() {
++    static const bool enabled = RuntimeConfigFile::ModEnabled("free_camera");
++    return enabled;
++}
++
++float ReadFloat(uint32_t address) {
++    const uint32_t bits = Memory::Read32(address);
++    float value;
++    std::memcpy(&value, &bits, sizeof(value));
++    return value;
++}
++
++void WriteFloat(uint32_t address, float value) {
++    uint32_t bits;
++    std::memcpy(&bits, &value, sizeof(bits));
++    Memory::Write32(address, bits);
++}
++
++// The controllers and the keyboard, read straight from SDL: the game itself never sees the right
++// stick (the port gives it the Nunchuk's one stick).
++struct Input {
++    float lookX = 0, lookY = 0;     // right stick
++    float moveX = 0, moveY = 0;     // left stick
++    float up = 0, down = 0;         // R2, L2
++    bool faster = false, slower = false;
++    bool toggle = false;            // R3 or F6, held now
++};
++
++float Axis(SDL_Gamepad* pad, SDL_GamepadAxis axis) {
++    const float value = static_cast<float>(SDL_GetGamepadAxis(pad, axis)) / 32767.0f;
++    return std::fabs(value) < kDeadZone ? 0.0f : std::clamp(value, -1.0f, 1.0f);
++}
++
++Input ReadInput() {
++    Input in;
++    int count = 0;
++    SDL_JoystickID* ids = SDL_GetGamepads(&count);
++    for (int i = 0; ids != nullptr && i < count; ++i) {
++        SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
++        if (pad == nullptr) {
++            continue;
++        }
++        // The stick pushed the furthest wins, so two controllers do not fight.
++        auto keep = [](float& into, float value) { if (std::fabs(value) > std::fabs(into)) into = value; };
++        keep(in.lookX, Axis(pad, SDL_GAMEPAD_AXIS_RIGHTX));
++        keep(in.lookY, Axis(pad, SDL_GAMEPAD_AXIS_RIGHTY));
++        keep(in.moveX, Axis(pad, SDL_GAMEPAD_AXIS_LEFTX));
++        keep(in.moveY, Axis(pad, SDL_GAMEPAD_AXIS_LEFTY));
++        keep(in.up, Axis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
++        keep(in.down, Axis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
++        in.faster |= SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
++        in.slower |= SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
++        in.toggle |= SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
++    }
++    SDL_free(ids);
++    // The keyboard, only while the game window has it. The game gets no keys while the camera
++    // flies, so its own keys (W A S D, the arrows) can steer the camera.
++    if (SDL_GetKeyboardFocus() != nullptr) {
++        int keys = 0;
++        const bool* state = SDL_GetKeyboardState(&keys);
++        auto key = [&](SDL_Scancode code) { return state != nullptr && code < keys && state[code]; };
++        auto keep = [](float& into, float value) { if (std::fabs(value) > std::fabs(into)) into = value; };
++        in.toggle |= key(SDL_SCANCODE_F6);
++        keep(in.moveX, (key(SDL_SCANCODE_D) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_A) ? 1.0f : 0.0f));
++        keep(in.moveY, (key(SDL_SCANCODE_S) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_W) ? 1.0f : 0.0f));
++        keep(in.lookX, (key(SDL_SCANCODE_RIGHT) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_LEFT) ? 1.0f : 0.0f));
++        keep(in.lookY, (key(SDL_SCANCODE_DOWN) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_UP) ? 1.0f : 0.0f));
++        keep(in.up, key(SDL_SCANCODE_E) ? 1.0f : 0.0f);
++        keep(in.down, key(SDL_SCANCODE_Q) ? 1.0f : 0.0f);
++        in.faster |= key(SDL_SCANCODE_LSHIFT) || key(SDL_SCANCODE_RSHIFT);
++    }
++    return in;
++}
++
++struct Flight {
++    bool on = false;
++    uint32_t camera = 0;        // the main camera's address while flying
++    float eye[3] = {};
++    float pitch = 0, yaw = 0;
++    bool toggleHeld = false;    // so a held button toggles once
++    std::chrono::steady_clock::time_point last;
++};
++Flight g_flight;
++std::atomic<bool> g_flying{false};
++
++bool IsMainCamera(uint32_t camera) {
++    if (Memory::Read32(camera) != kCameraVtable) {
++        return false;
++    }
++    const float pitch = ReadFloat(camera + kPitch);
++    const float x = ReadFloat(camera + kEye), y = ReadFloat(camera + kEye + 4), z = ReadFloat(camera + kEye + 8);
++    return pitch > 0.01f && pitch < kPitchLimit && (x != 0.0f || y != 0.0f || z != 0.0f);
++}
++
++void Start(uint32_t camera) {
++    Flight& f = g_flight;
++    f.on = true;
++    f.camera = camera;
++    for (int i = 0; i < 3; ++i) {
++        f.eye[i] = ReadFloat(camera + kEye + 4 * i);
++    }
++    f.pitch = ReadFloat(camera + kPitch);
++    f.yaw = ReadFloat(camera + kYaw);
++    f.last = std::chrono::steady_clock::now();
++    g_flying.store(true);
++    GameMods::SetGameInputTaken(true);
++    RT_LOG(RT_TAG_VI) << "[free-camera] on, from the camera at 0x" << std::hex << camera << std::dec << std::endl;
++}
++
++void Stop() {
++    g_flight.on = false;
++    g_flying.store(false);
++    GameMods::SetGameInputTaken(false);
++    RT_LOG(RT_TAG_VI) << "[free-camera] off" << std::endl;
++}
++
++// One frame of flight: the sticks move the camera by the time since the last frame.
++void Fly(const Input& in) {
++    Flight& f = g_flight;
++    const auto now = std::chrono::steady_clock::now();
++    const float dt = std::min(0.1f, std::chrono::duration<float>(now - f.last).count());
++    f.last = now;
++
++    f.yaw -= in.lookX * kLookSpeed * dt;
++    f.pitch = std::clamp(f.pitch + in.lookY * kLookSpeed * dt, -kPitchLimit, kPitchLimit);
++
++    const float speed = kFlySpeed * (in.faster ? 3.0f : 1.0f) * (in.slower ? 0.3f : 1.0f) * dt;
++    const float cp = std::cos(f.pitch), sp = std::sin(f.pitch), cy = std::cos(f.yaw), sy = std::sin(f.yaw);
++    const float forward[3] = {-sy * cp, -sp, -cy * cp};
++    const float right[3] = {cy, 0.0f, -sy};
++    const float push = -in.moveY;  // the stick up is forward
++    for (int i = 0; i < 3; ++i) {
++        f.eye[i] += (forward[i] * push + right[i] * in.moveX) * speed;
++    }
++    f.eye[1] += (in.up - in.down) * speed;
++}
++
++void Apply(uint32_t camera) {
++    const Flight& f = g_flight;
++    for (int i = 0; i < 3; ++i) {
++        WriteFloat(camera + kEye + 4 * i, f.eye[i]);
++    }
++    WriteFloat(camera + kPitch, f.pitch);
++    WriteFloat(camera + kYaw, f.yaw);
++    WriteFloat(camera + kRoll, 0.0f);
++}
++
++// What shows on screen while flying.
++void DrawHint() {
++    if (!g_flying.load()) {
++        return;
++    }
++    const ImGuiViewport* viewport = ImGui::GetMainViewport();
++    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + 12.0f, viewport->Pos.y + viewport->Size.y - 12.0f),
++                            ImGuiCond_Always, ImVec2(0.0f, 1.0f));
++    ImGui::SetNextWindowBgAlpha(0.45f);
++    if (ImGui::Begin("Free camera hint", nullptr,
++                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
++                     ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
++                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
++        ImGui::TextUnformatted("Free camera - R3 or F6 to go back");
++        ImGui::TextDisabled("Right stick: look   Left stick: fly   R2/L2: up/down   R1/L1: faster/slower");
++        ImGui::TextDisabled("Keyboard: arrows look   W A S D fly   E/Q up/down   Shift faster");
++    }
++    ImGui::End();
++}
++
++const bool kHint = (GameMods::RegisterOverlay(DrawHint), true);
++
++} // namespace
++} // namespace FreeCamera
++
++// 0x80052778 (the camera in r3): the engine makes the picture's view from a camera. Every layer of
++// the frame calls it with its own camera.
++extern "C" void AnimalParadeCameraView(CpuContext* ctx) {
++    using namespace FreeCamera;
++    const uint32_t camera = ctx->gpr[3];
++    // While flying, the camera it started from; otherwise the main camera, whichever it is now.
++    const bool main = g_flight.on ? camera == g_flight.camera : IsMainCamera(camera);
++    if (Enabled() && main) {
++        // Once a frame, with the main camera: the button, then the flight.
++        const Input in = ReadInput();
++        if (in.toggle && !g_flight.toggleHeld) {
++            if (g_flight.on) {
++                Stop();
++            } else if (!InputBindings::InputBlocked()) {  // not while F10 or a prompt is open
++                Start(camera);
++            }
++        }
++        g_flight.toggleHeld = in.toggle;
++        if (g_flight.on) {
++            Fly(in);
++        }
++    }
++    if (g_flight.on && camera == g_flight.camera) {
++        Apply(camera);
++    }
++    GuestFunctions::BaseTranslation(0x80052778u)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80052778, AnimalParadeCameraView);
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..f3e9ee3
+index 0000000..f23acd1
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,127 @@
 +// The list of game mods' disc overlays (see game_mods.h).
 +
 +#include "game_mods.h"
@@ -2131,6 +2416,7 @@ index 0000000..f3e9ee3
 +
 +#include <imgui.h>
 +
++#include <atomic>
 +#include <mutex>
 +
 +namespace GameMods {
@@ -2198,6 +2484,31 @@ index 0000000..f3e9ee3
 +        if (panel.available()) {
 +            panel.draw();
 +        }
++    }
++}
++
++std::atomic<bool> g_gameInputTaken{false};
++
++void SetGameInputTaken(bool taken) {
++    g_gameInputTaken.store(taken, std::memory_order_relaxed);
++}
++
++bool GameInputTaken() {
++    return g_gameInputTaken.load(std::memory_order_relaxed);
++}
++
++std::vector<void (*)()>& Overlays() {
++    static std::vector<void (*)()> overlays;
++    return overlays;
++}
++
++void RegisterOverlay(void (*draw)()) {
++    Overlays().push_back(draw);
++}
++
++void DrawOverlays() {
++    for (void (*draw)() : Overlays()) {
++        draw();
 +    }
 +}
 +
@@ -6697,7 +7008,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..222404b 100644
+index 6c2083a..ccaceed 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -7206,7 +7517,17 @@ index 6c2083a..222404b 100644
      const ImGuiStyle& style = ImGui::GetStyle();
      const float hideWidth = ImGui::CalcTextSize("Hide (F10)").x + style.FramePadding.x * 2.0f;
      const float exitWidth = ImGui::CalcTextSize("X").x + style.FramePadding.x * 2.0f;
-@@ -1660,9 +1887,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1608,7 +1835,8 @@ void PersistDisplayModeIfChanged() {
+ 
+ void ApplyInputBlockState() {
+     const bool blocked = controller_mapping_wizard::IsActive() || g_rebind.active ||
+-                         g_exitPromptOpen || g_restartPromptOpen || g_topBarVisible || StartupScreenVisible();
++                         g_exitPromptOpen || g_restartPromptOpen || g_topBarVisible || StartupScreenVisible() ||
++                         GameMods::GameInputTaken();
+     PADBlockInput(blocked);
+     InputBindings::SetInputBlocked(blocked);
+ }
+@@ -1660,9 +1888,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
          controller_mapping_wizard::HandleSdlEvent(ev->sdl);
          if (g_rebind.active && (IsToggleKey(ev->sdl, SDL_SCANCODE_BACKSPACE) ||
                                  IsToggleKey(ev->sdl, SDL_SCANCODE_DELETE))) {
@@ -7221,7 +7542,15 @@ index 6c2083a..222404b 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1963,12 @@ void Draw() noexcept {
+@@ -1723,6 +1955,7 @@ void Draw() noexcept {
+         DrawShaderCompilationStatus();
+     }
+     DrawFpsOverlay();
++    GameMods::DrawOverlays();
+     DrawTopBar();
+     DrawExitPrompt();
+     DrawRestartPrompt();
+@@ -1732,6 +1965,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
