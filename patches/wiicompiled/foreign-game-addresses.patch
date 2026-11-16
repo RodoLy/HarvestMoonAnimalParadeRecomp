@@ -2979,10 +2979,10 @@ index 0000000..4afa2fd
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..e116988
+index 0000000..98cffd6
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,709 @@
+@@ -0,0 +1,658 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -3213,31 +3213,24 @@ index 0000000..e116988
 +}
 +
 +// ---------------------------------------------------------------------------------------------
-+// Testing: an easy confession and proposal. With [mods] romance_any_gender_test_proposal = true
-+// (F10 > Mods) a candidate's confession and proposal need less than in the original. The confession
-+// is the candidate's event whose messages are L000003a and the proposal L000005 (GIL_L000003a,
-+// GIL_L000005 for Gill). The confession has to play for real: it is what makes the candidate the
-+// player's sweetheart, and without it the proposal is turned down.
-+// - The confession is a "panel" event: it starts when the player steps on its spot by the
-+//   lighthouse (param/field/info/fld_info04.pBin names the spot L000003a), only in the evening.
-+//   Its test trigger is the same spot at any hour of the day.
-+// - The proposal keeps its own trigger, talking to the candidate, and its scene its own staging;
-+//   only its condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at
-+//   900). (Started on the farm instead, the scene waited for a place it was not in and the screen
-+//   stayed black.)
++// Testing: an easy confession. With [mods] romance_any_gender_test_proposal = true (F10 > Mods) a
++// candidate's confession, the event whose messages are L000003a (GIL_L000003a for Gill), starts at
++// any hour of the day instead of only in the evening. It is a "panel" event: it starts when the
++// player steps on its spot by the lighthouse (param/field/info/fld_info04.pBin names the spot
++// L000003a), and that spot stays. The confession has to play for real: it is what makes the
++// candidate the player's sweetheart, and without it the proposal is turned down.
++//
++// The proposal (L000005) is left as in the original: giving the candidate a Blue Feather (item
++// 1269). Its scene starts with the player holding the feather out, and started any other way
++// (talking with empty hands, at bedtime, on leaving the house) the screen stayed black.
 +
-+std::set<long> ProposalEvents(const std::filesystem::path& eventFolder, std::map<long, long>& characters) {
++// The candidates' confession events.
++std::set<long> ConfessionEvents(const std::filesystem::path& eventFolder) {
 +    std::set<long> events;
-+    static const std::regex proposal("msg0_0\\s+\"[A-Z]+_L000005\"");
 +    static const std::regex confession("msg0_0\\s+\"[A-Z]+_L000003a\"");
 +    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
 +        for (const std::string& block : Blocks(ReadFile(eventFolder / name))) {
 +            const long character = Number(block, "chara0");
-+            if (character >= 0 && NaturalPartnerSex(static_cast<uint32_t>(character)) >= 0 &&
-+                std::regex_search(block, proposal)) {
-+                events.insert(Number(block, "evtNo"));
-+                characters[Number(block, "evtNo")] = character;
-+            }
 +            if (character >= 0 && NaturalPartnerSex(static_cast<uint32_t>(character)) >= 0 &&
 +                std::regex_search(block, confession)) {
 +                events.insert(Number(block, "evtNo"));
@@ -3247,48 +3240,11 @@ index 0000000..e116988
 +    return events;
 +}
 +
-+// The test trigger of a panel event (the confession): its own spot by the lighthouse, at any hour
-+// of the day instead of only in the evening. Other events keep their own trigger (an empty answer).
++// The confession's test trigger: its own spot by the lighthouse, at any hour of the day.
 +std::string EasyConfessionTrigger(const std::string& block) {
-+    if (block.find("panelName") == std::string::npos) {
-+        return {};
-+    }
 +    static const std::regex start("timeS\\s+-?\\d+");
 +    static const std::regex end("timeE\\s+-?\\d+");
 +    return std::regex_replace(std::regex_replace(block, start, "timeS  6"), end, "timeE  22");
-+}
-+
-+// prm_love.epc with the Blue Feather condition {10, 1269, 0, >=, 0, 1} of these events turned into
-+// {2, 1, character, >=, 0, 900}: the character's hearts at 900, which the proposal also asks for.
-+std::string WithoutFeatherCondition(std::string data, const std::map<long, long>& characters) {
-+    if (data.size() < 20 || data.compare(0, 4, "EVTP") != 0) {
-+        return {};
-+    }
-+    const uint32_t count = ReadBigEndian32(data, 8);
-+    const size_t blocks = 20 + 12 * size_t(count);
-+    for (uint32_t i = 0; i < count && blocks <= data.size(); ++i) {
-+        const size_t row = 20 + 12 * size_t(i);
-+        const auto found = characters.find(static_cast<long>(ReadBigEndian32(data, row)));
-+        if (found == characters.end()) {
-+            continue;
-+        }
-+        const size_t block = blocks + ReadBigEndian32(data, row + 4);
-+        const size_t size = ReadBigEndian32(data, row + 8);
-+        if (block + size > data.size() || size < 0x14) {
-+            continue;
-+        }
-+        const uint32_t conditions = ReadBigEndian32(data, block + 8);
-+        for (uint32_t c = 0; c < conditions && 0x14 + 24 * size_t(c + 1) <= size; ++c) {
-+            const size_t at = block + 0x14 + 24 * size_t(c);
-+            if (ReadBigEndian32(data, at) == 10 && ReadBigEndian32(data, at + 4) == 1269) {
-+                const uint32_t hearts[6] = {2, 1, static_cast<uint32_t>(found->second), 4, 0, 900};
-+                for (int w = 0; w < 6; ++w) {
-+                    PutBigEndian32(data, at + 4 * w, hearts[w]);
-+                }
-+            }
-+        }
-+    }
-+    return data;
 +}
 +
 +struct Candidate {
@@ -3380,8 +3336,7 @@ index 0000000..e116988
 +    }
 +    const std::set<long> events = CandidateEvents(eventFolder);
 +    const bool testProposal = RuntimeConfigFile::ModEnabled(kTestProposalKey);
-+    std::map<long, long> proposalCharacters;
-+    const std::set<long> proposals = ProposalEvents(eventFolder, proposalCharacters);
++    const std::set<long> confessions = ConfessionEvents(eventFolder);
 +    const bool testAdoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
 +
 +    // Copy the file, leaving out the attr line of every candidate event.
@@ -3403,11 +3358,8 @@ index 0000000..e116988
 +            block = std::regex_replace(block, attrLine, "");
 +            opened += block != before ? 1 : 0;
 +        }
-+        if (testProposal && proposals.count(Number(block, "evtNo")) != 0) {
-+            const std::string easy = EasyConfessionTrigger(block);
-+            if (!easy.empty()) {
-+                block = easy;
-+            }
++        if (testProposal && confessions.count(Number(block, "evtNo")) != 0) {
++            block = EasyConfessionTrigger(block);
 +        }
 +        copy += block;
 +        at = end + 1;
@@ -3418,20 +3370,17 @@ index 0000000..e116988
 +    std::filesystem::create_directories(root / "event", ec);
 +    std::ofstream(root / "event" / "trig_love.db", std::ios::binary | std::ios::trunc) << copy;
 +    std::filesystem::remove(root / "event" / "prm_love.epc", ec);
-+    if (testProposal || testAdoption) {
-+        std::string conditions = ReadFile(eventFolder / "prm_love.epc");
-+        if (testProposal) {
-+            conditions = WithoutFeatherCondition(conditions, proposalCharacters);
-+            std::fprintf(stderr, "[mod %s] test: %zu confessions start at the lighthouse at any hour, proposals without the Blue Feather\n", kMod,
-+                         proposals.size());
-+        }
-+        if (testAdoption) {
-+            g_previewCandidate = g_chosenCandidate = SavedTestCandidate();
-+            const uint32_t chosen = kCandidates[g_previewCandidate.load()].id;
-+            conditions = OnlyOwnFlag(conditions, ChildQuestionEvents(eventFolder, chosen));
-+            std::fprintf(stderr, "[mod %s] test: the adoption scene plays at bedtime with %s\n", kMod,
-+                         kCandidates[g_previewCandidate.load()].name);
-+        }
++    if (testProposal) {
++        std::fprintf(stderr, "[mod %s] test: %zu confessions start at the lighthouse at any hour\n", kMod,
++                     confessions.size());
++    }
++    if (testAdoption) {
++        g_previewCandidate = g_chosenCandidate = SavedTestCandidate();
++        const uint32_t chosen = kCandidates[g_previewCandidate.load()].id;
++        const std::string conditions =
++            OnlyOwnFlag(ReadFile(eventFolder / "prm_love.epc"), ChildQuestionEvents(eventFolder, chosen));
++        std::fprintf(stderr, "[mod %s] test: the adoption scene plays at bedtime with %s\n", kMod,
++                     kCandidates[g_previewCandidate.load()].name);
 +        if (!conditions.empty()) {
 +            std::ofstream(root / "event" / "prm_love.epc", std::ios::binary | std::ios::trunc) << conditions;
 +        }
@@ -3643,11 +3592,11 @@ index 0000000..e116988
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
 +    static bool s_atHome = RuntimeConfigFile::ModEnabled(kTestProposalKey);
-+    if (ImGui::Checkbox("Easy confession and proposal (next start)", &s_atHome)) {
++    if (ImGui::Checkbox("Confession at any hour (next start)", &s_atHome)) {
 +        RuntimeConfigFile::SetModEnabled(kTestProposalKey, s_atHome);
 +    }
-+    ImGui::TextDisabled("The confession starts at its spot in front of the lighthouse at any hour; then talk to "
-+                        "the candidate for the proposal (no Blue Feather needed).");
++    ImGui::TextDisabled("The confession starts at its spot in front of the lighthouse at any hour. Then propose "
++                        "as in the game: give the candidate the Blue Feather.");
 +    static bool s_adoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
 +    if (ImGui::Checkbox("Adoption scene at bedtime (next start)", &s_adoption)) {
 +        RuntimeConfigFile::SetModEnabled(kTestAdoptionKey, s_adoption);
@@ -3694,10 +3643,10 @@ index 0000000..e116988
 +}
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
 new file mode 100644
-index 0000000..de5a4e4
+index 0000000..567a5a2
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.h
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,65 @@
 +#pragma once
 +
 +// Shared by the two source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
@@ -3718,8 +3667,7 @@ index 0000000..de5a4e4
 +bool Enabled();
 +
 +// Testing (F10 > Mods), each read at the next start:
-+// - kTestProposalKey: a candidate's confession starts at its spot by the lighthouse at any hour,
-+//   and the proposal, talking to them, needs no Blue Feather.
++// - kTestProposalKey: a candidate's confession starts at its spot by the lighthouse at any hour.
 +// - kTestAdoptionKey: going to bed at home plays a preview of the adoption scene with the
 +//   candidate chosen in the panel in the spouse's place, in any game and changing nothing in it.
 +//   That candidate's question event (L000015) loses its conditions but its own "done" flag, and

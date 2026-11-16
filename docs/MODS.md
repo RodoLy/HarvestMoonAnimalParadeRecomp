@@ -50,12 +50,12 @@ What the game does, and what the mod changes:
 a candidate and press it, then save in the game. It sets that candidate's hearts to the most, marks
 their heart events before the proposal as seen (the flags their conditions in
 `event/prm_love.epc` ask for) and builds the house up once. *Hold a Blue Feather* puts the feather
-(item 1269) in the player's hands, so it can be given right away. *Easy confession and proposal*
+(item 1269) in the player's hands, so it can be given right away. *Confession at any hour*
 (read at the next start) makes the candidate's confession start at its own spot in front of the
-lighthouse at any hour of the day instead of only in the evening, and lets the proposal,
-talking to them, go ahead without the Blue Feather. Both scenes are staged in their own places, so
-their triggers keep those places: started on the farm, the confession looked at an empty corner and
-the proposal left the screen black.
+lighthouse at any hour of the day instead of only in the evening. The proposal stays as in the
+game, giving the candidate the Blue Feather: its scene starts with the player holding the feather
+out, and started any other way (talking with empty hands, leaving the house) the screen stayed
+black.
 
 The dialogue needs nothing new. The disc has every candidate's love text in a version for a
 male player and one for a female player (`msglang/<language>/male` and `female`). The game picks
@@ -164,12 +164,12 @@ Lo que hace el juego y lo que cambia el mod:
 una partida, elige un candidato, púlsalo y guarda en el juego. Pone los corazones de ese candidato
 al máximo, marca como vistos sus eventos de corazón anteriores a la pedida (las banderas que piden
 sus condiciones en `event/prm_love.epc`) y amplía la casa una vez. *Hold a Blue Feather* pone la
-pluma (objeto 1269) en las manos del jugador, para darla en seguida. *Easy confession and proposal*
-(se lee al siguiente arranque) hace que la declaración del candidato empiece en su propio punto frente
-al faro a cualquier hora del día en vez de solo por la tarde, y que la pedida,
-al hablarle, salga sin la Pluma Azul. Las dos escenas están montadas en su propio lugar, así que sus
-disparadores conservan ese lugar: empezadas en la granja, la declaración miraba a un rincón vacío y
-la pedida dejaba la pantalla en negro.
+pluma (objeto 1269) en las manos del jugador, para darla en seguida. *Confession at any hour*
+(se lee al siguiente arranque) hace que la declaración del candidato empiece en su propio punto
+frente al faro a cualquier hora del día en vez de solo por la tarde. La pedida queda como en el
+juego, dándole al candidato la Pluma Azul: su escena empieza con quien juega ofreciendo la pluma, y
+empezada de otra forma (hablando con las manos vacías, al salir de la casa) la pantalla se quedaba
+en negro.
 
 Los diálogos no necesitan nada nuevo. El disco trae los textos de amor de cada candidato en una
 versión para jugador hombre y otra para jugadora mujer (`msglang/<idioma>/male` y `female`). El
