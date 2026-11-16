@@ -2156,10 +2156,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..fe4baa7
+index 0000000..68c8cc0
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,375 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2182,11 +2182,24 @@ index 0000000..fe4baa7
 +//   +0x1C                 the roll
 +// The game's camera code (BB_CCamera) writes the eye and the angles every frame, following the
 +// player, and the engine turns them into the picture's view at 0x8005277C, reached through
-+// 0x80052778 (the frame's layers call it, 0x8024C4E0..0x8024C510). Just before that, this mod finds
-+// the point the game's camera looks at (on its line of sight, next to the player) and moves the eye
-+// around that point by the turn and tilt the right stick chose, at the same distance. The game's code
-+// keeps following the player underneath, so the camera still follows; and when the mod does nothing
-+// (indoors, in scenes), the game's own camera is what shows.
++// 0x80052778 (the frame's layers call it, 0x8024C4E0..0x8024C510). Just before that, once the right
++// stick has been moved, this mod writes its own camera there: its own angles and distance around a
++// point just above the player (taken from the game's camera at that moment, so the picture does
++// not jump). Places where the game's camera holds a set angle do not change it. Until the stick
++// moves, after R3, after a change of area, indoors, and while no player is being updated, the
++// game's own camera is what shows.
++//
++// Walls. The engine's collision manager (aa_CollisionManager.cpp; at 0x804D71DC: +0x04 the count,
++// +0x08 the entries, 0xA4 bytes each) keeps a shape for everything the player bumps into:
++//   +0x00            1 while in use
++//   +0x08 ... +0x34  where it stands: a 3x4 matrix, row by row (the turn and size, then x, y, z)
++//   +0x38            its shape: 2 a box, 3 a cylinder (the people and animals)
++//   +0x3C ... +0x50  a box's corners in its own space, the lowest then the highest
++//   +0x78            what it belongs to (a character, an animal), 0 for the place itself
++// The camera is pulled in, towards the player, when a box of the place stands between them, so it
++// never ends up behind a house or a wall. The boxes are only as tall as the player needs (a house's
++// may stop at its eaves): big ones, a house or a long wall, count as reaching all the way up, while
++// small ones (a fence, a stone) can still be looked over.
 +//
 +// The current area is game variables 0x36 (its kind: 0 the outdoors, 1 the buildings, 2 the mines)
 +// and 0x37 (which one), at the game's state + 0x148C and + 0x1490 (the getter is 0x8010B154).
@@ -2229,9 +2242,18 @@ index 0000000..fe4baa7
 +constexpr float kLowestPitch = 0.05f;     // nearly level with the ground
 +constexpr float kHighestPitch = 1.40f;    // nearly straight down
 +constexpr float kDeadZone = 0.2f;
++
++constexpr uint32_t kCollisionManager = 0x804D71DCu;
++constexpr uint32_t kShapeSize = 0xA4;
++constexpr uint32_t kBox = 2;
++constexpr float kBigBox = 1.2f;           // half its width and depth at least this: a house, a wall
++constexpr float kClosest = 1.5f;          // the nearest the camera comes to the point it looks at
++constexpr float kWallGap = 0.3f;          // how far in front of a wall the camera stops
++constexpr float kBackOut = 3.0f;          // how fast it goes back out once the wall is gone, a second
 +constexpr float kLookHeight = 0.7f;       // the game's cameras look this far above the player's feet
 +constexpr float kFollowing = 1.5f;        // how close to the player's head the game's line of sight
-+                                          // passes while it follows the player (farther: a scene)
++                                          // passes while it follows the player
++constexpr float kScene = 4.0f;            // farther than this, the game's camera is a scene's
 +
 +bool Enabled() {
 +    static const bool enabled = RuntimeConfigFile::ModEnabled("free_camera");
@@ -2288,10 +2310,15 @@ index 0000000..fe4baa7
 +    return in;
 +}
 +
-+// What the right stick has done to the game's camera so far.
++// The camera once the right stick has taken it: its own angles and distance around the player,
++// whatever the game's camera does in that place. Until then (and after R3 or a change of area) it is
++// the game's camera.
 +struct Orbit {
-+    float turn = 0;     // added to the game's yaw
-+    float tilt = 0;     // added to the game's pitch
++    bool taken = false;
++    float yaw = 0, pitch = 0;   // as the engine camera's
++    float distance = 0;         // from the point it looks at
++    float lookAt[3] = {};       // that point, from the player's feet
++    float shown = 0;            // the distance shown now: shorter while a wall is in the way
 +    uint32_t areaKind = 0xFFFFFFFFu, areaId = 0xFFFFFFFFu;
 +    std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
 +};
@@ -2311,12 +2338,127 @@ index 0000000..fe4baa7
 +    out[2] = -std::cos(yaw) * std::cos(pitch);
 +}
 +
-+void Reset(Orbit& o) {
-+    o.turn = 0;
-+    o.tilt = 0;
++// Where the game's camera looks: the point on its line of sight nearest the player's head (the
++// game's cameras look a little above the player), how far along the line it is, and how far it
++// passes from the head.
++struct Sight {
++    float target[3];
++    float along;
++    float miss;
++};
++
++Sight GameSight(uint32_t camera, const float feet[3]) {
++    float eye[3], forward[3];
++    for (int i = 0; i < 3; ++i) {
++        eye[i] = ReadFloat(camera + kEye + 4 * i);
++    }
++    Forward(ReadFloat(camera + kPitch), ReadFloat(camera + kYaw), forward);
++    const float head[3] = {feet[0], feet[1] + kLookHeight, feet[2]};
++    Sight sight{};
++    for (int i = 0; i < 3; ++i) {
++        sight.along += (head[i] - eye[i]) * forward[i];
++    }
++    float miss = 0;
++    for (int i = 0; i < 3; ++i) {
++        sight.target[i] = eye[i] + forward[i] * sight.along;
++        miss += (head[i] - sight.target[i]) * (head[i] - sight.target[i]);
++    }
++    sight.miss = sight.along > 0.5f ? std::sqrt(miss) : 1e9f;
++    return sight;
 +}
 +
-+// Once a frame, with the main camera: turns it around the point it looks at, when it may.
++// The right stick takes the camera where the game's camera is now: the same point, angle and
++// distance, so the picture does not jump.
++bool Take(Orbit& o, uint32_t camera, const float feet[3], const Sight& sight) {
++    if (sight.miss > kFollowing) {
++        return false;  // the game's camera is not looking at the player
++    }
++    const float pitch = ReadFloat(camera + kPitch), yaw = ReadFloat(camera + kYaw);
++    const float* target = sight.target;
++    const float along = sight.along;
++    o.taken = true;
++    o.yaw = yaw;
++    o.pitch = std::clamp(pitch, kLowestPitch, kHighestPitch);
++    o.distance = along;
++    o.shown = along;
++    for (int i = 0; i < 3; ++i) {
++        o.lookAt[i] = target[i] - feet[i];
++    }
++    return true;
++}
++
++// How far along the line from `from` (0) to `to` (1) the first box of the place stands, or 1 when
++// none does.
++float FirstWall(const float from[3], const float to[3]) {
++    const uint32_t count = Memory::Read32(kCollisionManager + 0x04);
++    const uint32_t shapes = Memory::Read32(kCollisionManager + 0x08);
++    if (shapes == 0 || count > 0x1000 || !Memory::Contains(shapes, count * kShapeSize)) {
++        return 1.0f;
++    }
++    float nearest = 1.0f;
++    for (uint32_t i = 0; i < count; ++i) {
++        const uint32_t shape = shapes + i * kShapeSize;
++        if (Memory::Read32(shape) != 1 || Memory::Read32(shape + 0x38) != kBox || Memory::Read32(shape + 0x78) != 0) {
++            continue;
++        }
++        float m[12];
++        for (int k = 0; k < 12; ++k) {
++            m[k] = ReadFloat(shape + 0x08 + 4 * k);
++        }
++        float low[3], high[3];
++        for (int k = 0; k < 3; ++k) {
++            low[k] = ReadFloat(shape + 0x3C + 4 * k);
++            high[k] = ReadFloat(shape + 0x48 + 4 * k);
++        }
++        // Rows of the 3x3 part, and where the box stands.
++        const float a = m[0], b = m[1], c = m[2], d = m[4], e = m[5], f = m[6], g = m[8], h = m[9], k9 = m[10];
++        const float place[3] = {m[3], m[7], m[11]};
++        // A house or a long wall reaches all the way up: its width and depth in the world.
++        const float width = std::sqrt(a * a + d * d + g * g) * (high[0] - low[0]) * 0.5f;
++        const float depth = std::sqrt(c * c + f * f + k9 * k9) * (high[2] - low[2]) * 0.5f;
++        if (width >= kBigBox && depth >= kBigBox) {
++            high[1] = 1e6f;
++        }
++        // The line in the box's own space: the inverse of the 3x3 part.
++        const float det = a * (e * k9 - f * h) - b * (d * k9 - f * g) + c * (d * h - e * g);
++        if (std::fabs(det) < 1e-6f) {
++            continue;
++        }
++        const float inv[9] = {(e * k9 - f * h) / det, (c * h - b * k9) / det, (b * f - c * e) / det,
++                              (f * g - d * k9) / det, (a * k9 - c * g) / det, (c * d - a * f) / det,
++                              (d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det};
++        float origin[3], along[3];
++        for (int r = 0; r < 3; ++r) {
++            origin[r] = along[r] = 0;
++            for (int q = 0; q < 3; ++q) {
++                origin[r] += inv[3 * r + q] * (from[q] - place[q]);
++                along[r] += inv[3 * r + q] * (to[q] - from[q]);
++            }
++        }
++        // Where the line enters the box (the slabs of its three sides).
++        float enter = 0.0f, leave = 1.0f;
++        bool misses = false;
++        for (int r = 0; r < 3 && !misses; ++r) {
++            if (std::fabs(along[r]) < 1e-6f) {
++                misses = origin[r] < low[r] || origin[r] > high[r];
++                continue;
++            }
++            float t0 = (low[r] - origin[r]) / along[r], t1 = (high[r] - origin[r]) / along[r];
++            if (t0 > t1) {
++                std::swap(t0, t1);
++            }
++            enter = std::max(enter, t0);
++            leave = std::min(leave, t1);
++            misses = enter > leave;
++        }
++        if (!misses && enter > 0.0f && enter < nearest) {
++            nearest = enter;  // (a box the player's head is in, entered at 0, does not count)
++        }
++    }
++    return nearest;
++}
++
++// Once a frame, with the main camera.
 +void TurnCamera(uint32_t camera) {
 +    Orbit& o = g_orbit;
 +    const auto now = std::chrono::steady_clock::now();
@@ -2332,56 +2474,49 @@ index 0000000..fe4baa7
 +    if (kind != o.areaKind || id != o.areaId) {
 +        o.areaKind = kind;
 +        o.areaId = id;
-+        Reset(o);
++        o.taken = false;
 +    }
 +    float feet[3];
-+    if (kind != kOutdoors || !AnimalParadePlayerPosition(feet)) {
-+        Reset(o);  // indoors, or no player being updated (a menu, a scene that holds the player)
++    if (kind != kOutdoors) {
++        o.taken = false;  // buildings and mines keep the game's camera
 +        return;
 +    }
++    if (!AnimalParadePlayerPosition(feet)) {
++        return;  // no player being updated (a menu, a scene that holds the player): the game's camera
++    }
 +
-+    // Where the game's camera looks: the point on its line of sight nearest the player's head. A
-+    // camera whose line of sight passes far from the player is a scene's: left alone.
-+    float eye[3], forward[3];
-+    for (int i = 0; i < 3; ++i) {
-+        eye[i] = ReadFloat(camera + kEye + 4 * i);
-+    }
-+    const float pitch = ReadFloat(camera + kPitch), yaw = ReadFloat(camera + kYaw);
-+    Forward(pitch, yaw, forward);
-+    const float head[3] = {feet[0], feet[1] + kLookHeight, feet[2]};
-+    float along = 0;
-+    for (int i = 0; i < 3; ++i) {
-+        along += (head[i] - eye[i]) * forward[i];
-+    }
-+    float target[3], miss = 0;
-+    for (int i = 0; i < 3; ++i) {
-+        target[i] = eye[i] + forward[i] * along;
-+        miss += (head[i] - target[i]) * (head[i] - target[i]);
-+    }
-+    if (along <= 0.5f || std::sqrt(miss) > kFollowing) {
-+        Reset(o);
++    // A scene's camera, looking away from the player: the game's, for as long as it lasts.
++    const Sight sight = GameSight(camera, feet);
++    if (sight.miss > kScene) {
 +        return;
 +    }
-+
 +    const Input in = ReadInput();
 +    if (in.reset) {
-+        Reset(o);
++        o.taken = false;
 +    }
-+    o.turn = std::remainder(o.turn + in.turn * kTurnSpeed * dt, 6.28318530718f);
-+    o.tilt = std::clamp(pitch + o.tilt + in.tilt * kTiltSpeed * dt, kLowestPitch, kHighestPitch) - pitch;
-+    if (o.turn == 0 && o.tilt == 0) {
-+            return;
++    if (!o.taken && (in.turn != 0 || in.tilt != 0) && !Take(o, camera, feet, sight)) {
++        return;
 +    }
++    if (!o.taken) {
++        return;
++    }
++    o.yaw = std::remainder(o.yaw + in.turn * kTurnSpeed * dt, 6.28318530718f);
++    o.pitch = std::clamp(o.pitch + in.tilt * kTiltSpeed * dt, kLowestPitch, kHighestPitch);
 +
-+    // The same distance from the same point, seen from the new angle.
-+    const float newPitch = pitch + o.tilt, newYaw = yaw + o.turn;
-+    float newForward[3];
-+    Forward(newPitch, newYaw, newForward);
++    float forward[3], target[3], wanted[3];
++    Forward(o.pitch, o.yaw, forward);
 +    for (int i = 0; i < 3; ++i) {
-+        WriteFloat(camera + kEye + 4 * i, target[i] - newForward[i] * along);
++        target[i] = feet[i] + o.lookAt[i];
++        wanted[i] = target[i] - forward[i] * o.distance;
 +    }
-+    WriteFloat(camera + kPitch, newPitch);
-+    WriteFloat(camera + kYaw, newYaw);
++    // In front of the first wall between the player and the camera; back out slowly once it is gone.
++    const float room = std::max(kClosest, FirstWall(target, wanted) * o.distance - kWallGap);
++    o.shown = room < o.shown ? room : std::min(room, o.shown + kBackOut * dt);
++    for (int i = 0; i < 3; ++i) {
++        WriteFloat(camera + kEye + 4 * i, target[i] - forward[i] * o.shown);
++    }
++    WriteFloat(camera + kPitch, o.pitch);
++    WriteFloat(camera + kYaw, o.yaw);
 +}
 +
 +} // namespace

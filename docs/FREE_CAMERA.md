@@ -19,6 +19,14 @@ What was learned building it:
 - The area is game variables 0x36 (0 outdoors, 1 buildings, 2 mines) and 0x37. The camera only
   turns outdoors, and only while the game's camera looks at the player (scenes are left alone).
 - The water's reflection has a camera of its own and keeps the game's angle.
+- Once the right stick moves, the camera keeps its own angle, tilt and distance around a point just
+  above the player, so places where the game's camera holds a set angle do not turn it back. R3 or
+  a change of area gives the camera back to the game.
+- Walls come from the engine's collision manager (0x804D71DC: the count at +0x04, the entries at
+  +0x08, 0xA4 bytes each: a 3x4 matrix at +0x08, the shape at +0x38, 2 for a box with its corners at
+  +0x3C and +0x48, and what it belongs to at +0x78, 0 for the place). The camera is pulled in front of
+  the first box between it and the player; big boxes (a house, a long wall) count as reaching all the
+  way up, since they stop at the height the player needs.
 
 A first try let the camera fly on its own while the player stood still; the orbit camera replaced
 it. The study from before follows.
@@ -99,6 +107,15 @@ Lo que se aprendió al hacerlo:
   solo gira al aire libre, y solo mientras la cámara del juego mira al personaje (las escenas no se
   tocan).
 - El reflejo del agua tiene su propia cámara y se queda con el ángulo del juego.
+- En cuanto se mueve el stick derecho, la cámara guarda su propio giro, inclinación y distancia
+  alrededor de un punto un poco arriba del personaje, así que los lugares donde la cámara del juego
+  tiene un ángulo fijo ya no la regresan. R3 o un cambio de zona le devuelven la cámara al juego.
+- Las paredes salen del administrador de colisiones del motor (0x804D71DC: la cuenta en +0x04, las
+  entradas en +0x08, 0xA4 bytes cada una: una matriz de 3x4 en +0x08, la forma en +0x38, 2 para una
+  caja con sus esquinas en +0x3C y +0x48, y a qué pertenece en +0x78, 0 si es del lugar). La cámara se
+  acerca hasta quedar delante de la primera caja entre ella y el personaje; las cajas grandes (una
+  casa, un muro largo) cuentan como si llegaran hasta arriba, porque solo llegan a la altura que
+  necesita el personaje.
 
 Un primer intento soltaba la cámara para volar sola mientras el personaje se quedaba quieto; la
 cámara orbital lo reemplazó. Sigue el estudio de antes.
