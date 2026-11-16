@@ -695,6 +695,14 @@ void CancelPreparation() {
     TerminateJobObject(g_prep.job, 1);
 }
 
+// Started by RecompLauncher (it sets RECOMPLAUNCHER=1 for what it starts): RecompLauncher takes
+// the end of this program for the end of the game, and backs up the saves then. So the launcher
+// hides and stays until the game closes, instead of closing as soon as the game starts.
+bool StartedByRecompLauncher() {
+    wchar_t value[8] = {};
+    return GetEnvironmentVariableW(L"RECOMPLAUNCHER", value, 8) > 0 && std::wstring(value) == L"1";
+}
+
 void StartGame() {
     STARTUPINFOW startup{sizeof(startup)};
     PROCESS_INFORMATION process{};
@@ -702,6 +710,15 @@ void StartGame() {
     if (CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, 0, nullptr,
                        GameExe().parent_path().c_str(), &startup, &process)) {
         CloseHandle(process.hThread);
+        if (StartedByRecompLauncher()) {
+            ShowWindow(g_window, SW_HIDE);
+            std::thread([game = process.hProcess, window = g_window] {
+                WaitForSingleObject(game, INFINITE);
+                CloseHandle(game);
+                PostMessageW(window, WM_CLOSE, 0, 0);
+            }).detach();
+            return;
+        }
         CloseHandle(process.hProcess);
         DestroyWindow(g_window);
     }
