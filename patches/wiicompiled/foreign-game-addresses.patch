@@ -2979,10 +2979,10 @@ index 0000000..4afa2fd
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..a72a1ce
+index 0000000..61c6a0e
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,709 @@
+@@ -0,0 +1,735 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -3213,16 +3213,18 @@ index 0000000..a72a1ce
 +}
 +
 +// ---------------------------------------------------------------------------------------------
-+// Testing: the proposal at home. With [mods] romance_any_gender_test_proposal = true (F10 > Mods),
-+// a candidate's confession and proposal start when the player steps out of the house in the morning
-+// or the day, instead of at the lighthouse and when the player gives them the Blue Feather, so
-+// there is no need to find them. The confession is the candidate's event whose messages are
-+// L000003a and the proposal L000005 (GIL_L000003a, GIL_L000005 for Gill). The confession has to
-+// play for real: it is what makes the candidate the player's sweetheart, and without it the
-+// proposal is turned down. Both triggers become the one the morning gift events use (the farm,
-+// coming from the house), so the confession comes on one outing and the proposal on the next; the
-+// proposal's condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at
-+// 900).
++// Testing: an easy confession and proposal. With [mods] romance_any_gender_test_proposal = true
++// (F10 > Mods) a candidate's confession and proposal need less than in the original. The confession
++// is the candidate's event whose messages are L000003a and the proposal L000005 (GIL_L000003a,
++// GIL_L000005 for Gill). The confession has to play for real: it is what makes the candidate the
++// player's sweetheart, and without it the proposal is turned down.
++// - The confession is a "panel" event: a spot on a field where it starts in the evening
++//   (param/field/info/fld_infoNN.pBin names the spot: L000003a, by the lighthouse, is in field 4),
++//   and its scene is staged there. Its test trigger is entering that field at any hour.
++// - The proposal keeps its own trigger, talking to the candidate, and its scene its own staging;
++//   only its condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at
++//   900). (Started on the farm instead, the scene waited for a place it was not in and the screen
++//   stayed black.)
 +
 +std::set<long> ProposalEvents(const std::filesystem::path& eventFolder, std::map<long, long>& characters) {
 +    std::set<long> events;
@@ -3245,8 +3247,29 @@ index 0000000..a72a1ce
 +    return events;
 +}
 +
-+// The proposal's trigger as the morning gift's: on the farm (map 0, 0), coming from the house (1, 0).
-+std::string ProposalAtHomeTrigger(const std::string& block, const std::string& newline) {
++// The field whose spots include the panel `name` (fld_infoNN.pBin holds its spots' names), or -1.
++long PanelField(const std::string& name) {
++    const std::filesystem::path folder = RuntimeConfigFile::ResolvedDvdRoot() / "files" / "param" / "field" / "info";
++    for (int field = 0; field < 100; ++field) {
++        char file[32];
++        std::snprintf(file, sizeof(file), "fld_info%02d.pBin", field);
++        const std::string data = ReadFile(folder / file);
++        if (!data.empty() && data.find(name + std::string(1, '\0')) != std::string::npos) {
++            return field;
++        }
++    }
++    return -1;
++}
++
++// The test trigger of a panel event (the confession): entering its field, at any hour. Other
++// events keep their own trigger (an empty answer).
++std::string EasyConfessionTrigger(const std::string& block, const std::string& newline) {
++    static const std::regex panelName("panelName\\s+\"([^\"]+)\"");
++    std::smatch panel;
++    const long field = std::regex_search(block, panel, panelName) ? PanelField(panel[1].str()) : -1;
++    if (field < 0) {
++        return {};
++    }
 +    std::string trigger = "{" + newline;
 +    trigger += "    class  \"trig\"" + newline;
 +    trigger += "    evtNo  " + std::to_string(Number(block, "evtNo")) + newline;
@@ -3255,8 +3278,7 @@ index 0000000..a72a1ce
 +    }
 +    trigger += "    oneShot  1" + newline;
 +    trigger += "    type  \"map\"" + newline;
-+    trigger += "    nowMapCtg  0" + newline + "    nowMapId  0" + newline;
-+    trigger += "    preMapCtg  1" + newline + "    preMapId  0" + newline;
++    trigger += "    nowMapCtg  0" + newline + "    nowMapId  " + std::to_string(field) + newline;
 +    trigger += "    timeS  6" + newline + "    timeE  22" + newline;
 +    return trigger + "}";
 +}
@@ -3407,7 +3429,11 @@ index 0000000..a72a1ce
 +            opened += block != before ? 1 : 0;
 +        }
 +        if (testProposal && proposals.count(Number(block, "evtNo")) != 0) {
-+            block = ProposalAtHomeTrigger(block, block.find("\r\n") != std::string::npos ? "\r\n" : "\n");
++            const std::string easy =
++                EasyConfessionTrigger(block, block.find("\r\n") != std::string::npos ? "\r\n" : "\n");
++            if (!easy.empty()) {
++                block = easy;
++            }
 +        }
 +        copy += block;
 +        at = end + 1;
@@ -3422,7 +3448,7 @@ index 0000000..a72a1ce
 +        std::string conditions = ReadFile(eventFolder / "prm_love.epc");
 +        if (testProposal) {
 +            conditions = WithoutFeatherCondition(conditions, proposalCharacters);
-+            std::fprintf(stderr, "[mod %s] test: %zu confessions and proposals start on leaving the house\n", kMod,
++            std::fprintf(stderr, "[mod %s] test: %zu confessions start on entering their field, proposals without the Blue Feather\n", kMod,
 +                         proposals.size());
 +        }
 +        if (testAdoption) {
@@ -3643,11 +3669,11 @@ index 0000000..a72a1ce
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }
 +    static bool s_atHome = RuntimeConfigFile::ModEnabled(kTestProposalKey);
-+    if (ImGui::Checkbox("Proposal when leaving the house (next start)", &s_atHome)) {
++    if (ImGui::Checkbox("Easy confession and proposal (next start)", &s_atHome)) {
 +        RuntimeConfigFile::SetModEnabled(kTestProposalKey, s_atHome);
 +    }
-+    ImGui::TextDisabled("Step out of the house: first the candidate's confession, the next time the proposal "
-+                        "(no Blue Feather needed).");
++    ImGui::TextDisabled("The confession starts on reaching the lighthouse's area at any hour; then talk to the "
++                        "candidate for the proposal (no Blue Feather needed).");
 +    static bool s_adoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
 +    if (ImGui::Checkbox("Adoption scene at bedtime (next start)", &s_adoption)) {
 +        RuntimeConfigFile::SetModEnabled(kTestAdoptionKey, s_adoption);
@@ -3694,10 +3720,10 @@ index 0000000..a72a1ce
 +}
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
 new file mode 100644
-index 0000000..7e5bdba
+index 0000000..fdc45d3
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.h
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,66 @@
 +#pragma once
 +
 +// Shared by the two source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
@@ -3718,7 +3744,8 @@ index 0000000..7e5bdba
 +bool Enabled();
 +
 +// Testing (F10 > Mods), each read at the next start:
-+// - kTestProposalKey: a candidate's confession and proposal start when leaving the house.
++// - kTestProposalKey: a candidate's confession starts on entering its field (by the lighthouse) at
++//   any hour, and the proposal, talking to them, needs no Blue Feather.
 +// - kTestAdoptionKey: going to bed at home plays a preview of the adoption scene with the
 +//   candidate chosen in the panel in the spouse's place, in any game and changing nothing in it.
 +//   That candidate's question event (L000015) loses its conditions but its own "done" flag, and
