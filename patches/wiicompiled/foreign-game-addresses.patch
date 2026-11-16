@@ -2979,10 +2979,10 @@ index 0000000..4afa2fd
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..61c6a0e
+index 0000000..c9905d7
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,735 @@
+@@ -0,0 +1,737 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -3219,7 +3219,8 @@ index 0000000..61c6a0e
 +// GIL_L000005 for Gill). The confession has to play for real: it is what makes the candidate the
 +// player's sweetheart, and without it the proposal is turned down.
 +// - The confession is a "panel" event: a spot on a field where it starts in the evening
-+//   (param/field/info/fld_infoNN.pBin names the spot: L000003a, by the lighthouse, is in field 4),
++//   (param/field/info/fld_infoNN.pBin names the spot: L000003a, by the lighthouse, is in
++//   fld_info04, the town, field 1),
 +//   and its scene is staged there. Its test trigger is entering that field at any hour.
 +// - The proposal keeps its own trigger, talking to the candidate, and its scene its own staging;
 +//   only its condition of holding item 1269 (the Blue Feather) becomes one already true (hearts at
@@ -3247,15 +3248,16 @@ index 0000000..61c6a0e
 +    return events;
 +}
 +
-+// The field whose spots include the panel `name` (fld_infoNN.pBin holds its spots' names), or -1.
++// The field whose spots include the panel `name`, or -1. fld_infoNN.pBin holds the spots of field
++// NN / 4 (the files count in fours: fld_info00 is the farm, field 0; fld_info04 the town, field 1).
 +long PanelField(const std::string& name) {
 +    const std::filesystem::path folder = RuntimeConfigFile::ResolvedDvdRoot() / "files" / "param" / "field" / "info";
-+    for (int field = 0; field < 100; ++field) {
++    for (int field = 0; field < 100; field += 4) {
 +        char file[32];
 +        std::snprintf(file, sizeof(file), "fld_info%02d.pBin", field);
 +        const std::string data = ReadFile(folder / file);
 +        if (!data.empty() && data.find(name + std::string(1, '\0')) != std::string::npos) {
-+            return field;
++            return field / 4;
 +        }
 +    }
 +    return -1;
