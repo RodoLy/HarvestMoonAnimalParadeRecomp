@@ -172,6 +172,9 @@ const MODS = [
   { id: 'romance_any_gender', es: 'Amor para todos', en: 'Romance for everyone',
     hint: { es: 'Cualquier candidato o candidata puede enamorarse de ti y casarse contigo, seas chico o chica. En pruebas.',
       en: 'Any bachelor or bachelorette can fall in love with you and marry you, whether you play as a boy or a girl. Being tested.' } },
+  { id: 'no_place_sign', es: 'Sin letrero de las zonas al cargar', en: 'No area sign when loading',
+    hint: { es: 'Al cambiar de zona no sale el letrero con la foto y el nombre del lugar: la zona nueva aparece en cuanto carga.',
+      en: 'Changing area shows no sign with the picture and name of the place: the new area appears as soon as it loads.' } },
 ];
 
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).

@@ -733,7 +733,7 @@ int ConnectedControllers() {
 
 // The game's mods (runtime/src/hle/game_mods in WiiCompiled's patch): each is a line in [mods] of
 // Config.toml, off unless it says true. The page has their names and descriptions.
-const char* const kMods[] = {"romance_any_gender"};
+const char* const kMods[] = {"romance_any_gender", "no_place_sign"};
 
 std::wstring StateJson(const wchar_t* status) {
     const ConfigFile config = ConfigFile::Load();
