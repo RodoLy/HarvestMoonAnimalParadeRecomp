@@ -200,7 +200,9 @@ sickle take half the time.
 
 ### Cheats (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
-In the launcher's own Cheats tab (next to Mods), all off until turned on. In `Config.toml` they
+In the launcher's own Cheats tab (next to Mods) and in the game's F10 menu, under Cheats, where
+each can be turned on and off while playing: the change applies at once and is saved to the same
+line of `Config.toml`. All off until turned on. In `Config.toml` they
 are lines of `[mods]` like any mod. Infinite stamina keeps
 the stamina bar full; infinite money keeps the money at 999,999 G; infinite lumber and infinite
 material stone keep each at 9,999; infinite feed keeps the fodder and the bird feed at 9,999;
@@ -427,7 +429,9 @@ la mitad.
 
 ### Trucos (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
-En su propia pestaña del launcher, Trucos (junto a Mods), todos apagados hasta que se encienden. En
+En su propia pestaña del launcher, Trucos (junto a Mods), y en el menú F10 del juego, en Cheats,
+donde cada uno se activa o desactiva mientras juegas: el cambio se aplica al momento y se guarda en
+la misma línea de `Config.toml`. Todos apagados hasta que se encienden. En
 `Config.toml` son líneas de `[mods]` como cualquier mod. Estamina
 infinita mantiene llena la barra de estamina; dinero infinito deja el dinero en 999,999 G; madera
 infinita y piedra infinita dejan cada una en 9,999; alimento infinito deja el heno y el pienso en 9,999;

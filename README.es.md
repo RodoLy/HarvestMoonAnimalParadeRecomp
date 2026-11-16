@@ -116,7 +116,8 @@ derecho es B. Los botones del mando y del teclado se cambian en la pestaña Cont
 **El juego se cerró con un mensaje.** El mensaje dice por qué. Abre un issue con él y la
 carpeta más reciente de `UserData\Logs`.
 
-**¿Hay trucos?** Seis, en la pestaña Trucos del launcher, todos apagados hasta que los
+**¿Hay trucos?** Seis, en la pestaña Trucos del launcher y en el menú F10 del juego (Cheats, donde
+se activan y desactivan mientras juegas), todos apagados hasta que los
 enciendas: estamina infinita, dinero infinito (se queda en 999,999 G), madera infinita, piedra
 infinita, alimento infinito (heno y pienso) y detener el tiempo (dormir sí lleva al día
 siguiente). Cómo funcionan: [docs/MODS.md](docs/MODS.md). Los códigos que cambian
