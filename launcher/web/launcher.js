@@ -346,7 +346,16 @@ function rows() {
     // setting, or turn it on and off when it has none.
     return modsInOrder().map((m) => {
       const on = !!state.modsOn[m.id];
-      const toggle = () => { state.modsOn[m.id] = !on; send({ cmd: 'setMod', name: m.id, value: !on }); };
+      const toggle = () => {
+        state.modsOn[m.id] = !on;
+        send({ cmd: 'setMod', name: m.id, value: !on });
+        // Turned on with its bar empty (never moved, or left at ×1): it starts at ×1.5. A speed
+        // someone chose before stays as they left it.
+        if (!on && m.setting && !(Number(state.modSettings[m.setting.key]) > m.setting.min)) {
+          state.modSettings[m.setting.key] = m.setting.fallback;
+          send({ cmd: 'setModSetting', name: m.setting.key, value: m.setting.fallback });
+        }
+      };
       const change = m.setting ? (step) => changeModSetting(m, step) : toggle;
       return { mod: m, label: m[state.lang], hint: w.modKeys(!!m.setting) + ' ' + w.modNext, change, activate: toggle };
     });
