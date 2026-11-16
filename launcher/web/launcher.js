@@ -34,7 +34,7 @@ const T = {
     prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
     hintMove: 'Elegir', hintChange: 'Cambiar', f10: 'Menú en el juego',
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
-    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', noManifest: 'sin manifiesto',
+    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', modKeys: (setting) => setting ? 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.' : 'Enter o ◀ ▶ lo activan o desactivan.', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
     keyboard: 'Teclado', keyboardHint: 'El teclado como el control del jugador 1. Apagado, se juega solo con un control o un Wii Remote real.',
     controller: 'Control', controllerHint: 'Conecta un control y el juego lo toma en lugar del teclado.',
@@ -69,7 +69,7 @@ const T = {
     prepared: 'The game is ready.', opening: 'Opening the game…',
     hintMove: 'Select', hintChange: 'Change', f10: 'Menu in the game',
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
-    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', noManifest: 'no manifest',
+    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', modKeys: (setting) => setting ? 'Enter turns it on or off; ◀ ▶ change the speed.' : 'Enter or ◀ ▶ turn it on or off.', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
     keyboard: 'Keyboard', keyboardHint: 'The keyboard as player 1\'s controller. Off, the game is played only with a controller or a real Wii Remote.',
     controller: 'Controller', controllerHint: 'Connect a controller and the game uses it instead of the keyboard.',
@@ -167,26 +167,32 @@ const PAD_LABEL = { south: 'A', east: 'B', west: 'X', north: 'Y', left_shoulder:
 function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 
 // The game's mods: each one is a line in Config.toml [mods] (host/launcher.cpp kMods), off until it is
-// turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods). A mod with
-// "speeds" is not just on or off: its line holds the speed chosen (false when it is off). The mods of
-// one "group" are listed together under the group's title.
+// turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods). A mod's
+// "setting", when it has one, is a percentage kept in its own line of [mods] (100 is the original
+// game; it only goes up). The mods of one "group" are listed together under the group's title.
 const MOD_GROUPS = {
   game: { es: 'Juego', en: 'Game' },
   qol: { es: 'Calidad de vida', en: 'Quality of life' },
 };
 const MODS = [
   { id: 'romance_any_gender', group: 'game', es: 'Amor para todos', en: 'Romance for everyone',
-    hint: { es: 'Cualquier candidato o candidata puede enamorarse de ti y casarse contigo, seas chico o chica. En pruebas.',
-      en: 'Any bachelor or bachelorette can fall in love with you and marry you, whether you play as a boy or a girl. Being tested.' } },
+    summary: { es: 'Cualquier candidato o candidata, seas chico o chica.', en: 'Any bachelor or bachelorette, boy or girl.' },
+    hint: { es: 'Cualquier candidato o candidata puede enamorarse de ti y casarse contigo, seas chico o chica. Las parejas del mismo sexo adoptan a sus hijos: la Diosa trae al bebé. En pruebas.',
+      en: 'Any bachelor or bachelorette can fall in love with you and marry you, whether you play as a boy or a girl. Couples of the same sex adopt their children: the Harvest Goddess brings the baby. Being tested.' } },
   { id: 'no_place_sign', group: 'qol', es: 'Sin letrero de las zonas al cargar', en: 'No area sign when loading',
-    hint: { es: 'Al cambiar de zona no sale el letrero con la foto y el nombre del lugar: la zona nueva aparece en cuanto carga.',
-      en: 'Changing area shows no sign with the picture and name of the place: the new area appears as soon as it loads.' } },
-  { id: 'faster_actions', group: 'qol', es: 'Acciones más rápidas', en: 'Faster actions', speeds: [1.5, 2, 3],
-    hint: { es: 'Recoger y soltar cosas, sacarlas de la mochila y usar las herramientas, a la velocidad que elijas. El resto del juego va igual.',
-      en: 'Picking things up and putting them down, taking them out of the rucksack and using the tools, at the speed you choose. The rest of the game is unchanged.' } },
-  { id: 'faster_walking', group: 'qol', es: 'Caminar más rápido', en: 'Faster walking', speeds: [1.5, 2, 3],
-    hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Los aldeanos, los animales y el reloj van igual.',
-      en: 'Your character walks and runs at the speed you choose. The villagers, the animals and the clock are unchanged.' } },
+    summary: { es: 'La zona nueva aparece en cuanto carga.', en: 'The new area appears as soon as it loads.' },
+    hint: { es: 'Al cambiar de zona, el juego muestra un letrero con la foto y el nombre del lugar durante segundo y medio antes de dejarte jugar. Con este mod no sale: la zona nueva aparece en cuanto termina de cargar.',
+      en: 'When you change area, the game shows a sign with the picture and name of the place for a second and a half before you can play. With this mod it does not show: the new area appears as soon as it has loaded.' } },
+  { id: 'faster_actions', group: 'qol', es: 'Acciones más rápidas', en: 'Faster actions',
+    summary: { es: 'Herramientas, recoger y soltar cosas.', en: 'Tools, picking up and putting down.' },
+    hint: { es: 'Recoger y soltar cosas, sacarlas de la mochila y usar las herramientas (la azada, la regadera, la hoz…) van a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. 100% es la velocidad del juego original.',
+      en: 'Picking things up and putting them down, taking them out of the rucksack and using the tools (the hoe, the watering can, the sickle…) go at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. 100% is the original game\'s speed.' },
+    setting: { key: 'faster_actions_percent', es: 'Velocidad de las acciones', en: 'Speed of the actions', min: 100, max: 300, step: 10, fallback: 150 } },
+  { id: 'faster_walking', group: 'qol', es: 'Caminar más rápido', en: 'Faster walking',
+    summary: { es: 'Tu personaje camina y corre más rápido.', en: 'Your character walks and runs faster.' },
+    hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. 100% es la velocidad del juego original.',
+      en: 'Your character walks and runs at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. 100% is the original game\'s speed.' },
+    setting: { key: 'faster_walking_percent', es: 'Velocidad al caminar', en: 'Walking speed', min: 100, max: 300, step: 10, fallback: 150 } },
 ];
 
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
@@ -215,7 +221,7 @@ const state = {
   controllers: 0,
   controls: { keyboard: true, keys: {}, pad: {}, fastForwardKey: 43, fastForwardButton: 'disabled' },
   capture: null,         // the button waiting for a key or a controller button: { action, until }
-  mods: MODS, modsOn: {},
+  mods: MODS, modsOn: {}, modSettings: {},
   version: 'dev',
 };
 
@@ -336,29 +342,13 @@ function rows() {
     return list;
   }
   if (state.tab === 2) {
-    // Grouped: each group's mods together, its title above the first one.
-    const order = Object.keys(MOD_GROUPS);
-    const sorted = MODS.slice().sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
-    return sorted.map((m, i) => {
-      const value = state.modsOn[m.id];
-      const section = i === 0 || sorted[i - 1].group !== m.group ? MOD_GROUPS[m.group][state.lang] : null;
-      if (m.speeds) {
-        // Off, then each speed; the arrows go through them.
-        const choices = [false].concat(m.speeds);
-        const at = Math.max(0, choices.findIndex((c) => c === value || (c !== false && value === true && c === m.speeds[0])));
-        const change = (step) => {
-          const next = choices[(at + step + choices.length) % choices.length];
-          state.modsOn[m.id] = next;
-          send({ cmd: 'setMod', name: m.id, value: next });
-        };
-        const shown = choices[at] === false ? w.off : '×' + choices[at];
-        return { section, label: m[state.lang], value: shown, tone: choices[at] === false ? 'off' : 'on', arrows: true,
-          hint: m.hint[state.lang] + ' ' + w.modNext, change, activate: () => change(1) };
-      }
-      const on = !!value;
+    // Each group's mods together. Enter turns the chosen one on or off; the arrows change its
+    // setting, or turn it on and off when it has none.
+    return modsInOrder().map((m) => {
+      const on = !!state.modsOn[m.id];
       const toggle = () => { state.modsOn[m.id] = !on; send({ cmd: 'setMod', name: m.id, value: !on }); };
-      return { section, label: m[state.lang], value: on ? w.on : w.off, tone: on ? 'on' : 'off', arrows: true,
-        hint: m.hint[state.lang] + ' ' + w.modNext, change: toggle, activate: toggle };
+      const change = m.setting ? (step) => changeModSetting(m, step) : toggle;
+      return { mod: m, label: m[state.lang], hint: w.modKeys(!!m.setting) + ' ' + w.modNext, change, activate: toggle };
     });
   }
   return [];
@@ -421,11 +411,6 @@ function playRow(r, i, chosen) {
       '</div></div></div>';
 }
 
-// A group's title in the list, above its first row (the Mods tab).
-function sectionTitle(text) {
-  return '<div style="flex:none;padding:6px 4px 0 10px;font:800 21px/1.2 \'Baloo 2\',sans-serif;letter-spacing:.06em;color:#3f7d14">' + esc(text) + '</div>';
-}
-
 function normalRow(r, i, chosen) {
   const pet = ROW_ANIMALS[state.tab][i % ROW_ANIMALS[state.tab].length];
   const value = r.html ? r.html : !r.value ? '' : r.tone === 'key'
@@ -439,6 +424,80 @@ function normalRow(r, i, chosen) {
     '<span style="position:relative;flex:1;align-self:flex-end;margin:0 14px 13px;border-bottom:2px solid rgba(255,255,255,.7)"></span>' +
     '<div style="position:relative;flex:none;margin-right:16px;display:flex;align-items:center;gap:10px;font:800 18px/1 \'Baloo 2\',sans-serif;color:#f08a2c">' +
       arrow('◀', -1) + value + arrow('▶', 1) + '</div></div>';
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Mods tab: the mods in a column on the left, each a card with its switch, and the chosen one
+// told in full on the right, with its setting at the bottom.
+
+function modsInOrder() {
+  const order = Object.keys(MOD_GROUPS);
+  return MODS.slice().sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+}
+
+function modSetting(m) {
+  const v = Number(state.modSettings[m.setting.key]);
+  return Number.isFinite(v) && v >= m.setting.min && v <= m.setting.max ? v : m.setting.fallback;
+}
+
+function changeModSetting(m, step) {
+  const next = Math.max(m.setting.min, Math.min(m.setting.max, modSetting(m) + step * m.setting.step));
+  state.modSettings[m.setting.key] = next;
+  send({ cmd: 'setModSetting', name: m.setting.key, value: next });
+}
+
+function modSwitch(on, i) {
+  return '<span data-toggle="' + i + '" style="position:relative;flex:none;width:54px;height:30px;box-sizing:border-box;border-radius:15px;cursor:pointer;' +
+    'background:' + (on ? '#5aae22' : '#c9b26a') + ';border:3px solid #fff;box-shadow:0 2px 0 rgba(74,44,18,.3)">' +
+    '<span style="position:absolute;top:2px;left:' + (on ? 26 : 2) + 'px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 0 rgba(74,44,18,.35);transition:left .12s"></span></span>';
+}
+
+function modCard(r, i, chosen) {
+  const m = r.mod, on = !!state.modsOn[m.id];
+  return '<div data-row="' + i + '" style="position:relative;flex:none;height:66px;border-radius:8px;background:#f1d250;display:flex;align-items:center;gap:14px;padding:0 14px;cursor:pointer">' + glow(chosen) +
+    '<span style="position:relative;display:flex">' + modSwitch(on, i) + '</span>' +
+    '<span style="position:relative;display:flex;flex-direction:column;min-width:0">' +
+      '<span style="font-size:23px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (chosen ? '#d2401a' : '#4a2c12') + '">' + esc(m[state.lang]) + '</span>' +
+      '<span style="font:700 15px/1.25 Dosis,sans-serif;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#8a6a2a">' + esc(m.summary[state.lang]) + '</span>' +
+    '</span></div>';
+}
+
+function modDetails(r, i) {
+  const w = t(), m = r.mod, on = !!state.modsOn[m.id];
+  const chip = '<span style="flex:none;padding:3px 14px;border-radius:14px;font:800 17px/1.3 \'Baloo 2\',sans-serif;letter-spacing:.04em;' +
+    (on ? 'background:#5aae22;color:#fff' : 'background:#e6d79a;color:#7a6224') + '">' + (on ? w.on : w.off) + '</span>';
+  let setting = '<div style="font:700 17px/1.3 Dosis,sans-serif;letter-spacing:.05em;color:#a08a4a">' + esc(w.modNoSettings) + '</div>';
+  if (m.setting) {
+    const v = modSetting(m), share = (v - m.setting.min) / (m.setting.max - m.setting.min);
+    const arrow = (dir, sign) => '<span data-step="' + sign + '" style="flex:none;width:26px;text-align:center;cursor:pointer;font:800 20px/1 \'Baloo 2\',sans-serif;color:#f08a2c">' + dir + '</span>';
+    setting = '<div style="display:flex;align-items:center;gap:10px">' +
+      '<span style="flex:none;font:700 19px/1.2 Dosis,sans-serif;letter-spacing:.05em;color:#4a2c12;white-space:nowrap">' + esc(m.setting[state.lang]) + '</span>' +
+      arrow('◀', -1) +
+      '<span style="position:relative;flex:1;height:16px;box-sizing:border-box;border-radius:8px;background:#efe2a0;border:2px solid #b9982e;overflow:hidden">' +
+        '<span style="position:absolute;left:0;top:0;bottom:0;width:' + (share * 100).toFixed(1) + '%;background:linear-gradient(#a8d830,#5aae22)"></span></span>' +
+      arrow('▶', 1) +
+      '<span style="flex:none;min-width:70px;box-sizing:border-box;text-align:center;padding:2px 10px;border-radius:10px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 19px/1.3 \'Baloo 2\',sans-serif;color:#5e3712">' + v + '%</span>' +
+    '</div>';
+  }
+  return '<div data-row="' + i + '" class="abs" style="left:640px;top:122px;width:540px;height:340px;box-sizing:border-box;border-radius:12px;background:#fffbe2;border:3px solid #dff29a;box-shadow:inset 0 0 0 2px #f1d250;padding:16px 20px;display:flex;flex-direction:column;gap:12px">' +
+    '<div style="display:flex;align-items:center;gap:12px">' +
+      '<span style="flex:1;min-width:0;font-size:27px;letter-spacing:.04em;color:#4a2c12;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(m[state.lang]) + '</span>' + chip + '</div>' +
+    '<div style="flex:1;overflow:hidden;font:600 19px/1.4 Dosis,sans-serif;letter-spacing:.03em;color:#5e3712;text-wrap:pretty">' + esc(m.hint[state.lang]) + '</div>' +
+    setting + '</div>';
+}
+
+function renderMods(list, sel) {
+  const groups = modsInOrder();
+  let cards = '';
+  list.forEach((r, i) => {
+    if (i === 0 || groups[i - 1].group !== r.mod.group) {
+      cards += '<div style="flex:none;padding:4px 4px 0 6px;font:800 21px/1.2 \'Baloo 2\',sans-serif;letter-spacing:.06em;color:#3f7d14">' + esc(MOD_GROUPS[r.mod.group][state.lang]) + '</div>';
+    }
+    cards += modCard(r, i, i === sel);
+  });
+  return '<div class="abs wheel" style="left:56px;top:116px;width:572px;height:352px;overflow:hidden">' +
+    '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:560px">' + cards + '</div></div>' +
+    (list[sel] ? modDetails(list[sel], sel) : '');
 }
 
 function render() {
@@ -475,10 +534,12 @@ function render() {
 
   // The list (or the mods).
   let html = '';
-  if (list.length) {
+  if (list.length && tab === 2) {
+    html += renderMods(list, sel);
+  } else if (list.length) {
     html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
       '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:1124px">' +
-      list.map((r, i) => (r.section ? sectionTitle(r.section) : '') + (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
+      list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
   if (!list.length) {
     html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + w.noMods + '</div>';
@@ -507,6 +568,15 @@ $('stage').addEventListener('click', (e) => {
   const tabStep = e.target.closest('[data-tabstep]');
   if (tabEl) return setTab(Number(tabEl.dataset.tab));
   if (tabStep) return setTab(state.tab + Number(tabStep.dataset.tabstep));
+  const toggleEl = e.target.closest('[data-toggle]');
+  if (state.tab === 2 && rowEl) {
+    const i = Number(rowEl.dataset.row), r = rows()[i];
+    state.sel = i; state.toast = '';
+    if (toggleEl && r) r.activate();
+    else if (stepEl && r && r.mod.setting) changeModSetting(r.mod, Number(stepEl.dataset.step));
+    render();
+    return;
+  }
   if (rowEl) {
     const i = Number(rowEl.dataset.row), r = rows()[i];
     state.sel = i;
@@ -693,6 +763,7 @@ function receive(message) {
   if (message.type === 'state') {
     for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version', 'controls']) if (key in message) state[key] = message[key];
     if (message.mods) state.modsOn = message.mods;
+    if (message.modSettings) state.modSettings = message.modSettings;
 
     if (message.options) {
       for (const o of OPTS) {

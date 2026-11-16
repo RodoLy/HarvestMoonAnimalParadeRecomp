@@ -14,6 +14,7 @@
 //   setKeyboard  turn the keyboard on or off as the first player's controller
 //   resetControls  put every key and controller button back as they start
 //   setMod       turn a game mod on or off ([mods] in Config.toml)
+//   setModSetting  set a mod's percentage (its own line in [mods])
 //   setUiLanguage, minimize, drag, exit
 //
 // Built with the llvm-mingw compiler that comes with the package (see launcher/build.ps1). The
@@ -732,24 +733,15 @@ int ConnectedControllers() {
 }
 
 // The game's mods (runtime/src/hle/game_mods in WiiCompiled's patch): each is a line in [mods] of
-// Config.toml, off unless it says true, or a speed (a number) for the mods that have one. The page
-// has their names, descriptions and speeds.
+// Config.toml, off unless it says true. Some have a setting, a percentage in a line of its own in
+// [mods] (from 100, the original game, to 300). The page has their names, descriptions and limits.
 const char* const kMods[] = {"romance_any_gender", "no_place_sign", "faster_actions", "faster_walking"};
+const char* const kModSettings[] = {"faster_actions_percent", "faster_walking_percent"};
 
-// A mod's line as the page's value: true, false, or the number it holds.
-bool IsModNumber(const std::string& text) {
-    if (text.empty() || text.size() > 6) return false;
-    bool dot = false;
-    for (char c : text) {
-        if (c == '.' && !dot) dot = true;
-        else if (!isdigit(static_cast<unsigned char>(c))) return false;
-    }
-    return text != ".";
-}
-
-std::wstring ModJson(const std::string& line) {
-    if (line == "true") return L"true";
-    return IsModNumber(line) ? Wide(line) : L"false";
+// A whole number of at most three digits: what a percentage line may hold.
+bool IsPercent(const std::string& text) {
+    return !text.empty() && text.size() <= 3 &&
+           std::all_of(text.begin(), text.end(), [](char c) { return isdigit(static_cast<unsigned char>(c)); });
 }
 
 std::wstring StateJson(const wchar_t* status) {
@@ -769,7 +761,12 @@ std::wstring StateJson(const wchar_t* status) {
     json << L"},\"controls\":" << ControlsJson(config) << L",\"mods\":{";
     for (size_t i = 0; i < std::size(kMods); ++i) {
         json << (i ? L"," : L"") << L"\"" << Wide(kMods[i]) << L"\":"
-             << ModJson(config.Get("mods", kMods[i]).value_or("false"));
+             << (config.Get("mods", kMods[i]).value_or("false") == "false" ? L"false" : L"true");
+    }
+    json << L"},\"modSettings\":{";
+    for (size_t i = 0; i < std::size(kModSettings); ++i) {
+        const std::string value = config.Get("mods", kModSettings[i]).value_or("");
+        json << (i ? L"," : L"") << L"\"" << Wide(kModSettings[i]) << L"\":" << (IsPercent(value) ? Wide(value) : L"null");
     }
     json << L"}}";
     return json.str();
@@ -846,9 +843,19 @@ void OnPageMessage(const std::wstring& json) {
         const std::string name = Utf8(message[L"name"]);
         if (std::find_if(std::begin(kMods), std::end(kMods), [&](const char* mod) { return name == mod; }) != std::end(kMods)) {
             ConfigFile config = ConfigFile::Load();
-            // true, false, or a speed: anything else turns the mod off.
-            const std::string value = Utf8(message[L"value"]);
-            config.Set("mods", name, value == "true" || IsModNumber(value) ? value : "false");
+            config.Set("mods", name, message[L"value"] == L"true" ? "true" : "false");
+            config.Save();
+        }
+        PostToPage(StateJson(CurrentStatus()));
+    } else if (cmd == L"setModSetting") {
+        // A mod's percentage, from 100 to 300.
+        const std::string name = Utf8(message[L"name"]);
+        const std::string value = Utf8(message[L"value"]);
+        if (std::find_if(std::begin(kModSettings), std::end(kModSettings), [&](const char* key) { return name == key; }) !=
+                std::end(kModSettings) &&
+            IsPercent(value) && std::stoi(value) >= 100 && std::stoi(value) <= 300) {
+            ConfigFile config = ConfigFile::Load();
+            config.Set("mods", name, value);
             config.Save();
         }
         PostToPage(StateJson(CurrentStatus()));
