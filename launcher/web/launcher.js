@@ -305,6 +305,7 @@ function rows() {
       { label: w.changeDisc, value: state.discId || '—', tone: 'value', hint: w.changeDiscHint, activate: () => { if (st !== 'preparing') send({ cmd: 'chooseDisc' }); } },
       { label: w.uiLanguage, value: LANGUAGE.values.en[state.options.language], tone: 'value', arrows: true, hint: w.uiLanguageHint,
         change: (step) => setLanguage(state.options.language + step), activate: () => setLanguage(state.options.language + 1) },
+      { label: w.openLog, hint: w.openLogHint, activate: () => send({ cmd: 'openLog' }) },
       { label: st === 'preparing' ? w.cancel : w.exit, value: 'Esc', tone: 'key', hint: w.exitHint, activate: escape }];
   }
   if (state.tab === 1) {
