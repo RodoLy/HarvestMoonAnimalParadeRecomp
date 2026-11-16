@@ -51,8 +51,8 @@ a candidate and press it, then save in the game. It sets that candidate's hearts
 their heart events before the proposal as seen (the flags their conditions in
 `event/prm_love.epc` ask for) and builds the house up once. *Hold a Blue Feather* puts the feather
 (item 1269) in the player's hands, so it can be given right away. *Easy confession and proposal*
-(read at the next start) makes the candidate's confession start on reaching the lighthouse's area
-(field 1, the town, where its spot is) at any hour instead of only in the evening, and lets the proposal,
+(read at the next start) makes the candidate's confession start at its own spot in front of the
+lighthouse at any hour of the day instead of only in the evening, and lets the proposal,
 talking to them, go ahead without the Blue Feather. Both scenes are staged in their own places, so
 their triggers keep those places: started on the farm, the confession looked at an empty corner and
 the proposal left the screen black.
@@ -165,8 +165,8 @@ una partida, elige un candidato, púlsalo y guarda en el juego. Pone los corazon
 al máximo, marca como vistos sus eventos de corazón anteriores a la pedida (las banderas que piden
 sus condiciones en `event/prm_love.epc`) y amplía la casa una vez. *Hold a Blue Feather* pone la
 pluma (objeto 1269) en las manos del jugador, para darla en seguida. *Easy confession and proposal*
-(se lee al siguiente arranque) hace que la declaración del candidato empiece al llegar a la zona del
-faro (el campo 1, el pueblo, donde está su punto) a cualquier hora en vez de solo por la tarde, y que la pedida,
+(se lee al siguiente arranque) hace que la declaración del candidato empiece en su propio punto frente
+al faro a cualquier hora del día en vez de solo por la tarde, y que la pedida,
 al hablarle, salga sin la Pluma Azul. Las dos escenas están montadas en su propio lugar, así que sus
 disparadores conservan ese lugar: empezadas en la granja, la declaración miraba a un rincón vacío y
 la pedida dejaba la pantalla en negro.
