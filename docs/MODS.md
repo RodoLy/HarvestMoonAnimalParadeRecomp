@@ -95,9 +95,15 @@ The spouse calls the player by the name the wedding sets (game variable 0x51). A
 marriage by changing the game's memory has to set it too (to 0), or those lines show no name.
 
 **Still to do:**
-- Try it all in the game: the proposal, the wedding, the spouse at home and the second adoption
-  (the first was tried in the cloud with a marriage made in memory: question, Goddess, name, book,
-  flags).
+- Try it all in the game: the proposal, the wedding and the spouse at home. Both adoptions were
+  tried in the cloud: the first with a marriage made in memory (question, Goddess, name, book,
+  flags), the second after the developers' own set-up script `script/config/05_Child2.opb`
+  (married to Luke, first child grown) with the player's sex turned to the spouse's.
+
+The disc keeps the developers' set-up scripts in `script/config/` (`03_Marriage.opb`,
+`04_Child1.opb`, `05_Child2.opb`, `06_Child2Birth.opb` and more): each puts the game's state where a
+part of the family story starts. They are OPAL scenes like any other, so for testing one can be
+played in place of a scene the game already plays.
 - Check the rest of the places that read the player's sex: the wedding, the spouse at home and the
   rivals.
 
@@ -199,8 +205,15 @@ que hace un matrimonio cambiando la memoria del juego también tiene que fijarla
 salen sin nombre.
 
 **Falta:**
-- Probarlo todo en el juego: la pedida, la boda, la pareja en casa y la segunda adopción (la
-  primera se probó en la nube con un matrimonio hecho en memoria: pregunta, Diosa, nombre, libro,
-  banderas).
+- Probarlo todo en el juego: la pedida, la boda y la pareja en casa. Las dos adopciones se
+  probaron en la nube: la primera con un matrimonio hecho en memoria (pregunta, Diosa, nombre,
+  libro, banderas), la segunda tras el script de preparación de los propios desarrolladores
+  `script/config/05_Child2.opb` (casada con Luke, primer hijo ya crecido) cambiando el sexo de quien
+  juega al de la pareja.
+
+El disco guarda los scripts de preparación de los desarrolladores en `script/config/`
+(`03_Marriage.opb`, `04_Child1.opb`, `05_Child2.opb`, `06_Child2Birth.opb` y más): cada uno deja el
+estado del juego donde empieza una parte de la historia de la familia. Son escenas OPAL como las
+demás, así que para probar se puede poner una en lugar de una escena que el juego ya pone.
 - Revisar el resto de los lugares que leen el sexo de quien juega: la boda, la pareja en casa y
   los rivales.
