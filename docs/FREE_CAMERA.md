@@ -1,0 +1,126 @@
+# Free camera / Cámara libre
+
+[Español abajo](#español)
+
+## English
+
+A study of what a free camera mod would take. Nothing here is built yet; this branch keeps the
+notes until the work starts.
+
+### How the game's camera works
+
+- **Every area has a fixed camera.** `param/camera/camera.dat` holds one entry of 0x58 bytes per
+  map (0x5E of them). An entry is a camera that follows the player from a set offset, for
+  instance a target 0.7 above the player and the eye at (-5, 4, 6) from it, with zoom steps, a
+  60° field of view and near and far planes of 0.025 and 250. The game's debug build could move it
+  and save it ("Save Default Map Camera", `cam_pos`, `cam_rot`, `%s/map_camera/%s.txt`).
+- **Three kinds of camera.** The map camera above; `FixedCamera` (`FIX_CAMERA_%02d`), a camera
+  standing in one place; and `MotionCamera` (`MOTION_CAMERA_%02d`, `MOTION_CAM_SET`,
+  `MOTION_CAM_PLAY`), the one the scenes move. The functions that run them are around
+  0x8003D000-0x8003F000; they set the engine's camera through small setters (0x80066898,
+  0x800668A8, 0x80066930 and the like).
+- **The engine's camera.** Every frame 0x8005277C (an `AA_CCamera` wrapper) reads the eye and the
+  target from the engine camera (+4: the eye at +4..+0xC), sets the field of view and the aspect,
+  and builds the projection (0x803060BC, the function the wide picture already widens). This is
+  the last point before the picture is drawn: a camera written here is what the player sees.
+- **Culling.** The game decides what is on screen from the same camera (0x80064638 builds the
+  frustum from tan(fovy / 2) · aspect). The wide picture had to widen it too, or the sides of
+  the picture stayed empty.
+
+### Two ways to do it
+
+1. **Orbit camera (the game's camera, turned).** The right stick turns the map camera's offset
+   around the player and pulls it closer or farther. The game keeps doing everything else: it
+   follows the player, culls, and the scenes keep their own cameras.
+   - To check first: whether walking follows the camera (the player's update turns the stick into a
+     direction from the camera's angle; if it reads the live camera, walking turns with it, as
+     players expect).
+   - Indoors the fixed camera hides walls that were never modelled: turning it there would show
+     the back of the room. The mod would turn only outdoors, or within limits per area.
+   - Size: one or two sessions.
+2. **Free camera (detached).** A camera that flies on its own, for photos or to look around:
+   written into the engine camera at 0x8005277C every frame, moved with the right stick (turn) and
+   the left stick or the triggers (move), while the player stands still.
+   - Culling has to come from the free camera, or things vanish where the game's camera does not
+     look.
+   - Areas only have what their camera shows: outside the play area, or behind the fixed cameras
+     indoors, there are holes and unfinished backs.
+   - Scenes: off while a `MotionCamera` or `FixedCamera` is running.
+   - Size: several sessions; it builds on the orbit camera's findings.
+
+### Controls
+
+The Wii game uses the Wii Remote and the Nunchuk, one stick. A PC controller's right stick is not
+used by the port (the launcher's controls bind the buttons, the D-pad and the left stick), so the
+mod can read it directly through SDL, as the fast-forward button is read (`runtime/src/hle/vi.cpp`,
+`FastForwardButtonHeld`). On the keyboard and mouse it would need keys of its own, chosen in the
+launcher.
+
+### Plan
+
+Start with the orbit camera as a quality of life mod, off by default: find how walking takes its
+direction from the camera, turn the map camera with the right stick, and limit it indoors. Then the
+free camera, on top of it.
+
+---
+
+## Español
+
+Un estudio de lo que haría falta para un mod de cámara libre. Aún no hay nada hecho; esta rama
+guarda las notas hasta que empiece el trabajo.
+
+### Cómo funciona la cámara del juego
+
+- **Cada zona tiene una cámara fija.** `param/camera/camera.dat` tiene una entrada de 0x58 bytes
+  por mapa (0x5E en total). Cada entrada es una cámara que sigue a quien juega desde una posición
+  fija, por ejemplo mirando 0.7 por encima del personaje desde (-5, 4, 6), con pasos de zoom, un
+  campo de visión de 60° y planos cercano y lejano de 0.025 y 250. La versión de depuración del
+  juego podía moverla y guardarla ("Save Default Map Camera", `cam_pos`, `cam_rot`,
+  `%s/map_camera/%s.txt`).
+- **Tres tipos de cámara.** La del mapa; `FixedCamera` (`FIX_CAMERA_%02d`), una cámara parada en un
+  lugar; y `MotionCamera` (`MOTION_CAMERA_%02d`, `MOTION_CAM_SET`, `MOTION_CAM_PLAY`), la que
+  mueven las escenas. Las funciones que las manejan están cerca de 0x8003D000-0x8003F000 y ponen
+  la cámara del motor con funciones pequeñas (0x80066898, 0x800668A8, 0x80066930 y parecidas).
+- **La cámara del motor.** En cada cuadro, 0x8005277C (un `AA_CCamera`) lee el ojo y el punto al
+  que mira de la cámara del motor (+4: el ojo en +4..+0xC), pone el campo de visión y la
+  proporción, y arma la proyección (0x803060BC, la función que ya ensancha la imagen ancha). Es el
+  último paso antes de dibujar: una cámara escrita ahí es lo que se ve.
+- **Recorte.** El juego decide qué está en pantalla con la misma cámara (0x80064638 arma el campo
+  de visión con tan(fovy / 2) · proporción). La imagen ancha tuvo que ensancharlo también, o los
+  lados de la imagen quedaban vacíos.
+
+### Dos maneras de hacerlo
+
+1. **Cámara orbital (la del juego, girada).** El stick derecho gira la posición de la cámara del
+   mapa alrededor del personaje y la acerca o la aleja. El juego sigue haciendo lo demás: sigue al
+   personaje, recorta, y las escenas siguen con sus propias cámaras.
+   - Lo primero a revisar: si caminar sigue a la cámara (la actualización del personaje convierte
+     el stick en una dirección según el ángulo de la cámara; si lee la cámara viva, caminar gira
+     con ella, como se espera).
+   - Dentro de las casas la cámara fija esconde paredes que nunca se modelaron: girarla ahí
+     mostraría la parte de atrás del cuarto. El mod giraría solo al aire libre, o con límites por
+     zona.
+   - Tamaño: una o dos sesiones.
+2. **Cámara libre (suelta).** Una cámara que vuela sola, para fotos o para mirar alrededor: se
+   escribe en la cámara del motor en 0x8005277C en cada cuadro y se mueve con el stick derecho
+   (girar) y el izquierdo o los gatillos (moverse), mientras el personaje se queda quieto.
+   - El recorte tiene que salir de la cámara libre, o las cosas desaparecen donde la cámara del
+     juego no mira.
+   - Las zonas solo tienen lo que su cámara muestra: fuera del área de juego, o detrás de las
+     cámaras fijas de las casas, hay huecos y partes sin terminar.
+   - Escenas: apagada mientras corre una `MotionCamera` o una `FixedCamera`.
+   - Tamaño: varias sesiones; se apoya en lo que se aprenda con la orbital.
+
+### Controles
+
+El juego de Wii usa el Wii Remote y el Nunchuk, un solo stick. El port no usa el stick derecho de un
+control de PC (los controles del launcher asignan los botones, la cruceta y el stick izquierdo), así
+que el mod puede leerlo directo con SDL, como se lee el botón de avance rápido
+(`runtime/src/hle/vi.cpp`, `FastForwardButtonHeld`). Con teclado y ratón necesitaría teclas propias,
+elegidas en el launcher.
+
+### Plan
+
+Empezar por la cámara orbital como mod de calidad de vida, apagado de inicio: ver cómo caminar toma
+su dirección de la cámara, girar la cámara del mapa con el stick derecho y limitarla dentro de las
+casas. Después la cámara libre, encima de eso.
