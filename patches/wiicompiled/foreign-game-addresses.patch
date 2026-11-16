@@ -2979,10 +2979,10 @@ index 0000000..4afa2fd
 +} // namespace
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.cpp b/runtime/src/hle/game_mods/romance_any_gender.cpp
 new file mode 100644
-index 0000000..98cffd6
+index 0000000..ff1de61
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.cpp
-@@ -0,0 +1,658 @@
+@@ -0,0 +1,671 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender": every marriage candidate can fall in love
 +// with the player, whether the player is a man or a woman. Off unless Config.toml says
 +//   [mods]
@@ -3479,8 +3479,21 @@ index 0000000..98cffd6
 +    return {flags.begin(), flags.end()};
 +}
 +
-+// Puts a Blue Feather in the player's hands; false while the player is not on screen.
++// Gives the player a Blue Feather the way the game's scenes give items (command 0x306, 0x8010D8A0):
++// {item, count} pairs of 16 bits in a queue of 30 at 0x80502180 + 0x9C, which the game moves into
++// the rucksack at once (an empty slot is item -1). The proposal asks for one in the rucksack
++// ({10, 1269, 0, >=, 0, 1} in prm_love.epc): a feather only in the hands is given as a plain gift.
++// Then it puts the feather in the player's hands; false while the player is not on screen.
 +bool HoldBlueFeather() {
++    constexpr uint32_t kGivenItems = 0x80502180u + 0x9Cu;
++    for (uint32_t slot = 0; slot < 30; ++slot) {
++        const uint32_t at = kGivenItems + 4 * slot;
++        if (static_cast<int16_t>(Memory::Read16(at)) == -1) {
++            Memory::Write16(at, static_cast<uint16_t>(kBlueFeather));
++            Memory::Write16(at + 2, 1);
++            break;
++        }
++    }
 +    const uint32_t player = Memory::Read32(kPlayerObject);
 +    if (player == 0 || !Memory::Contains(player + 0x650, 4)) {
 +        return false;
@@ -3587,7 +3600,7 @@ index 0000000..98cffd6
 +    ImGui::SameLine();
 +    if (ImGui::Button("Hold a Blue Feather")) {
 +        result = HoldBlueFeather()
-+            ? "The player holds a Blue Feather (it may not show in the hands). Give it to the candidate."
++            ? "A Blue Feather in the rucksack and the player's hands (it may not show). Give it to the candidate."
 +            : "The player is not on screen.";
 +        std::fprintf(stderr, "[mod %s] test: %s\n", kMod, result.c_str());
 +    }

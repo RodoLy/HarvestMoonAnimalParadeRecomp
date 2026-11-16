@@ -49,8 +49,10 @@ What the game does, and what the mod changes:
 **Testing.** With the mod on, F10 has a **Mods** menu with *Ready to propose*: load a game, choose
 a candidate and press it, then save in the game. It sets that candidate's hearts to the most, marks
 their heart events before the proposal as seen (the flags their conditions in
-`event/prm_love.epc` ask for) and builds the house up once. *Hold a Blue Feather* puts the feather
-(item 1269) in the player's hands, so it can be given right away. *Confession at any hour*
+`event/prm_love.epc` ask for) and builds the house up once. *Hold a Blue Feather* gives the player the
+feather (item 1269) the way the game's scenes give items (a queue at `0x80502180 + 0x9C` that the
+game empties into the rucksack) and puts it in the player's hands, so it can be given right away.
+The proposal asks for the feather in the rucksack: one only in the hands is taken as a plain gift. *Confession at any hour*
 (read at the next start) makes the candidate's confession start at its own spot in front of the
 lighthouse at any hour of the day instead of only in the evening. The proposal stays as in the
 game, giving the candidate the Blue Feather: its scene starts with the player holding the feather
@@ -163,8 +165,10 @@ Lo que hace el juego y lo que cambia el mod:
 **Para probar.** Con el mod encendido, F10 tiene un menú **Mods** con *Ready to propose*: carga
 una partida, elige un candidato, púlsalo y guarda en el juego. Pone los corazones de ese candidato
 al máximo, marca como vistos sus eventos de corazón anteriores a la pedida (las banderas que piden
-sus condiciones en `event/prm_love.epc`) y amplía la casa una vez. *Hold a Blue Feather* pone la
-pluma (objeto 1269) en las manos del jugador, para darla en seguida. *Confession at any hour*
+sus condiciones en `event/prm_love.epc`) y amplía la casa una vez. *Hold a Blue Feather* le da la pluma
+(objeto 1269) a quien juega como la dan las escenas del juego (una cola en `0x80502180 + 0x9C` que el
+juego vacía en la mochila) y se la pone en las manos, para darla en seguida. La pedida pide la pluma
+en la mochila: una que solo está en las manos se toma como un regalo normal. *Confession at any hour*
 (se lee al siguiente arranque) hace que la declaración del candidato empiece en su propio punto
 frente al faro a cualquier hora del día en vez de solo por la tarde. La pedida queda como en el
 juego, dándole al candidato la Pluma Azul: su escena empieza con quien juega ofreciendo la pluma, y
