@@ -173,6 +173,7 @@ function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 const MOD_GROUPS = {
   game: { es: 'Juego', en: 'Game' },
   qol: { es: 'Calidad de vida', en: 'Quality of life' },
+  cheats: { es: 'Trucos', en: 'Cheats' },
 };
 const MODS = [
   { id: 'romance_any_gender', group: 'game', es: 'Amor para todos', en: 'Romance for everyone',
@@ -193,6 +194,18 @@ const MODS = [
     hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. ×1 es la velocidad del juego original.',
       en: 'Your character walks and runs at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. ×1 is the original game\'s speed.' },
     setting: { key: 'faster_walking_percent', es: 'Velocidad al caminar', en: 'Walking speed', min: 100, max: 300, step: 25, fallback: 150 } },
+  { id: 'cheat_infinite_stamina', group: 'cheats', es: 'Estamina infinita', en: 'Infinite stamina',
+    summary: { es: 'Trabajar nunca te cansa.', en: 'Work never tires you.' },
+    hint: { es: 'La barra de estamina siempre está llena: puedes trabajar todo el día sin cansarte ni desmayarte.',
+      en: 'The stamina bar is always full: you can work all day without getting tired or fainting.' } },
+  { id: 'cheat_infinite_money', group: 'cheats', es: 'Dinero infinito', en: 'Infinite money',
+    summary: { es: 'Siempre tienes 999,999 G.', en: 'You always have 999,999 G.' },
+    hint: { es: 'Tu dinero se queda en 999,999 G: lo que gastes vuelve enseguida. Si lo apagas, te quedas con lo que tengas en ese momento.',
+      en: 'Your money stays at 999,999 G: what you spend comes straight back. If you turn it off, you keep what you have at that moment.' } },
+  { id: 'cheat_stop_time', group: 'cheats', es: 'Detener el tiempo', en: 'Stop time',
+    summary: { es: 'El reloj no avanza.', en: 'The clock does not move.' },
+    hint: { es: 'El reloj del juego se queda quieto mientras juegas. Dormir sí te lleva al día siguiente, y las escenas que adelantan la hora siguen haciéndolo.',
+      en: 'The game\'s clock stands still while you play. Sleeping still takes you to the next day, and the scenes that move the time on still do.' } },
 ];
 
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
