@@ -17,8 +17,8 @@
 
 const T = {
   es: {
-    subtitle: 'versión nativa para PC', tabs: ['Juego', 'Opciones', 'Mods', 'Controles'],
-    panel: ['Animal Parade', 'Imagen y sonido', '', 'Botones y teclas'], modsOn: (a, b) => a + ' de ' + b + ' activados',
+    subtitle: 'versión nativa para PC', tabs: ['Juego', 'Opciones', 'Mods', 'Trucos', 'Controles'],
+    panel: ['Animal Parade', 'Imagen y sonido', '', '', 'Botones y teclas'], modsOn: (a, b) => a + ' de ' + b + ' activados',
     disc: 'Disco', version: 'versión', on: 'Activado', off: 'Desactivado',
     ready: 'Listo', notPrepared: 'Sin preparar', preparingS: 'Preparando', failed: 'Falló',
     play: 'Jugar', prepare: 'Preparar el juego', preparing: 'Preparando…', tryAgain: 'Intentar de nuevo',
@@ -34,7 +34,7 @@ const T = {
     prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
     hintMove: 'Elegir', hintChange: 'Cambiar', f10: 'Menú en el juego',
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
-    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', modKeys: (setting) => setting ? 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.' : 'Enter o ◀ ▶ lo activan o desactivan.', noManifest: 'sin manifiesto',
+    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', cheatNoSettings: 'Este truco no tiene ajustes.', noCheats: 'No hay trucos.', modKeys: (setting) => setting ? 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.' : 'Enter o ◀ ▶ lo activan o desactivan.', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
     keyboard: 'Teclado', keyboardHint: 'El teclado como el control del jugador 1. Apagado, se juega solo con un control o un Wii Remote real.',
     controller: 'Control', controllerHint: 'Conecta un control y el juego lo toma en lugar del teclado.',
@@ -52,8 +52,8 @@ const T = {
     reserved: 'F10 abre el menú del juego; elige otra tecla.',
   },
   en: {
-    subtitle: 'native PC port', tabs: ['Game', 'Options', 'Mods', 'Controls'],
-    panel: ['Animal Parade', 'Picture and sound', '', 'Buttons and keys'], modsOn: (a, b) => a + ' of ' + b + ' on',
+    subtitle: 'native PC port', tabs: ['Game', 'Options', 'Mods', 'Cheats', 'Controls'],
+    panel: ['Animal Parade', 'Picture and sound', '', '', 'Buttons and keys'], modsOn: (a, b) => a + ' of ' + b + ' on',
     disc: 'Disc', version: 'version', on: 'On', off: 'Off',
     ready: 'Ready', notPrepared: 'Not prepared', preparingS: 'Preparing', failed: 'Failed',
     play: 'Play', prepare: 'Prepare the game', preparing: 'Preparing…', tryAgain: 'Try again',
@@ -69,7 +69,7 @@ const T = {
     prepared: 'The game is ready.', opening: 'Opening the game…',
     hintMove: 'Select', hintChange: 'Change', f10: 'Menu in the game',
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
-    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', modKeys: (setting) => setting ? 'Enter turns it on or off; ◀ ▶ change the speed.' : 'Enter or ◀ ▶ turn it on or off.', noManifest: 'no manifest',
+    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', cheatNoSettings: 'This cheat has no settings.', noCheats: 'There are no cheats.', modKeys: (setting) => setting ? 'Enter turns it on or off; ◀ ▶ change the speed.' : 'Enter or ◀ ▶ turn it on or off.', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
     keyboard: 'Keyboard', keyboardHint: 'The keyboard as player 1\'s controller. Off, the game is played only with a controller or a real Wii Remote.',
     controller: 'Controller', controllerHint: 'Connect a controller and the game uses it instead of the keyboard.',
@@ -169,7 +169,8 @@ function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 // The game's mods: each one is a line in Config.toml [mods] (host/launcher.cpp kMods), off until it is
 // turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods). A mod's
 // "setting", when it has one, is a speed kept as a percentage in its own line of [mods] (100 is the
-// original game; it only goes up), shown as ×1, ×1.25, ×1.5… up to ×3. The mods of one "group" are listed together under the group's title.
+// original game; it only goes up), shown as ×1, ×1.25, ×1.5… up to ×3. The mods of one "group" are
+// listed together under the group's title; the "cheats" group has a tab of its own (TAB.cheats).
 const MOD_GROUPS = {
   game: { es: 'Juego', en: 'Game' },
   qol: { es: 'Calidad de vida', en: 'Quality of life' },
@@ -226,10 +227,19 @@ const GAMEPAD = '<svg viewBox="0 0 24 16" width="1.15em" height="0.8em" style="d
   '<path d="M5.2 4.4h1.6v1.8h1.8v1.6H6.8v1.8H5.2V7.8H3.4V6.2h1.8z" fill="#000"/>' +
   '<circle cx="17.2" cy="5.4" r="1.2" fill="#000"/><circle cx="19.4" cy="7.6" r="1.2" fill="#000"/></mask>' +
   '<path mask="url(#gamepadHoles)" d="M6 1h12a5 5 0 0 1 4.8 3.6l1 4.6A3.6 3.6 0 0 1 17.6 12L15.8 10H8.2L6.4 12A3.6 3.6 0 0 1 .2 9.2l1-4.6A5 5 0 0 1 6 1z"/></svg>';
-const SYMS = ['★', '⚙\uFE0E', '✿\uFE0E', GAMEPAD];
-const ROW_ANIMALS = [['elephant', 'giraffe', 'zebra', 'hippo'], ['cow', 'horse', 'sheep', 'chicken', 'duck', 'chick', 'lion', 'ostrich'], ['cow'], ['sheep', 'chicken', 'duck', 'zebra']];
-const PARADE_TOP = [{ n: 'giraffe', left: 6, h: 92, sway: true }, { n: 'elephant', left: 46, w: 64, h: 64 }, { n: 'lion', left: 104, w: 60, h: 60, hop: true },
-  { n: 'ostrich', left: 188, h: 84, sway: true }, { n: 'hippo', left: 82, w: 46, h: 46 }, { n: 'zebra', left: 150, w: 52, h: 52 }];
+const SYMS = ['★', '⚙\uFE0E', '✿\uFE0E', '♣\uFE0E', GAMEPAD];
+// The tabs, in the order they are drawn. Mods and Cheats are the same kind of list: the cheats are
+// mods too (lines of [mods] in Config.toml), shown apart so that playing with mods is not playing
+// with cheats.
+const TAB = { game: 0, options: 1, mods: 2, cheats: 3, controls: 4 };
+const TAB_COUNT = SYMS.length;
+const isModList = (tab) => tab === TAB.mods || tab === TAB.cheats;
+// The mods each of those two tabs lists: the cheats group on Cheats, every other group on Mods.
+const modsOfTab = (tab) => MODS.filter((m) => (m.group === 'cheats') === (tab === TAB.cheats));
+const ROW_ANIMALS = [['elephant', 'giraffe', 'zebra', 'hippo'], ['cow', 'horse', 'sheep', 'chicken', 'duck', 'chick', 'lion', 'ostrich'], ['cow'], ['cow'], ['sheep', 'chicken', 'duck', 'zebra']];
+// The top parade sits between the panel's title and the tabs, so it is kept narrow.
+const PARADE_TOP = [{ n: 'giraffe', left: 0, h: 92, sway: true }, { n: 'elephant', left: 38, w: 64, h: 64 }, { n: 'lion', left: 96, w: 60, h: 60, hop: true },
+  { n: 'ostrich', left: 142, h: 84, sway: true }, { n: 'hippo', left: 74, w: 46, h: 46 }];
 const PARADE_BOTTOM = [{ n: 'horse', w: 48, h: 48 }, { n: 'cow', w: 46, h: 46, ml: -4 }, { n: 'sheep', w: 42, h: 42, ml: -4 }, { n: 'chicken', w: 36, h: 36, ml: -4, hop: true },
   { n: 'chick', w: 18, h: 18, ml: -2, hop: true }, { n: 'duck', w: 36, h: 36, hop: true }, { n: 'chick', w: 18, h: 18, ml: -2, hop: true }];
 
@@ -315,7 +325,7 @@ function parade(list, flex) {
 
 function rows() {
   const w = t(), st = state.status;
-  if (state.tab === 0) {
+  if (state.tab === TAB.game) {
     const play = { play: true, value: 'Enter' };
     if (st === 'preparing') {
       const i = state.stage;
@@ -333,7 +343,7 @@ function rows() {
       { label: w.openLog, hint: w.openLogHint, activate: () => send({ cmd: 'openLog' }) },
       { label: st === 'preparing' ? w.cancel : w.exit, value: 'Esc', tone: 'key', hint: w.exitHint, activate: escape }];
   }
-  if (state.tab === 1) {
+  if (state.tab === TAB.options) {
     return OPTS.filter((o) => o.key !== 'language').map((o) => {
       const v = state.options[o.key], n = o.settings.length;
       const change = (step) => {
@@ -345,7 +355,7 @@ function rows() {
         tone: o.flag ? (v ? 'on' : 'off') : 'value', change, activate: () => change(1) };
     });
   }
-  if (state.tab === 3) {
+  if (state.tab === TAB.controls) {
     const c = state.controls;
     const toggleKeyboard = () => { c.keyboard = !c.keyboard; send({ cmd: 'setKeyboard', value: c.keyboard }); };
     const list = [{ label: w.keyboard, value: c.keyboard ? w.on : w.off, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
@@ -367,8 +377,8 @@ function rows() {
       { label: w.wiimote, value: w.inF10, tone: 'value', hint: w.wiimoteHint });
     return list;
   }
-  if (state.tab === 2) {
-    // Each group's mods together. Enter turns the chosen one on or off; the arrows change its
+  if (isModList(state.tab)) {
+    // Each group's mods together (on Cheats, only the cheats). Enter turns the chosen one on or off; the arrows change its
     // setting, or turn it on and off when it has none.
     return modsInOrder().map((m) => {
       const on = !!state.modsOn[m.id];
@@ -403,7 +413,7 @@ function move(step) {
   render();
   showChosenRow();
 }
-function setTab(i) { state.tab = (i + 4) % 4; state.sel = 0; state.scroll = 0; state.toast = ''; render(); }
+function setTab(i) { state.tab = (i + TAB_COUNT) % TAB_COUNT; state.sel = 0; state.scroll = 0; state.toast = ''; render(); }
 function escape() {
   if (state.status === 'preparing') send({ cmd: 'cancel' });
   else send({ cmd: 'exit' });
@@ -467,7 +477,7 @@ function normalRow(r, i, chosen) {
 
 function modsInOrder() {
   const order = Object.keys(MOD_GROUPS);
-  return MODS.slice().sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+  return modsOfTab(state.tab).sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
 }
 
 function modSetting(m) {
@@ -506,7 +516,7 @@ function modDetails(r, i) {
   const w = t(), m = r.mod, on = !!state.modsOn[m.id];
   const chip = '<span style="flex:none;padding:3px 14px;border-radius:14px;font:800 17px/1.3 \'Baloo 2\',sans-serif;letter-spacing:.04em;' +
     (on ? 'background:#5aae22;color:#fff' : 'background:#e6d79a;color:#7a6224') + '">' + (on ? w.on : w.off) + '</span>';
-  let setting = '<div style="font:700 17px/1.3 Dosis,sans-serif;letter-spacing:.05em;color:#a08a4a">' + esc(w.modNoSettings) + '</div>';
+  let setting = '<div style="font:700 17px/1.3 Dosis,sans-serif;letter-spacing:.05em;color:#a08a4a">' + esc(m.group === 'cheats' ? w.cheatNoSettings : w.modNoSettings) + '</div>';
   if (m.setting) {
     const v = modSetting(m), share = (v - m.setting.min) / (m.setting.max - m.setting.min);
     const arrow = (dir, sign) => '<span data-step="' + sign + '" style="flex:none;width:26px;text-align:center;cursor:pointer;font:800 20px/1 \'Baloo 2\',sans-serif;color:#f08a2c">' + dir + '</span>';
@@ -530,7 +540,7 @@ function renderMods(list, sel) {
   const groups = modsInOrder();
   let cards = '';
   list.forEach((r, i) => {
-    if (i === 0 || groups[i - 1].group !== r.mod.group) {
+    if (state.tab === TAB.mods && (i === 0 || groups[i - 1].group !== r.mod.group)) {
       cards += '<div style="flex:none;padding:4px 4px 0 6px;font:800 21px/1.2 \'Baloo 2\',sans-serif;letter-spacing:.06em;color:#3f7d14">' + esc(MOD_GROUPS[r.mod.group][state.lang]) + '</div>';
     }
     cards += modCard(r, i, i === sel);
@@ -567,14 +577,14 @@ function render() {
       : '<div class="tabcircle" data-tab="' + i + '" style="width:50px;height:50px;margin-bottom:10px;box-sizing:border-box;border-radius:50%;background:#fff6d6;border:3px solid #fff;box-shadow:0 3px 0 rgba(74,44,18,.28);display:grid;place-items:center;font:800 23px/1 \'Baloo 2\',sans-serif;color:#8a5a2a;cursor:pointer">' + sym + '</div>').join('') +
     '<div data-tabstep="1" style="margin:0 0 20px 4px;height:28px;padding:0 9px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;display:grid;place-items:center;font:800 15px/1 \'Baloo 2\',sans-serif;color:#5e3712;cursor:pointer">R ▶</div>';
 
-  const onCount = state.mods.filter((m) => state.modsOn[m.id]).length;
-  $('panelTitle').textContent = tab === 2 ? w.modsOn(onCount, state.mods.length) : w.panel[tab];
-  $('tabAnimal').innerHTML = animal(['lion', 'elephant', 'hippo', 'giraffe'][tab], { width: 66, height: 66, objectFit: 'cover', marginTop: 4 });
+  const shown = modsOfTab(tab), onCount = shown.filter((m) => state.modsOn[m.id]).length;
+  $('panelTitle').textContent = isModList(tab) ? w.modsOn(onCount, shown.length) : w.panel[tab];
+  $('tabAnimal').innerHTML = animal(['lion', 'elephant', 'hippo', 'zebra', 'giraffe'][tab], { width: 66, height: 66, objectFit: 'cover', marginTop: 4 });
 
 
   // The list (or the mods).
   let html = '';
-  if (list.length && tab === 2) {
+  if (list.length && isModList(tab)) {
     html += renderMods(list, sel);
   } else if (list.length) {
     html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
@@ -582,7 +592,7 @@ function render() {
       list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
   if (!list.length) {
-    html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + w.noMods + '</div>';
+    html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + (tab === TAB.cheats ? w.noCheats : w.noMods) + '</div>';
   }
   $('content').innerHTML = html;
   applyScroll(false);
@@ -591,7 +601,7 @@ function render() {
   // The message box: what just happened, or what the chosen row does.
   let message = state.toast;
   if (state.capture) message = (state.capture.action.keyOnly ? w.captureKeyOnly : w.capture)(state.capture.action[state.lang]);
-  if (!message && !list.length) message = w.noMods;
+  if (!message && !list.length) message = (tab === TAB.cheats ? w.noCheats : w.noMods);
   if (!message && list[sel]) message = list[sel].hint || '';
   $('message').textContent = message;
   $('message').style.fontSize = message.length > 105 ? '22px' : '27px';
@@ -609,7 +619,7 @@ $('stage').addEventListener('click', (e) => {
   if (tabEl) return setTab(Number(tabEl.dataset.tab));
   if (tabStep) return setTab(state.tab + Number(tabStep.dataset.tabstep));
   const toggleEl = e.target.closest('[data-toggle]');
-  if (state.tab === 2 && rowEl) {
+  if (isModList(state.tab) && rowEl) {
     const i = Number(rowEl.dataset.row), r = rows()[i];
     state.sel = i; state.toast = '';
     if (toggleEl && r) r.activate();

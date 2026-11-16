@@ -200,7 +200,8 @@ sickle take half the time.
 
 ### Cheats (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
-In the launcher's Mods tab, in a group of their own, all off until turned on. Infinite stamina keeps
+In the launcher's own Cheats tab (next to Mods), all off until turned on. In `Config.toml` they
+are lines of `[mods]` like any mod. Infinite stamina keeps
 the stamina bar full; infinite money keeps the money at 999,999 G; infinite lumber and infinite
 material stone keep each at 9,999; infinite feed keeps the fodder and the bird feed at 9,999;
 stop time leaves the clock still
@@ -426,7 +427,8 @@ la mitad.
 
 ### Trucos (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
-En la pestaña Mods del launcher, en su propio grupo, todos apagados hasta que se encienden. Estamina
+En su propia pestaña del launcher, Trucos (junto a Mods), todos apagados hasta que se encienden. En
+`Config.toml` son líneas de `[mods]` como cualquier mod. Estamina
 infinita mantiene llena la barra de estamina; dinero infinito deja el dinero en 999,999 G; madera
 infinita y piedra infinita dejan cada una en 9,999; alimento infinito deja el heno y el pienso en 9,999;
 detener el tiempo deja quieto el reloj mientras juegas (dormir sí lleva al día siguiente, y las escenas que

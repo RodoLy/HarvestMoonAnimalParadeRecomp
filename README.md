@@ -115,7 +115,7 @@ Copy the whole `UserData` folder to keep them.
 **The game closed with a message.** The message says why. Please open an issue with it and the
 newest folder in `UserData\Logs`.
 
-**Are there cheats?** Six, in the launcher's Mods tab under Cheats, all off until you turn them
+**Are there cheats?** Six, in the launcher's Cheats tab, all off until you turn them
 on: infinite stamina, infinite money (it stays at 999,999 G), infinite lumber, infinite material
 stone, infinite feed (fodder and bird feed) and stop time (sleeping still goes on to the
 next day). How they work: [docs/MODS.md](docs/MODS.md). Codes that change the game's

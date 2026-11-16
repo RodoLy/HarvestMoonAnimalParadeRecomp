@@ -25,6 +25,11 @@ and of `host/launcher.cpp`. To prepare the game the program runs `play.ps1 -NoSt
 script `play.cmd` always ran, hidden, and turns its lines into the three steps on the page.
 Settings go to `UserData\Config.toml`; the first time, they start as the original game.
 
+**Mods and Cheats tabs.** Both list switches from `[mods]` in `Config.toml` (the list is `MODS` in
+`web/launcher.js` and `kMods` in `host/launcher.cpp`): a mod in the `cheats` group shows on the
+Cheats tab, every other one on the Mods tab, each tab with its own count of how many are on. They
+take effect the next time the game starts.
+
 **Controls tab.** Each Wii Remote and Nunchuk button (and fast-forward) has a key and a controller
 button: choose a row, press Enter, then press the key or the controller button. Keys go to
 `UserData\keyboard_bindings.dat`, the file the game's input library keeps (its layout is described
@@ -52,6 +57,11 @@ contesta con el estado del juego; la lista de mensajes está al principio de `we
 `host/launcher.cpp`. Para preparar el juego, el programa corre `play.ps1 -NoStart`, el mismo
 script que siempre corrió `play.cmd`, oculto, y convierte sus líneas en los tres pasos de la
 página. Los ajustes van a `UserData\Config.toml`; la primera vez empiezan como el juego original.
+
+**Pestañas Mods y Trucos.** Las dos muestran interruptores de `[mods]` en `Config.toml` (la lista
+es `MODS` en `web/launcher.js` y `kMods` en `host/launcher.cpp`): un mod del grupo `cheats` sale en
+la pestaña Trucos y todos los demás en la pestaña Mods, cada pestaña con su propia cuenta de cuántos
+están activados. Se aplican la próxima vez que se abre el juego.
 
 **Pestaña Controles.** Cada botón del Wii Remote y del Nunchuk (y el avance rápido) tiene una tecla
 y un botón del control: eliges una fila, Enter, y presionas la tecla o el botón del control. Las
