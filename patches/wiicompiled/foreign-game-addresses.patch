@@ -651,7 +651,7 @@ index e3ba175..46585bb 100644
 +        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
 +        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..6508620 100644
+index ea5a12b..c661256 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
 @@ -51,6 +51,11 @@ struct RuntimeUserConfig {
@@ -666,16 +666,18 @@ index ea5a12b..6508620 100644
      std::optional<uint32_t> disabledPostProcessingPaths;
      std::optional<float> audioVolume;
      std::optional<float> audioMusicVolume;
-@@ -86,6 +91,8 @@ struct RuntimeUserConfig {
+@@ -86,6 +91,10 @@ struct RuntimeUserConfig {
      // it here instead of copying the pack, so an asset-only update is visible on the next launch.
      std::optional<std::string> retroRewindRoot;
      std::vector<std::string> overlayRoots;
-+    // [mods]: one line per game mod, name = true to turn it on. Every mod starts off.
++    // [mods]: one line per game mod, name = true to turn it on. Every mod starts off. A mod with a
++    // setting has a number instead (a speed, say): on with that value.
 +    std::map<std::string, bool, std::less<>> mods;
++    std::map<std::string, double, std::less<>> modNumbers;
      // Controller mappings use Wii/GameCube button names as keys and up to two
      // comma-separated SDL-style physical button names ("south", or
      // "dpad_up,left_shoulder") as values; pressing either bound button counts.
-@@ -146,6 +153,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+@@ -146,6 +155,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
  
  // Must stay in step with the backend table in main.cpp, which is what actually
  // maps these to AuroraBackend.
@@ -698,7 +700,7 @@ index ea5a12b..6508620 100644
  inline bool IsSupportedGraphicsApi(std::string_view value) {
  #if defined(__APPLE__)
      static constexpr std::array<std::string_view, 2> values{"auto", "metal"};
-@@ -168,7 +191,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
+@@ -168,7 +193,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
  // 240 was offered by an early build and is no longer supported; a saved 240 is
  // migrated to 180 at the parse site.
  inline bool IsSupportedFrameInterpolationFps(uint32_t value) {
@@ -707,7 +709,7 @@ index ea5a12b..6508620 100644
  }
  
  inline std::optional<std::filesystem::path> ExecutableDirectory() {
-@@ -298,6 +321,10 @@ inline void EnsureConfigFile() {
+@@ -298,6 +323,10 @@ inline void EnsureConfigFile() {
                "# replacement would need. Both are read once, at startup.\n"
                "texture_replacements = false\n"
                "texture_dumps = false\n\n"
@@ -718,7 +720,7 @@ index ea5a12b..6508620 100644
                "[audio]\n"
                "volume = 1.0\n"
                "music_volume = 1.0\n"
-@@ -464,6 +491,34 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
+@@ -464,6 +493,39 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
      config.gxWorker = FindConfigValue<bool>(document, "video", "gx_worker");
      config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
      config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
@@ -743,6 +745,11 @@ index ea5a12b..6508620 100644
 +            for (const auto& [name, value] : document.at("mods").as_table()) {
 +                if (value.is_boolean()) {
 +                    config.mods[name] = value.as_boolean();
++                } else if (value.is_integer() || value.is_floating()) {
++                    const double number = value.is_integer() ? static_cast<double>(value.as_integer())
++                                                             : value.as_floating();
++                    config.mods[name] = number > 0.0;
++                    config.modNumbers[name] = number;
 +                }
 +            }
 +        }
@@ -753,7 +760,7 @@ index ea5a12b..6508620 100644
      config.textureReplacements = FindConfigValue<bool>(document, "video", "texture_replacements");
      config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
      if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-@@ -665,6 +720,14 @@ inline bool SetDisplayMode(std::string value) {
+@@ -665,6 +727,14 @@ inline bool SetDisplayMode(std::string value) {
      return WriteSetting("video", "display_mode", FormatString(value));
  }
  
@@ -768,7 +775,7 @@ index ea5a12b..6508620 100644
  inline bool SetSkipUnreadyPipelines(bool value) {
      Mutable().skipUnreadyPipelines = value;
      return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
-@@ -680,6 +743,34 @@ inline bool SetDisableCopyFilter(bool value) {
+@@ -680,6 +750,34 @@ inline bool SetDisableCopyFilter(bool value) {
      return WriteSetting("video", "disable_copy_filter", value ? "true" : "false");
  }
  
@@ -803,7 +810,7 @@ index ea5a12b..6508620 100644
  inline bool SetShowFps(bool value) {
      Mutable().showFps = value;
      return WriteSetting("video", "show_fps", value ? "true" : "false");
-@@ -979,6 +1070,49 @@ inline bool DisableCopyFilter(bool fallback = true) {
+@@ -979,6 +1077,57 @@ inline bool DisableCopyFilter(bool fallback = true) {
      return Get().disableCopyFilter.value_or(fallback);
  }
  
@@ -835,6 +842,14 @@ index ea5a12b..6508620 100644
 +    const auto& mods = Get().mods;
 +    const auto found = mods.find(name);
 +    return found != mods.end() && found->second;
++}
++
++// A game mod's setting when its line in [mods] is a number, or `fallback` when it is true, false or
++// missing.
++inline double ModNumber(std::string_view name, double fallback) {
++    const auto& numbers = Get().modNumbers;
++    const auto found = numbers.find(name);
++    return found != numbers.end() ? found->second : fallback;
 +}
 +
 +inline bool SetModEnabled(std::string_view name, bool value) {
@@ -2055,6 +2070,125 @@ index 0000000..e348ccc
 +    NoPlaceSign::RunAreaChangeStep(0x80126B84u, ctx);
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
+diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
+new file mode 100644
+index 0000000..5663944
+--- /dev/null
++++ b/runtime/src/hle/game_mods/player_speed.cpp
+@@ -0,0 +1,113 @@
++// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
++// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
++// Config.toml says, for instance,
++//   [mods]
++//   faster_actions = 2      (twice as fast; 1.5 and 3 work too, and true means 1.5)
++//   faster_walking = 1.5
++//
++// How the game moves the player: the player is a BB_CCharaObjePc (vtable 0x80482454), and every frame
++// the game calls its update, 0x800CFB30, with the time since the last frame in f1, in seconds. Walking,
++// the animations and the actions all advance by that time (the update keeps it at +0x56C; when
++// +0x570 is set the game uses a fixed step of its own instead and the mods change nothing). So the
++// mods hand the player a longer step: the player then does in one frame what takes longer in the
++// original game, and nothing else in the world changes speed (the clock, the villagers, the animals).
++//
++// Which step is longer depends on what the player is doing, the action at +0x5EC. These were read
++// from the log while playing (the mods write every change of action there):
++//   0, 1, 2      standing still: empty-handed, with a tool, carrying something
++//   39, 40, 41   walking or running, the same three ways
++//   21, 22, 23   stopping or turning, the same three ways
++//   94 then 86   picking something up from the ground into the rucksack
++//   90 then 81   taking something out to carry it; 69 then 72 putting it down
++//   90 then 87   taking out a tool
++//   95 then 98   the hoe
++//   119          filling the watering can; 115 then 118 watering
++//   91, 92       the other tools tried (the sickle, the hammer)
++// Only the actions in the lists below are sped up, so a scene, a talk or anything not listed plays
++// as in the original game.
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "memory.h"
++#include "runtime_config.h"
++#include "runtime_log.h"
++
++#include <chrono>
++#include <cstdint>
++#include <iostream>
++#include <set>
++
++// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
++// file's translation unit.
++namespace PlayerSpeed {
++namespace {
++
++constexpr uint32_t kAction = 0x5EC;
++
++// The player's walking (and running), and the short stop or turn after it.
++const std::set<uint32_t> kWalking = {39, 40, 41, 21, 22, 23};
++// Picking things up and putting them down, taking things out of the rucksack, and the tools.
++const std::set<uint32_t> kQuickActions = {94, 86, 90, 81, 69, 72, 87, 95, 98, 119, 115, 118, 91, 92};
++
++// A mod's speed: its number in [mods], 1.5 for a plain "true", and 1 (the original) when it is off.
++double Speed(const char* mod) {
++    if (!RuntimeConfigFile::ModEnabled(mod)) {
++        return 1.0;
++    }
++    const double speed = RuntimeConfigFile::ModNumber(mod, 1.5);
++    return speed >= 1.0 && speed <= 4.0 ? speed : 1.0;
++}
++
++double WalkingSpeed() {
++    static const double speed = Speed("faster_walking");
++    return speed;
++}
++
++double ActionSpeed() {
++    static const double speed = Speed("faster_actions");
++    return speed;
++}
++
++// While the mods are being made: every change of the player's action goes to the log with how long
++// the one before lasted, so the actions to speed up can be told apart. Only with a mod on.
++void NoteAction(uint32_t action) {
++    using Clock = std::chrono::steady_clock;
++    static uint32_t s_last = 0xFFFFFFFFu;
++    static Clock::time_point s_since;
++    static int s_reported = 0;
++    if (action == s_last) {
++        return;
++    }
++    const auto now = Clock::now();
++    if (s_last != 0xFFFFFFFFu && s_reported < 400) {
++        ++s_reported;
++        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_since).count();
++        RT_LOG(RT_TAG_VI) << "[player-action] " << s_last << " for " << ms << " ms, then " << action
++                          << std::endl;
++    }
++    s_last = action;
++    s_since = now;
++}
++
++} // namespace
++} // namespace PlayerSpeed
++
++// 0x800CFB30 (the player in r3, the time step in f1): the player's update, once a frame.
++extern "C" void AnimalParadePlayerUpdate(CpuContext* ctx) {
++    using namespace PlayerSpeed;
++    const double walking = WalkingSpeed();
++    const double actions = ActionSpeed();
++    if (walking != 1.0 || actions != 1.0) {
++        const uint32_t action = Memory::Read32(ctx->gpr[3] + kAction);
++        NoteAction(action);
++        if (kWalking.count(action) != 0) {
++            ctx->fpr[1].d *= walking;
++        } else if (kQuickActions.count(action) != 0) {
++            ctx->fpr[1].d *= actions;
++        }
++    }
++    GuestFunctions::BaseTranslation(0x800CFB30u)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 800CFB30, AnimalParadePlayerUpdate);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
 index 0000000..420775c

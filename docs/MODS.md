@@ -166,6 +166,28 @@ What the game does, and what the mod changes (`runtime/src/hle/game_mods/no_plac
 
 Tried: on a Windows ARM PC, crossing several areas.
 
+### Faster actions and faster walking (`faster_actions`, `faster_walking`)
+
+Quality of life. Each is off, or a speed (×1.5, ×2 or ×3): its line in `[mods]` holds the number,
+for instance `faster_walking = 2` (`true` means 1.5). `faster_actions` speeds up picking things up
+and putting them down, taking them out of the rucksack and using the tools; `faster_walking`, the
+player's walking and running. The clock, the villagers and the animals keep their speed.
+
+What the game does, and what the mods change (`runtime/src/hle/game_mods/player_speed.cpp`):
+
+- The player is a `BB_CCharaObjePc` (vtable 0x80482454). Every frame the game calls its update,
+  0x800CFB30, with the time since the last frame in f1, in seconds; walking, the animations and the
+  actions all advance by that time.
+- The mods wrap the update and hand the player a longer time step, but only while the player's
+  action (+0x5EC) is in one of two lists: walking (39, 40, 41, and 21, 22, 23 for the stop after it)
+  or the quick actions (picking up 94 and 86, carrying 90 and 81, putting down 69 and 72, taking out a
+  tool 90 and 87, the hoe 95 and 98, the watering can 119, 115 and 118, other tools 91 and 92). A
+  scene, a talk or anything not listed plays as in the original game.
+- The numbers were read from the log while playing: with either mod on, every change of action goes
+  there as `[player-action] <action> for <ms> ms, then <next>`.
+
+**Being tested.** Tried: walking at ×2 in the cloud and on a Windows ARM PC.
+
 ---
 
 ## Español
@@ -333,3 +355,25 @@ Qué hace el juego y qué cambia el mod (`runtime/src/hle/game_mods/no_place_sig
   letrero nunca se crea. No toca nada más del cambio de zona.
 
 Probado: en una PC Windows ARM, cruzando varias zonas.
+
+### Acciones más rápidas y caminar más rápido (`faster_actions`, `faster_walking`)
+
+Calidad de vida. Cada uno está apagado o a una velocidad (×1.5, ×2 o ×3): su línea en `[mods]`
+guarda el número, por ejemplo `faster_walking = 2` (`true` es 1.5). `faster_actions` acelera
+recoger y soltar cosas, sacarlas de la mochila y usar las herramientas; `faster_walking`, caminar y
+correr. El reloj, los aldeanos y los animales van a su velocidad de siempre.
+
+Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_speed.cpp`):
+
+- Quien juega es un `BB_CCharaObjePc` (vtable 0x80482454). En cada cuadro el juego llama a su
+  actualización, 0x800CFB30, con el tiempo desde el cuadro anterior en f1, en segundos; la caminata,
+  las animaciones y las acciones avanzan todas con ese tiempo.
+- Los mods envuelven la actualización y le dan un paso de tiempo más largo, pero solo mientras la
+  acción de quien juega (+0x5EC) está en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al
+  frenar) o las acciones rápidas (recoger 94 y 86, cargar 90 y 81, soltar 69 y 72, sacar una
+  herramienta 90 y 87, la azada 95 y 98, la regadera 119, 115 y 118, otras herramientas 91 y 92). Una
+  escena, una plática o cualquier cosa fuera de las listas va como en el juego original.
+- Los números salieron del log jugando: con cualquiera de los dos mods activo, cada cambio de acción
+  se anota ahí como `[player-action] <acción> for <ms> ms, then <siguiente>`.
+
+**En pruebas.** Probado: caminar a ×2 en la nube y en una PC Windows ARM.
