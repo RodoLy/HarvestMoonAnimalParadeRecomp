@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..1a499db
+index 0000000..0824700
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,44 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -268,6 +268,12 @@ index 0000000..1a499db
 +void RegisterSettingsPanel(SettingsPanel panel);
 +bool HasSettings();
 +void DrawSettings();
++
++// A game's cheats in the F10 menu (a "Cheats" menu appears when any game has one available). Kept
++// apart from the mods' menu so that cheats are never mixed in with the mods.
++void RegisterCheatsPanel(SettingsPanel panel);
++bool HasCheats();
++void DrawCheats();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
 +using PrepareFn = void (*)();
@@ -1923,10 +1929,10 @@ index 0000000..be149bd
 +FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
 diff --git a/runtime/src/hle/game_mods/animal_parade_cheats.cpp b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
 new file mode 100644
-index 0000000..5db607c
+index 0000000..1b40d4e
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,172 @@
 +// Harvest Moon: Animal Parade cheats, each off unless Config.toml turns it on in [mods]:
 +//   cheat_infinite_stamina = true   the stamina stays full: work never tires the player
 +//   cheat_infinite_money = true     the money stays at 999,999 G
@@ -1934,7 +1940,8 @@ index 0000000..5db607c
 +//   cheat_infinite_lumber = true    the lumber stays at 9,999
 +//   cheat_infinite_stone = true     the material stone stays at 9,999
 +//   cheat_infinite_feed = true      the fodder and the bird feed stay at 9,999
-+// The launcher lists them in the Mods tab, in a group of their own.
++// The launcher lists them in its Cheats tab, and the F10 menu has them under Cheats, where they can
++// be turned on and off while playing.
 +//
 +// Where the game keeps what they change:
 +//   *(0x806B3A24)            the game's state (the save data while playing)
@@ -1948,8 +1955,8 @@ index 0000000..5db607c
 +//                            (0x801294F0) calls it every frame while the clock runs; a script that moves
 +//                            the time on calls it too (0x8010EEFC, thirty times for a minute).
 +//
-+// The money, the stamina and the four stores are set once a frame, from the player's update (player_speed.cpp calls
-+// AnimalParadeCheatsEveryFrame). The clock is stopped by leaving out the field's tick only, so the
++// The money, the stamina and the four stores are set once a frame, from the player's update
++// (player_speed.cpp calls AnimalParadeCheatsEveryFrame). The clock is stopped by leaving out the field's tick only, so the
 +// scripts that move the time on still do.
 +
 +#include "animal_parade_cheats.h"
@@ -1961,6 +1968,9 @@ index 0000000..5db607c
 +#include "memory.h"
 +#include "runtime_config.h"
 +
++#include <imgui.h>
++
++#include <atomic>
 +#include <cstdint>
 +
 +// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
@@ -1980,34 +1990,48 @@ index 0000000..5db607c
 +constexpr uint32_t kStoreKept = 9999u;  // the most the game lets each of the four hold
 +constexpr uint32_t kFieldTickReturn = 0x80129584u;  // right after the field's call to the tick
 +
-+bool On(const char* cheat) {
-+    return RuntimeConfigFile::ModEnabled(cheat);
++// The cheats, in the order the F10 menu lists them. Each starts as its line in Config.toml [mods]
++// says; the F10 menu's Cheats can turn one on or off while playing, and saves the change to the same
++// line, so the launcher shows it too. The game's thread reads them, F10 changes them: atomics.
++struct Cheat {
++    const char* key;          // its line in Config.toml [mods]
++    const char* name;         // in the F10 menu
++    const char* description;  // under it
++    std::atomic<bool> on{false};
++};
++
++Cheat g_cheats[] = {
++    {"cheat_infinite_stamina", "Infinite stamina", "The stamina bar stays full."},
++    {"cheat_infinite_money", "Infinite money", "The money stays at 999,999 G."},
++    {"cheat_infinite_lumber", "Infinite lumber", "The lumber stays at 9,999."},
++    {"cheat_infinite_stone", "Infinite material stone", "The material stone stays at 9,999."},
++    {"cheat_infinite_feed", "Infinite feed", "The fodder and the bird feed stay at 9,999."},
++    {"cheat_stop_time", "Stop time", "The clock stands still (sleeping still goes on to the next day)."},
++};
++enum CheatIndex { kInfiniteStamina, kInfiniteMoney, kInfiniteLumber, kInfiniteStone, kInfiniteFeed, kStopTime };
++
++// Reads Config.toml the first time any cheat is asked about.
++void LoadOnce() {
++    static const bool loaded = [] {
++        for (Cheat& cheat : g_cheats) {
++            cheat.on.store(RuntimeConfigFile::ModEnabled(cheat.key), std::memory_order_relaxed);
++        }
++        return true;
++    }();
++    (void)loaded;
 +}
 +
-+bool InfiniteStamina() {
-+    static const bool on = On("cheat_infinite_stamina");
-+    return on;
++bool On(CheatIndex index) {
++    LoadOnce();
++    return g_cheats[index].on.load(std::memory_order_relaxed);
 +}
 +
-+bool InfiniteMoney() {
-+    static const bool on = On("cheat_infinite_money");
-+    return on;
-+}
-+
-+bool InfiniteLumber() {
-+    static const bool on = On("cheat_infinite_lumber");
-+    return on;
-+}
-+
-+bool InfiniteStone() {
-+    static const bool on = On("cheat_infinite_stone");
-+    return on;
-+}
-+
-+bool InfiniteFeed() {
-+    static const bool on = On("cheat_infinite_feed");
-+    return on;
-+}
++bool InfiniteStamina() { return On(kInfiniteStamina); }
++bool InfiniteMoney() { return On(kInfiniteMoney); }
++bool InfiniteLumber() { return On(kInfiniteLumber); }
++bool InfiniteStone() { return On(kInfiniteStone); }
++bool InfiniteFeed() { return On(kInfiniteFeed); }
++bool StopTime() { return On(kStopTime); }
 +
 +// Puts one of the four stores at its most when it has less.
 +void Fill(uint32_t state, uint32_t store) {
@@ -2016,10 +2040,26 @@ index 0000000..5db607c
 +    }
 +}
 +
-+bool StopTime() {
-+    static const bool on = On("cheat_stop_time");
-+    return on;
++// The F10 menu's Cheats: a checkbox for each, applied at once and saved for the next start.
++void DrawCheatsMenu() {
++    LoadOnce();
++    for (Cheat& cheat : g_cheats) {
++        bool on = cheat.on.load(std::memory_order_relaxed);
++        if (ImGui::Checkbox(cheat.name, &on)) {
++            cheat.on.store(on, std::memory_order_relaxed);
++            RuntimeConfigFile::WriteSetting("mods", cheat.key, on ? "true" : "false");
++        }
++        ImGui::Indent();
++        ImGui::TextDisabled("%s", cheat.description);
++        ImGui::Unindent();
++    }
++    ImGui::Separator();
++    ImGui::TextDisabled("Changes apply right away and are kept for the next time you play.");
 +}
++
++bool Always() { return true; }
++
++const bool kCheatsMenu = (GameMods::RegisterCheatsPanel({"Cheats", Always, DrawCheatsMenu}), true);
 +
 +} // namespace
 +} // namespace AnimalParadeCheats
@@ -2079,10 +2119,10 @@ index 0000000..9ed4312
 +void AnimalParadeCheatsEveryFrame();
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..e9bc399
+index 0000000..f3e9ee3
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,101 @@
 +// The list of game mods' disc overlays (see game_mods.h).
 +
 +#include "game_mods.h"
@@ -2111,14 +2151,13 @@ index 0000000..e9bc399
 +    return panels;
 +}
 +
-+} // namespace
-+
-+void RegisterSettingsPanel(SettingsPanel panel) {
-+    Panels().push_back(panel);
++std::vector<SettingsPanel>& CheatPanels() {
++    static std::vector<SettingsPanel> panels;
++    return panels;
 +}
 +
-+bool HasSettings() {
-+    for (const SettingsPanel& panel : Panels()) {
++bool AnyAvailable(const std::vector<SettingsPanel>& panels) {
++    for (const SettingsPanel& panel : panels) {
 +        if (panel.available()) {
 +            return true;
 +        }
@@ -2126,10 +2165,37 @@ index 0000000..e9bc399
 +    return false;
 +}
 +
++} // namespace
++
++void RegisterSettingsPanel(SettingsPanel panel) {
++    Panels().push_back(panel);
++}
++
++bool HasSettings() {
++    return AnyAvailable(Panels());
++}
++
 +void DrawSettings() {
 +    for (const SettingsPanel& panel : Panels()) {
 +        if (panel.available()) {
 +            ImGui::SeparatorText(panel.name);
++            panel.draw();
++        }
++    }
++}
++
++void RegisterCheatsPanel(SettingsPanel panel) {
++    CheatPanels().push_back(panel);
++}
++
++bool HasCheats() {
++    return AnyAvailable(CheatPanels());
++}
++
++// One game's cheats need no title of their own: the menu is already called Cheats.
++void DrawCheats() {
++    for (const SettingsPanel& panel : CheatPanels()) {
++        if (panel.available()) {
 +            panel.draw();
 +        }
 +    }
@@ -6631,7 +6697,7 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..43fe8da 100644
+index 6c2083a..222404b 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,7 @@
@@ -6949,7 +7015,10 @@ index 6c2083a..43fe8da 100644
 +            if (saved == kChoices[i].configName) {
 +                return static_cast<int>(i);
 +            }
-+        }
+         }
+-        if (ImGui::Selectable("4:3", !g_widescreen)) {
+-            g_widescreen = false;
+-            RuntimeConfigFile::SetWidescreen(false);
 +        return 0;
 +    }();
 +    static const int atLaunch = selected;
@@ -6965,10 +7034,7 @@ index 6c2083a..43fe8da 100644
 +            if (isSelected) {
 +                ImGui::SetItemDefaultFocus();
 +            }
-         }
--        if (ImGui::Selectable("4:3", !g_widescreen)) {
--            g_widescreen = false;
--            RuntimeConfigFile::SetWidescreen(false);
++        }
 +        ImGui::EndCombo();
 +    }
 +    if (selected != atLaunch) {
@@ -7121,7 +7187,7 @@ index 6c2083a..43fe8da 100644
  }
  
  void DrawFpsOverlay() {
-@@ -1533,6 +1748,12 @@ void DrawTopBar() {
+@@ -1533,6 +1748,18 @@ void DrawTopBar() {
          ImGui::EndMenu();
      }
  
@@ -7131,10 +7197,16 @@ index 6c2083a..43fe8da 100644
 +        ImGui::EndMenu();
 +    }
 +
++    // The game's cheats, apart from the mods (hle/game_mods/).
++    if (GameMods::HasCheats() && ImGui::BeginMenu("Cheats")) {
++        GameMods::DrawCheats();
++        ImGui::EndMenu();
++    }
++
      const ImGuiStyle& style = ImGui::GetStyle();
      const float hideWidth = ImGui::CalcTextSize("Hide (F10)").x + style.FramePadding.x * 2.0f;
      const float exitWidth = ImGui::CalcTextSize("X").x + style.FramePadding.x * 2.0f;
-@@ -1660,9 +1881,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1660,9 +1887,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
          controller_mapping_wizard::HandleSdlEvent(ev->sdl);
          if (g_rebind.active && (IsToggleKey(ev->sdl, SDL_SCANCODE_BACKSPACE) ||
                                  IsToggleKey(ev->sdl, SDL_SCANCODE_DELETE))) {
@@ -7149,7 +7221,7 @@ index 6c2083a..43fe8da 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1957,12 @@ void Draw() noexcept {
+@@ -1732,6 +1963,12 @@ void Draw() noexcept {
  }
  
  bool StartupScreenVisible() noexcept {
