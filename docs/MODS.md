@@ -169,7 +169,7 @@ Tried: on a Windows ARM PC, crossing several areas.
 ### Faster actions and faster walking (`faster_actions`, `faster_walking`)
 
 Quality of life. Each is turned on or off and has a speed, a percentage from 100 (the original
-game) to 300, chosen with a bar in the launcher. In `[mods]` they are two lines each, for instance
+game) to 300, chosen with a bar in the launcher that shows it as ×1, ×1.25, ×1.5… up to ×3. In `[mods]` they are two lines each, for instance
 `faster_walking = true` and `faster_walking_percent = 150` (150 when the percentage is missing).
 `faster_actions` speeds up picking things up
 and putting them down, taking them out of the rucksack and using the tools; `faster_walking`, the
@@ -367,7 +367,8 @@ Probado: en una PC Windows ARM, cruzando varias zonas.
 ### Acciones más rápidas y caminar más rápido (`faster_actions`, `faster_walking`)
 
 Calidad de vida. Cada uno se activa o desactiva y tiene una velocidad, un porcentaje de 100 (el
-juego original) a 300, que se elige con una barra en el launcher. En `[mods]` son dos líneas cada
+juego original) a 300, que se elige con una barra en el launcher que lo muestra como ×1, ×1.25,
+×1.5… hasta ×3. En `[mods]` son dos líneas cada
 uno, por ejemplo `faster_walking = true` y `faster_walking_percent = 150` (150 si falta el
 porcentaje). `faster_actions` acelera
 recoger y soltar cosas, sacarlas de la mochila y usar las herramientas; `faster_walking`, caminar y

@@ -168,8 +168,8 @@ function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 
 // The game's mods: each one is a line in Config.toml [mods] (host/launcher.cpp kMods), off until it is
 // turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods). A mod's
-// "setting", when it has one, is a percentage kept in its own line of [mods] (100 is the original
-// game; it only goes up). The mods of one "group" are listed together under the group's title.
+// "setting", when it has one, is a speed kept as a percentage in its own line of [mods] (100 is the
+// original game; it only goes up), shown as ×1, ×1.25, ×1.5… up to ×3. The mods of one "group" are listed together under the group's title.
 const MOD_GROUPS = {
   game: { es: 'Juego', en: 'Game' },
   qol: { es: 'Calidad de vida', en: 'Quality of life' },
@@ -185,14 +185,14 @@ const MODS = [
       en: 'When you change area, the game shows a sign with the picture and name of the place for a second and a half before you can play. With this mod it does not show: the new area appears as soon as it has loaded.' } },
   { id: 'faster_actions', group: 'qol', es: 'Acciones más rápidas', en: 'Faster actions',
     summary: { es: 'Herramientas, recoger y soltar cosas.', en: 'Tools, picking up and putting down.' },
-    hint: { es: 'Recoger y soltar cosas, sacarlas de la mochila y usar las herramientas (la azada, la regadera, la hoz…) van a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. 100% es la velocidad del juego original.',
-      en: 'Picking things up and putting them down, taking them out of the rucksack and using the tools (the hoe, the watering can, the sickle…) go at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. 100% is the original game\'s speed.' },
-    setting: { key: 'faster_actions_percent', es: 'Velocidad de las acciones', en: 'Speed of the actions', min: 100, max: 300, step: 10, fallback: 150 } },
+    hint: { es: 'Recoger y soltar cosas, sacarlas de la mochila y usar las herramientas (la azada, la regadera, la hoz…) van a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. ×1 es la velocidad del juego original.',
+      en: 'Picking things up and putting them down, taking them out of the rucksack and using the tools (the hoe, the watering can, the sickle…) go at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. ×1 is the original game\'s speed.' },
+    setting: { key: 'faster_actions_percent', es: 'Velocidad de las acciones', en: 'Speed of the actions', min: 100, max: 300, step: 25, fallback: 150 } },
   { id: 'faster_walking', group: 'qol', es: 'Caminar más rápido', en: 'Faster walking',
     summary: { es: 'Tu personaje camina y corre más rápido.', en: 'Your character walks and runs faster.' },
-    hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. 100% es la velocidad del juego original.',
-      en: 'Your character walks and runs at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. 100% is the original game\'s speed.' },
-    setting: { key: 'faster_walking_percent', es: 'Velocidad al caminar', en: 'Walking speed', min: 100, max: 300, step: 10, fallback: 150 } },
+    hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. ×1 es la velocidad del juego original.',
+      en: 'Your character walks and runs at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. ×1 is the original game\'s speed.' },
+    setting: { key: 'faster_walking_percent', es: 'Velocidad al caminar', en: 'Walking speed', min: 100, max: 300, step: 25, fallback: 150 } },
 ];
 
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
@@ -440,6 +440,11 @@ function modSetting(m) {
   return Number.isFinite(v) && v >= m.setting.min && v <= m.setting.max ? v : m.setting.fallback;
 }
 
+// A speed kept as a percentage, shown as a multiple: 125 is ×1.25, 150 is ×1.5, 200 is ×2.
+function speedText(percent) {
+  return '×' + String(Math.round(percent) / 100);
+}
+
 function changeModSetting(m, step) {
   const next = Math.max(m.setting.min, Math.min(m.setting.max, modSetting(m) + step * m.setting.step));
   state.modSettings[m.setting.key] = next;
@@ -476,7 +481,7 @@ function modDetails(r, i) {
       '<span style="position:relative;flex:1;height:16px;box-sizing:border-box;border-radius:8px;background:#efe2a0;border:2px solid #b9982e;overflow:hidden">' +
         '<span style="position:absolute;left:0;top:0;bottom:0;width:' + (share * 100).toFixed(1) + '%;background:linear-gradient(#a8d830,#5aae22)"></span></span>' +
       arrow('▶', 1) +
-      '<span style="flex:none;min-width:70px;box-sizing:border-box;text-align:center;padding:2px 10px;border-radius:10px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 19px/1.3 \'Baloo 2\',sans-serif;color:#5e3712">' + v + '%</span>' +
+      '<span style="flex:none;min-width:70px;box-sizing:border-box;text-align:center;padding:2px 10px;border-radius:10px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 19px/1.3 \'Baloo 2\',sans-serif;color:#5e3712">' + speedText(v) + '</span>' +
     '</div>';
   }
   return '<div data-row="' + i + '" class="abs" style="left:640px;top:122px;width:540px;height:340px;box-sizing:border-box;border-radius:12px;background:#fffbe2;border:3px solid #dff29a;box-shadow:inset 0 0 0 2px #f1d250;padding:16px 20px;display:flex;flex-direction:column;gap:12px">' +
