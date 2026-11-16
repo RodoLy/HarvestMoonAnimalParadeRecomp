@@ -1921,6 +1921,117 @@ index 0000000..be149bd
 +}
 +
 +FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
+diff --git a/runtime/src/hle/game_mods/animal_parade_cheats.cpp b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
+new file mode 100644
+index 0000000..9f52366
+--- /dev/null
++++ b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
+@@ -0,0 +1,93 @@
++// Harvest Moon: Animal Parade cheats, each off unless Config.toml turns it on in [mods]:
++//   cheat_infinite_stamina = true   the stamina stays full: work never tires the player
++//   cheat_infinite_money = true     the money stays at 999,999 G
++//   cheat_stop_time = true          the clock does not move (sleeping still goes on to the next day)
++// The launcher lists them in the Mods tab, in a group of their own.
++//
++// Where the game keeps what they change:
++//   *(0x806B3A24)            the game's state (the save data while playing)
++//     +0x1454                the money, in G
++//     +0x1468, +0x146C       the stamina and its maximum (800 for a new farmer; the bar at the bottom)
++//   0x80107944               the clock's tick: two seconds of game time each call. The field's update
++//                            (0x801294F0) calls it every frame while the clock runs; a script that moves
++//                            the time on calls it too (0x8010EEFC, thirty times for a minute).
++//
++// The money and the stamina are set once a frame, from the player's update (player_speed.cpp calls
++// AnimalParadeCheatsEveryFrame). The clock is stopped by leaving out the field's tick only, so the
++// scripts that move the time on still do.
++
++#include "animal_parade_cheats.h"
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "memory.h"
++#include "runtime_config.h"
++
++#include <cstdint>
++
++// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
++// file's translation unit.
++namespace AnimalParadeCheats {
++namespace {
++
++constexpr uint32_t kGameState = 0x806B3A24u;
++constexpr uint32_t kMoney = 0x1454u;
++constexpr uint32_t kMoneyKept = 999999u;
++constexpr uint32_t kStamina = 0x1468u;
++constexpr uint32_t kStaminaMaximum = 0x146Cu;
++constexpr uint32_t kFieldTickReturn = 0x80129584u;  // right after the field's call to the tick
++
++bool On(const char* cheat) {
++    return RuntimeConfigFile::ModEnabled(cheat);
++}
++
++bool InfiniteStamina() {
++    static const bool on = On("cheat_infinite_stamina");
++    return on;
++}
++
++bool InfiniteMoney() {
++    static const bool on = On("cheat_infinite_money");
++    return on;
++}
++
++bool StopTime() {
++    static const bool on = On("cheat_stop_time");
++    return on;
++}
++
++} // namespace
++} // namespace AnimalParadeCheats
++
++void AnimalParadeCheatsEveryFrame() {
++    using namespace AnimalParadeCheats;
++    if (!InfiniteStamina() && !InfiniteMoney()) {
++        return;
++    }
++    const uint32_t state = Memory::Read32(kGameState);
++    if (state == 0 || !Memory::Contains(state, kStaminaMaximum + 4)) {
++        return;
++    }
++    if (InfiniteMoney() && Memory::Read32(state + kMoney) < kMoneyKept) {
++        Memory::Write32(state + kMoney, kMoneyKept);
++    }
++    if (InfiniteStamina()) {
++        const uint32_t maximum = Memory::Read32(state + kStaminaMaximum);
++        if (maximum != 0 && Memory::Read32(state + kStamina) != maximum) {
++            Memory::Write32(state + kStamina, maximum);
++        }
++    }
++}
++
++// 0x80107944: two seconds of game time. Left out when the field's update calls it and the clock is
++// stopped.
++extern "C" void AnimalParadeClockTick(CpuContext* ctx) {
++    using namespace AnimalParadeCheats;
++    if (StopTime() && ctx->lr == kFieldTickReturn) {
++        return;
++    }
++    GuestFunctions::BaseTranslation(0x80107944u)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80107944, AnimalParadeClockTick);
+diff --git a/runtime/src/hle/game_mods/animal_parade_cheats.h b/runtime/src/hle/game_mods/animal_parade_cheats.h
+new file mode 100644
+index 0000000..9ed4312
+--- /dev/null
++++ b/runtime/src/hle/game_mods/animal_parade_cheats.h
+@@ -0,0 +1,6 @@
++// Harvest Moon: Animal Parade cheats (animal_parade_cheats.cpp).
++#pragma once
++
++// Keeps the money and the stamina as the cheats that are on want them. Once a frame, from the
++// player's update (player_speed.cpp).
++void AnimalParadeCheatsEveryFrame();
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
 index 0000000..e9bc399
@@ -2073,10 +2184,10 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..742a5e6
+index 0000000..6edd8b7
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,145 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -2112,6 +2223,7 @@ index 0000000..742a5e6
 +// Only the actions in the lists below are sped up, so a scene, a talk or anything not listed plays
 +// as in the original game.
 +
++#include "animal_parade_cheats.h"
 +#include "game_mods.h"
 +#include "guest_abi/cpu_context.h"
 +#include "guest_function_imports.h"
@@ -2181,9 +2293,11 @@ index 0000000..742a5e6
 +} // namespace
 +} // namespace PlayerSpeed
 +
-+// 0x800CFB30 (the player in r3, the time step in f1): the player's update, once a frame.
++// 0x800CFB30 (the player in r3, the time step in f1): the player's update, once a frame. The cheats
++// (animal_parade_cheats.cpp) use it as their once-a-frame moment too.
 +extern "C" void AnimalParadePlayerUpdate(CpuContext* ctx) {
 +    using namespace PlayerSpeed;
++    AnimalParadeCheatsEveryFrame();  // the cheats' money and stamina, once a frame
 +    const double walking = WalkingSpeed();
 +    const double actions = ActionSpeed();
 +    if (walking == 1.0 && actions == 1.0) {

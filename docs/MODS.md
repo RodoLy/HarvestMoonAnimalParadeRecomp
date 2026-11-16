@@ -198,6 +198,23 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
 **Being tested.** Tried at 200% on a Windows ARM PC: walking, and the hoe, the watering can and the
 sickle take half the time.
 
+### Cheats (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_stop_time`)
+
+In the launcher's Mods tab, in a group of their own, all off until turned on. Infinite stamina keeps
+the stamina bar full; infinite money keeps the money at 999,999 G; stop time leaves the clock still
+while you play (sleeping still goes on to the next day, and scenes that move the time on still do).
+
+Where the game keeps what they change (`runtime/src/hle/game_mods/animal_parade_cheats.cpp`):
+
+- `*(0x806B3A24)` is the game's state; the money is at +0x1454 and the stamina and its maximum at
+  +0x1468 and +0x146C (800 for a new farmer). Once a frame, from the player's update, the cheats set
+  the money to 999,999 when it is lower and the stamina to its maximum.
+- 0x80107944 is the clock's tick (two seconds of game time). The field's update calls it every frame
+  while the clock runs (from 0x80129580); stop time leaves out that call only, so a script that moves
+  the time on (0x8010EEFC, thirty ticks for a minute) still does.
+
+Tried: the money and the stamina in the cloud. Stop time still has to be tried outdoors.
+
 ---
 
 ## Español
@@ -399,3 +416,21 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
 
 **En pruebas.** Probado a 200% en una PC Windows ARM: caminar, y la azada, la regadera y la hoz tardan
 la mitad.
+
+### Trucos (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_stop_time`)
+
+En la pestaña Mods del launcher, en su propio grupo, todos apagados hasta que se encienden. Estamina
+infinita mantiene llena la barra de estamina; dinero infinito deja el dinero en 999,999 G; detener el
+tiempo deja quieto el reloj mientras juegas (dormir sí lleva al día siguiente, y las escenas que
+adelantan la hora lo siguen haciendo).
+
+Dónde guarda el juego lo que cambian (`runtime/src/hle/game_mods/animal_parade_cheats.cpp`):
+
+- `*(0x806B3A24)` es el estado del juego; el dinero está en +0x1454 y la estamina y su máximo en
+  +0x1468 y +0x146C (800 al empezar). Una vez por cuadro, desde la actualización del personaje, los
+  trucos ponen el dinero en 999,999 si es menor y la estamina en su máximo.
+- 0x80107944 es el tic del reloj (dos segundos del juego). La actualización del campo lo llama en
+  cada cuadro mientras el reloj corre (desde 0x80129580); detener el tiempo quita solo esa llamada,
+  así que un guion que adelanta la hora (0x8010EEFC, treinta tics por minuto) lo sigue haciendo.
+
+Probado: el dinero y la estamina en la nube. Detener el tiempo falta probarlo al aire libre.
