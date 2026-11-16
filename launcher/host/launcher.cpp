@@ -736,8 +736,8 @@ int ConnectedControllers() {
 // Config.toml, off unless it says true. Some have a setting, a percentage in a line of its own in
 // [mods] (from 100, the original game, to 300). The page has their names, descriptions and limits.
 const char* const kMods[] = {"romance_any_gender",     "no_place_sign",        "faster_actions",  "faster_walking",
-                              "cheat_infinite_stamina", "cheat_infinite_money", "cheat_infinite_materials",
-                              "cheat_infinite_feed", "cheat_stop_time"};
+                              "cheat_infinite_stamina", "cheat_infinite_money", "cheat_infinite_lumber",
+                              "cheat_infinite_stone", "cheat_infinite_feed", "cheat_stop_time"};
 const char* const kModSettings[] = {"faster_actions_percent", "faster_walking_percent"};
 
 // A whole number of at most three digits: what a percentage line may hold.
