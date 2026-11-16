@@ -1923,15 +1923,16 @@ index 0000000..be149bd
 +FOREIGN_GAME_NATIVE(RBIEE9, 8010FF04, AnimalParadeTextLanguage_HLE, uint32_t, (), ());
 diff --git a/runtime/src/hle/game_mods/animal_parade_cheats.cpp b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
 new file mode 100644
-index 0000000..0880694
+index 0000000..5db607c
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/animal_parade_cheats.cpp
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,138 @@
 +// Harvest Moon: Animal Parade cheats, each off unless Config.toml turns it on in [mods]:
 +//   cheat_infinite_stamina = true   the stamina stays full: work never tires the player
 +//   cheat_infinite_money = true     the money stays at 999,999 G
 +//   cheat_stop_time = true          the clock does not move (sleeping still goes on to the next day)
-+//   cheat_infinite_materials = true the lumber and the material stone stay at 9,999
++//   cheat_infinite_lumber = true    the lumber stays at 9,999
++//   cheat_infinite_stone = true     the material stone stays at 9,999
 +//   cheat_infinite_feed = true      the fodder and the bird feed stay at 9,999
 +// The launcher lists them in the Mods tab, in a group of their own.
 +//
@@ -1993,8 +1994,13 @@ index 0000000..0880694
 +    return on;
 +}
 +
-+bool InfiniteMaterials() {
-+    static const bool on = On("cheat_infinite_materials");
++bool InfiniteLumber() {
++    static const bool on = On("cheat_infinite_lumber");
++    return on;
++}
++
++bool InfiniteStone() {
++    static const bool on = On("cheat_infinite_stone");
 +    return on;
 +}
 +
@@ -2020,7 +2026,8 @@ index 0000000..0880694
 +
 +void AnimalParadeCheatsEveryFrame() {
 +    using namespace AnimalParadeCheats;
-+    if (!InfiniteStamina() && !InfiniteMoney() && !InfiniteMaterials() && !InfiniteFeed()) {
++    if (!InfiniteStamina() && !InfiniteMoney() && !InfiniteLumber() && !InfiniteStone() &&
++        !InfiniteFeed()) {
 +        return;
 +    }
 +    const uint32_t state = Memory::Read32(kGameState);
@@ -2036,8 +2043,10 @@ index 0000000..0880694
 +            Memory::Write32(state + kStamina, maximum);
 +        }
 +    }
-+    if (InfiniteMaterials()) {
++    if (InfiniteLumber()) {
 +        Fill(state, kLumber);
++    }
++    if (InfiniteStone()) {
 +        Fill(state, kMaterialStone);
 +    }
 +    if (InfiniteFeed()) {
