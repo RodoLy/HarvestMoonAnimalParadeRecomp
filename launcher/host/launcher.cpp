@@ -732,17 +732,46 @@ bool HasDisc() {
     return fs::exists(Root() / L"Disc" / L"sys" / L"main.dol") || fs::exists(Root() / L"Disc" / L"DATA" / L"sys" / L"main.dol");
 }
 
+// Controllers Windows sees as game pads or joysticks that are not XInput ones: a PlayStation or
+// Switch controller, for example (the game reads them all through SDL). XInput controllers show up
+// here too, with "IG_" in their device name; they are left out, since XInput counts them.
+int OtherControllers() {
+    UINT devices = 0;
+    if (GetRawInputDeviceList(nullptr, &devices, sizeof(RAWINPUTDEVICELIST)) != 0 || devices == 0) return 0;
+    std::vector<RAWINPUTDEVICELIST> list(devices);
+    devices = GetRawInputDeviceList(list.data(), &devices, sizeof(RAWINPUTDEVICELIST));
+    if (devices == static_cast<UINT>(-1)) return 0;
+    int count = 0;
+    for (UINT i = 0; i < devices; ++i) {
+        if (list[i].dwType != RIM_TYPEHID) continue;
+        RID_DEVICE_INFO info{};
+        info.cbSize = sizeof(info);
+        UINT size = sizeof(info);
+        if (GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICEINFO, &info, &size) == static_cast<UINT>(-1)) continue;
+        // Generic desktop controls (usage page 1): a joystick (4) or a game pad (5).
+        if (info.hid.usUsagePage != 1 || (info.hid.usUsage != 4 && info.hid.usUsage != 5)) continue;
+        UINT length = 0;
+        GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICENAME, nullptr, &length);
+        std::wstring name(length, L'\0');
+        if (length > 0 && GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICENAME, name.data(), &length) != static_cast<UINT>(-1) &&
+            name.find(L"IG_") != std::wstring::npos) {
+            continue;
+        }
+        ++count;
+    }
+    return count;
+}
+
 int ConnectedControllers() {
-    // XInput controllers (Xbox and the many that work like one). Others still work in the game;
-    // they just are not counted here.
+    // XInput controllers (Xbox and the many that work like one), and the others Windows sees as game
+    // pads (OtherControllers).
     static auto getState = [] {
         HMODULE xinput = LoadLibraryW(L"xinput1_4.dll");
         if (!xinput) xinput = LoadLibraryW(L"xinput9_1_0.dll");
         return xinput ? reinterpret_cast<DWORD(WINAPI*)(DWORD, XINPUT_STATE*)>(GetProcAddress(xinput, "XInputGetState")) : nullptr;
     }();
-    if (!getState) return 0;
-    int count = 0;
-    for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
+    int count = OtherControllers();
+    for (DWORD i = 0; getState && i < XUSER_MAX_COUNT; ++i) {
         XINPUT_STATE state{};
         if (getState(i, &state) == ERROR_SUCCESS) ++count;
     }
