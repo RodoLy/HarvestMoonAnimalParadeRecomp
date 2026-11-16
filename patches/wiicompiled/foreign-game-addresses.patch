@@ -2004,10 +2004,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/no_place_sign.cpp b/runtime/src/hle/game_mods/no_place_sign.cpp
 new file mode 100644
-index 0000000..e348ccc
+index 0000000..e8ab5aa
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/no_place_sign.cpp
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,63 @@
 +// Harvest Moon: Animal Parade mod "no_place_sign": no place sign after a change of area. Off unless
 +// Config.toml says
 +//   [mods]
@@ -2015,7 +2015,8 @@ index 0000000..e348ccc
 +//
 +// What the game does: every time the player walks into another area, the screen fades to black, the
 +// next area loads, and a sign with a picture of the place and its name fades in on the black, stays
-+// a second and a half, fades out, and only then does the new area fade in. The player waits through
++// a while (1.5 s, then another 30 frames once told to go), fades out, and only then does the new
++// area fade in. The player waits through
 +// all of it.
 +//
 +// The change of area is a list of steps (0x801259F4, and 0x80126B84 for the other kind of change of
