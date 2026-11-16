@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..e5607f5
+index 0000000..420775c
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1253 @@
+@@ -0,0 +1,1256 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -3103,8 +3103,10 @@ index 0000000..e5607f5
 +        }
 +    }
 +
-+    // The Goddess's lines in every love message pack.
++    // The Goddess's lines in every love message pack, and the lines a couple of the same sex sees
++    // fixed for them (romance_lines.cpp).
 +    int packs = 0;
++    int fixedLines = 0;
 +    for (const auto& language : std::filesystem::directory_iterator(files / "msglang", ec)) {
 +        for (const char* sex : {"male", "female"}) {
 +            const std::filesystem::path folder = language.path() / sex;
@@ -3113,12 +3115,13 @@ index 0000000..e5607f5
 +                if (file.rfind("love", 0) != 0 || entry.path().extension() != ".mpc") {
 +                    continue;
 +                }
-+                const std::string pack = WithGoddessLines(ReadFile(entry.path()),
-+                                                          language.path().filename() == "spa",
-+                                                          std::string(sex) == "female");
++                std::string pack = WithGoddessLines(ReadFile(entry.path()), language.path().filename() == "spa",
++                                                    std::string(sex) == "female");
 +                if (pack.empty()) {
 +                    continue;
 +                }
++                const std::string name = entry.path().stem().string().substr(4);  // "loveSelr": "Selr"
++                pack = WithSameSexLines(pack, language.path().filename().string(), sex, name, fixedLines);
 +                const std::filesystem::path target = root / "msglang" / language.path().filename() / sex;
 +                std::filesystem::create_directories(target, ec);
 +                std::ofstream(target / file, std::ios::binary | std::ios::trunc) << pack;
@@ -3127,8 +3130,8 @@ index 0000000..e5607f5
 +        }
 +    }
 +    GameMods::RegisterDiscOverlay(root);
-+    std::fprintf(stderr, "[mod %s] adoption: %zu spouses, %d message packs, %zu weddings\n", kMod, g_spouses.size(),
-+                 packs, g_weddings.size());
++    std::fprintf(stderr, "[mod %s] adoption: %zu spouses, %d message packs, %d lines fixed, %zu weddings\n", kMod,
++                 g_spouses.size(), packs, fixedLines, g_weddings.size());
 +}
 +
 +const GameMods::Registration kRegistration(PrepareAdoption);
@@ -3813,15 +3816,17 @@ index 0000000..ff1de61
 +}
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
 new file mode 100644
-index 0000000..567a5a2
+index 0000000..9fd13c7
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.h
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,73 @@
 +#pragma once
 +
-+// Shared by the two source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
-+// romance_any_gender.cpp (who can fall in love with the player, and the testing panel) and
-+// romance_adoption.cpp (the Harvest Goddess's adoption scene for couples of the same sex).
++// Shared by the three source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
++// romance_any_gender.cpp (who can fall in love with the player, and the testing panel),
++// romance_adoption.cpp (the Harvest Goddess's adoption scene and the wedding for couples of the
++// same sex, and the mod's copies of the love message packs) and romance_lines.cpp (the lines of
++// those packs fixed for couples of the same sex).
 +
 +#include <cstddef>
 +#include <cstdint>
@@ -3868,6 +3873,12 @@ index 0000000..567a5a2
 +uint32_t ReadBigEndian32(const std::string& data, size_t at);
 +void PutBigEndian32(std::string& data, size_t at, uint32_t value);
 +
++// romance_lines.cpp: the love message pack `name` (love<name>.mpc, "Selr" for example) of
++// msglang/<language>/<folder>/ with the lines a couple of the same sex sees fixed for them; the
++// pack as it is when it is not one of those. `fixed` grows by the fixes made.
++std::string WithSameSexLines(const std::string& pack, const std::string& language, const std::string& folder,
++                             const std::string& name, int& fixed);
++
 +// The game's state in memory:
 +// - The state is the structure at *(0x806B3B80).
 +// - Event flags are one byte each, at state + 0x118 + flag (read by 0x80111754).
@@ -3880,6 +3891,508 @@ index 0000000..567a5a2
 +inline constexpr uint32_t kVariableTable = 0x8050AA10u;
 +uint32_t TableOffset(uint32_t table, uint32_t entry);  // what 0x80150134 works out
 +uint32_t VariableAddress(uint32_t variable);
++
++} // namespace RomanceAnyGender
+diff --git a/runtime/src/hle/game_mods/romance_lines.cpp b/runtime/src/hle/game_mods/romance_lines.cpp
+new file mode 100644
+index 0000000..5b8033b
+--- /dev/null
++++ b/runtime/src/hle/game_mods/romance_lines.cpp
+@@ -0,0 +1,496 @@
++// Harvest Moon: Animal Parade mod "romance_any_gender", part three: the lines of couples of the
++// same sex. (Part one is romance_any_gender.cpp, part two the adoption, romance_adoption.cpp.)
++//
++// The game picks a candidate's love lines by the player's sex: msglang/<language>/male/ or
++// female/love<Name>.mpc. In the original game a woman never courts Renee and a man never courts
++// Gill, so the female packs of the women candidates and the male packs of the men candidates were
++// never seen, and in some languages they still talk to the player, and of the couple, as the
++// original pairing would: "¡Bienvenido a casa!" to a woman, "Puedes besar a la novia" at the
++// wedding of two men, "Marido" among a wife's names for her wife, "Papá" as what the child of two
++// women calls the player. With the mod those packs are exactly what a couple of the same sex sees,
++// so the mod fixes those lines in its copies of the packs (romance_adoption.cpp writes the copies).
++//
++// Each fix is a piece of one message's text and what replaces it (every time it appears in that
++// message). A fix whose piece is not in the message is left out and logged, so another edition of
++// the disc only loses that fix. Covered: Spanish (spa), US English (eng) and British English
++// (bri); French, German and Italian are not.
++//
++// Lines about the children (who may be a boy or a girl) keep the original's words, as the original
++// does for every couple.
++
++#include "romance_any_gender.h"
++
++#include <algorithm>
++#include <cstdint>
++#include <cstdio>
++#include <string>
++
++namespace RomanceAnyGender {
++namespace {
++
++struct LineFix {
++    const char* language;  // the msglang folder
++    const char* pack;      // love<pack>.mpc
++    uint32_t message;
++    const char* from;
++    const char* to;
++};
++
++// The women candidates; the men candidates are the rest of the packs below.
++bool WomanCandidate(const std::string& pack) {
++    for (const char* name : {"Rena", "Katy", "Mai", "Selr", "Putt", "Ktmi", "Anis", "Lumi"}) {
++        if (pack == name) {
++            return true;
++        }
++    }
++    return false;
++}
++
++const LineFix kFixes[] = {
++    // Spanish, two women.
++    {"spa", "Rena", 8364, "ocupado", "ocupada"},
++    {"spa", "Rena", 8404, "ocupado", "ocupada"},
++    {"spa", "Rena", 8422, "se sincero", "sé sincera"},
++    {"spa", "Rena", 8424, "salgamos juntos", "salgamos juntas"},
++    {"spa", "Rena", 8463, "juntos", "juntas"},
++    {"spa", "Rena", 8464, "¿Pero seguro", "¿Pero segura"},
++    {"spa", "Rena", 8514, "para los dos", "para las dos"},
++    {"spa", "Rena", 8517, "Marido mio", "Esposa mía"},
++    {"spa", "Rena", 8519, "futuro juntos", "futuro juntas"},
++    {"spa", "Rena", 8522, "nervioso al\nirnos los dos solos", "nerviosa al\nirnos las dos solas"},
++    {"spa", "Rena", 8680, "Bienvenido", "Bienvenida"},
++    {"spa", "Rena", 8700, "Bienvenido", "Bienvenida"},
++    {"spa", "Rena", 8750, "recien casados", "recién casadas"},
++    {"spa", "Rena", 8773, "nosotros también\ncrezcamos como padres", "nosotras también\ncrezcamos como madres"},
++    {"spa", "Rena", 8825, "Papá\nPapi\nPapaito\nPadre", "Mamá\nMami\nMamita\nMadre"},
++    {"spa", "Katy", 9024, "ocupado", "ocupada"},
++    {"spa", "Katy", 9047, "casa juntos", "casa juntas"},
++    {"spa", "Katy", 9084, "seguro", "segura"},
++    {"spa", "Katy", 9089, "juntos", "juntas"},
++    {"spa", "Katy", 9137, "Marido", "Esposa"},
++    {"spa", "Katy", 9142, "tiempo juntos", "tiempo juntas"},
++    {"spa", "Katy", 9300, "Bienvenido", "Bienvenida"},
++    {"spa", "Katy", 9320, "Bienvenido", "Bienvenida"},
++    {"spa", "Katy", 9344, "que no hay hombre que se\n", "que nadie se\n"},
++    {"spa", "Katy", 9445, "Papá\nPapi\nPapaíto\nPadre", "Mamá\nMami\nMamita\nMadre"},
++    {"spa", "Mai", 9604, "ocupado estás ocupado", "ocupada estás ocupada"},
++    {"spa", "Mai", 9662, "juntos", "juntas"},
++    {"spa", "Mai", 9703, "juntos", "juntas"},
++    {"spa", "Mai", 9704, "seguro", "segura"},
++    {"spa", "Mai", 9757, "Marido", "Esposa"},
++    {"spa", "Mai", 9801, "Bobo", "Boba"},
++    {"spa", "Mai", 9821, "atento", "atenta"},
++    {"spa", "Mai", 9920, "Bienvenido", "Bienvenida"},
++    {"spa", "Mai", 9940, "Bienvenido", "Bienvenida"},
++    {"spa", "Mai", 10065, "Papá\nPapaíto\nPapito\nPadre", "Mamá\nMamita\nMami\nMadre"},
++    {"spa", "Selr", 10198, "ocupado", "ocupada"},
++    {"spa", "Selr", 10245, "aburrido", "aburrida"},
++    {"spa", "Selr", 10281, "tímido", "tímida"},
++    {"spa", "Selr", 10284, "salgamos juntos", "salgamos juntas"},
++    {"spa", "Selr", 10323, "juntos", "juntas"},
++    {"spa", "Selr", 10324, "Seguro", "Segura"},
++    {"spa", "Selr", 10329, "juntos", "juntas"},
++    {"spa", "Selr", 10377, "Marido", "Esposa"},
++    {"spa", "Selr", 10540, "Bienvenido", "Bienvenida"},
++    {"spa", "Selr", 10552, "ocupado", "ocupada"},
++    {"spa", "Selr", 10560, "Bienvenido", "Bienvenida"},
++    {"spa", "Selr", 10563, "para\nlos dos", "para\nlas dos"},
++    {"spa", "Selr", 10584, "nosostros", "nosotras"},
++    {"spa", "Selr", 10685, "Papá\nPapi\nPapaíto\nPadre", "Mamá\nMami\nMamita\nMadre"},
++    {"spa", "Putt", 10943, "juntos", "juntas"},
++    {"spa", "Putt", 10944, "seguro", "segura"},
++    {"spa", "Putt", 10997, "Marido", "Esposa"},
++    {"spa", "Putt", 11064, "mi marido", "mi esposa"},
++    {"spa", "Putt", 11160, "Bienvenido", "Bienvenida"},
++    {"spa", "Putt", 11180, "Bienvenido", "Bienvenida"},
++    {"spa", "Putt", 11185, "uno está ocupado", "una está ocupada"},
++    {"spa", "Putt", 11253, "buenos\npadres", "buenas\nmadres"},
++    {"spa", "Putt", 11256, "buenos\npadres", "buenas\nmadres"},
++    {"spa", "Putt", 11305, "Papá\nPapi\nPapaíto\nPadre", "Mamá\nMami\nMamita\nMadre"},
++    {"spa", "Ktmi", 11464, "ocupado", "ocupada"},
++    {"spa", "Ktmi", 11522, "juntos", "juntas"},
++    {"spa", "Ktmi", 11563, "juntos", "juntas"},
++    {"spa", "Ktmi", 11564, "S-Seguro", "S-Segura"},
++    {"spa", "Ktmi", 11617, "Marido", "Esposa"},
++    {"spa", "Ktmi", 11780, "Bienvenido", "Bienvenida"},
++    {"spa", "Ktmi", 11803, "celebrar juntos", "celebrar juntas"},
++    {"spa", "Ktmi", 11824, "\njuntos", "\njuntas"},
++    {"spa", "Ktmi", 11873, "buenos padres", "buenas madres"},
++    {"spa", "Ktmi", 11876, "buenos padres", "buenas madres"},
++    {"spa", "Ktmi", 11925, "Papá\nPapito\nPapaíto\nPapá", "Mamá\nMamita\nMami\nMamá"},
++    {"spa", "Anis", 12183, "juntos", "juntas"},
++    {"spa", "Anis", 12185, "un\nhermano menor", "una\nhermana menor"},
++    {"spa", "Anis", 12237, "Marido", "Esposa"},
++    {"spa", "Anis", 12541, "Papá", "Mamá"},
++    {"spa", "Anis", 12552, "Papá", "Mamá"},
++    {"spa", "Anis", 12545, "Papá\nPapito\nPapaíto\nPapá", "Mamá\nMamita\nMami\nMamá"},
++    {"spa", "Anis", 12572, "todo padre", "toda madre"},
++    {"spa", "Lumi", 12720, "Bienvenido", "Bienvenida"},
++    {"spa", "Lumi", 12762, "el primero", "la primera"},
++    {"spa", "Lumi", 12767, "somos novios", "somos novias"},
++    {"spa", "Lumi", 12803, "juntos", "juntas"},
++    {"spa", "Lumi", 12857, "Marido", "Esposa"},
++    {"spa", "Lumi", 12862, "los dos\nsolos", "las dos\nsolas"},
++    {"spa", "Lumi", 12920, "arrepentido", "arrepentida"},
++    {"spa", "Lumi", 13040, "Bienvenido", "Bienvenida"},
++    {"spa", "Lumi", 13161, "Papá", "Mamá"},
++    {"spa", "Lumi", 13172, "Papá", "Mamá"},
++    {"spa", "Lumi", 13163, "Papaíto", "Mamita"},
++    {"spa", "Lumi", 13165, "Papá\nPapito\nPapaíto\nPapá", "Mamá\nMamita\nMami\nMamá"},
++    {"spa", "Lumi", 13173, "¿Papá?", "¿Mamita?"},
++    // Spanish, two men.
++    {"spa", "Gil", 13298, "ocupada", "ocupado"},
++    {"spa", "Gil", 13360, "ocupada", "ocupado"},
++    {"spa", "Gil", 13469, "a la novia", "al novio"},
++    {"spa", "Gil", 13477, "Esposa", "Esposo"},
++    {"spa", "Gil", 13541, "ocupada", "ocupado"},
++    {"spa", "Gil", 13640, "Bienvenida", "Bienvenido"},
++    {"spa", "Gil", 13644, "ocupada", "ocupado"},
++    {"spa", "Gil", 13652, "ocupada", "ocupado"},
++    {"spa", "Gil", 13660, "Bienvenida", "Bienvenido"},
++    {"spa", "Gil", 13663, "ocupada", "ocupado"},
++    {"spa", "Gil", 13684, "ocupada", "ocupado"},
++    {"spa", "Gil", 13780, "Mamá", "Papá"},
++    {"spa", "Gil", 13785, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Wong", 13961, "soltera", "soltero"},
++    {"spa", "Wong", 13964, "una chica fuerte", "un chico fuerte"},
++    {"spa", "Wong", 13984, "ocupada", "ocupado"},
++    {"spa", "Wong", 14089, "a la novia", "al novio"},
++    {"spa", "Wong", 14097, "Esposa", "Esposo"},
++    {"spa", "Wong", 14180, "Bienvenida", "Bienvenido"},
++    {"spa", "Wong", 14260, "Bienvenida", "Bienvenido"},
++    {"spa", "Wong", 14280, "Bienvenida", "Bienvenido"},
++    {"spa", "Wong", 14304, "ocupada", "ocupado"},
++    {"spa", "Wong", 14400, "Mamá", "Papá"},
++    {"spa", "Wong", 14405, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Tao", 14564, "ocupada", "ocupado"},
++    {"spa", "Tao", 14604, "ocupada", "ocupado"},
++    {"spa", "Tao", 14709, "a la novia", "al novio"},
++    {"spa", "Tao", 14717, "Esposa", "Esposo"},
++    {"spa", "Tao", 14800, "Bienvenida", "Bienvenido"},
++    {"spa", "Tao", 14880, "Bienvenida", "Bienvenido"},
++    {"spa", "Tao", 15020, "Mamá", "Papá"},
++    {"spa", "Tao", 15025, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Ose", 15157, "centrada", "centrado"},
++    {"spa", "Ose", 15201, "tu\nsola", "tú\nsolo"},
++    {"spa", "Ose", 15205, "una chica fuerte", "un chico fuerte"},
++    {"spa", "Ose", 15284, "llena", "lleno"},
++    {"spa", "Ose", 15329, "a la novia", "al novio"},
++    {"spa", "Ose", 15337, "Esposa", "Esposo"},
++    {"spa", "Ose", 15500, "Bienvenida", "Bienvenido"},
++    {"spa", "Ose", 15504, "ocupada", "ocupado"},
++    {"spa", "Ose", 15511, "centrada", "centrado"},
++    {"spa", "Ose", 15520, "Bienvenida", "Bienvenido"},
++    {"spa", "Ose", 15548, "absorvida", "absorbido"},
++    {"spa", "Ose", 15640, "Mamá", "Papá"},
++    {"spa", "Ose", 15645, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Luke", 15844, "ocupada", "ocupado"},
++    {"spa", "Luke", 15861, "atenta", "atento"},
++    {"spa", "Luke", 15866, "segura", "seguro"},
++    {"spa", "Luke", 15949, "a la novia", "al novio"},
++    {"spa", "Luke", 15957, "Esposa", "Esposo"},
++    {"spa", "Luke", 16120, "Bienvenida", "Bienvenido"},
++    {"spa", "Luke", 16140, "Bienvenida", "Bienvenido"},
++    {"spa", "Luke", 16260, "Mamá", "Papá"},
++    {"spa", "Luke", 16265, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Juli", 16398, "ocupada", "ocupado"},
++    {"spa", "Juli", 16752, "ocupada", "ocupado"},
++    {"spa", "Juli", 16569, "a la novia", "al novio"},
++    {"spa", "Juli", 16577, "Esposa", "Esposo"},
++    {"spa", "Juli", 16660, "Bienvenida", "Bienvenido"},
++    {"spa", "Juli", 16740, "Bienvenida", "Bienvenido"},
++    {"spa", "Juli", 16760, "Bienvenida", "Bienvenido"},
++    {"spa", "Juli", 16880, "Mamá", "Papá"},
++    {"spa", "Juli", 16885, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Juli", 16912, "su madre", "su padre"},
++    {"spa", "Chya", 17142, "mi\nesposa", "mi\nesposo"},
++    {"spa", "Chya", 17189, "a la novia", "al novio"},
++    {"spa", "Chya", 17197, "Esposa", "Esposo"},
++    {"spa", "Chya", 17300, "Bienvenida", "Bienvenido"},
++    {"spa", "Chya", 17360, "Bienvenida", "Bienvenido"},
++    {"spa", "Chya", 17380, "Bienvenida", "Bienvenido"},
++    {"spa", "Chya", 17500, "Mamá", "Papá"},
++    {"spa", "Chya", 17505, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "Clvn", 17809, "a la novia", "al novio"},
++    {"spa", "Clvn", 17817, "Esposa", "Esposo"},
++    {"spa", "Clvn", 17920, "Bienvenida", "Bienvenido"},
++    {"spa", "Clvn", 17980, "Bienvenida", "Bienvenido"},
++    {"spa", "Clvn", 18000, "Bienvenida", "Bienvenido"},
++    {"spa", "Clvn", 18120, "Mamá", "Papá"},
++    {"spa", "Clvn", 18125, "Mamá.\nMamita.\nMamaíta.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    // US English, two women.
++    {"eng", "Rena", 8820, "Dada!", "Mama!"},
++    {"eng", "Katy", 9440, "Dada!", "Mama!"},
++    {"eng", "Mai", 10060, "Dada!", "Mama!"},
++    {"eng", "Selr", 10680, "Dada!", "Mama!"},
++    {"eng", "Putt", 11300, "Dada!", "Mama!"},
++    {"eng", "Ktmi", 11920, "Dada!", "Mama!"},
++    {"eng", "Anis", 12540, "Dada!", "Mama!"},
++    {"eng", "Lumi", 13160, "Dada!", "Mama!"},
++    {"eng", "Rena", 8825, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Katy", 9445, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Mai", 10065, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Selr", 10685, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Putt", 11305, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Ktmi", 11925, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Anis", 12545, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Lumi", 13165, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "Katy", 9323, "Some men", "Some people"},
++    {"eng", "Katy", 9344, "to say men", "to say people"},
++    {"eng", "Mai", 9621, "with a guy\nlike you", "with someone\nlike you"},
++    {"eng", "Selr", 10374, "Now we're husband and wife.", "Now we're married."},
++    {"eng", "Putt", 11064, "my husband", "my wife"},
++    {"eng", "Lumi", 12725, "lots of guys", "lots of people"},
++    {"eng", "Lumi", 12725, "a guy I can", "someone I can"},
++    // US English, two men.
++    {"eng", "Gil", 13469, "kiss the bride", "kiss the groom"},
++    {"eng", "Wong", 14089, "kiss the bride", "kiss the groom"},
++    {"eng", "Tao", 14709, "kiss the bride", "kiss the groom"},
++    {"eng", "Ose", 15329, "kiss the bride", "kiss the groom"},
++    {"eng", "Luke", 15949, "kiss the bride", "kiss the groom"},
++    {"eng", "Juli", 16569, "kiss the bride", "kiss the groom"},
++    {"eng", "Chya", 17189, "kiss the bride", "kiss the groom"},
++    {"eng", "Clvn", 17809, "kiss the bride", "kiss the groom"},
++    {"eng", "Gil", 13780, "Mama!", "Dada!"},
++    {"eng", "Wong", 14400, "Mama!", "Dada!"},
++    {"eng", "Tao", 15020, "Mama!", "Dada!"},
++    {"eng", "Ose", 15640, "Mama!", "Dada!"},
++    {"eng", "Luke", 16260, "Mama!", "Dada!"},
++    {"eng", "Juli", 16880, "Mama!", "Dada!"},
++    {"eng", "Chya", 17500, "Mama!", "Dada!"},
++    {"eng", "Clvn", 18120, "Mama!", "Dada!"},
++    {"eng", "Gil", 13785, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Wong", 14405, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Tao", 15025, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Ose", 15645, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Luke", 16265, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Juli", 16885, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Chya", 17505, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Clvn", 18125, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "Gil", 13708, "But a girl like you\nwould", "But a little girl\nwould"},
++    {"eng", "Wong", 14098, "husband and wife", "married"},
++    {"eng", "Luke", 16188, "I want a girl\njust like you!", "I want a girl\nso much!"},
++    {"eng", "Juli", 16486, "boyfriend and girlfriend", "boyfriends"},
++    {"eng", "Juli", 16574, "Now we're husband and wife.", "Now we're married."},
++    {"eng", "Juli", 16912, "his\nmommy", "his\ndaddy"},
++    {"eng", "Chya", 17025, "All girls like\ncake", "Everyone likes\ncake"},
++    {"eng", "Chya", 17026, "What girl doesn't like\ncake?!", "Who doesn't like\ncake?!"},
++    {"eng", "Chya", 17065, "a girl who\nknows her way", "someone who\nknows their way"},
++    {"eng", "Clvn", 17685, "a girl\nwith a bit of adventuring\nin her blood", "someone\nwith a bit of adventuring\nin their blood"},
++    {"eng", "Clvn", 17686, "with\na girl than a guy", "with\nyou than on my own"},
++    // British English, two women.
++    {"bri", "Rena", 8820, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Katy", 9440, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Mai", 10060, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Selr", 10680, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Putt", 11300, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Ktmi", 11920, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Anis", 12540, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Lumi", 13160, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Rena", 8825, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Katy", 9445, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Mai", 10065, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Selr", 10685, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Putt", 11305, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Ktmi", 11925, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Anis", 12545, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Lumi", 13165, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "Katy", 9323, "Some men", "Some people"},
++    {"bri", "Katy", 9344, "to say men", "to say people"},
++    {"bri", "Selr", 10374, "Now we're husband and wife.", "Now we're married."},
++    {"bri", "Selr", 10628, "Men need", "Both of us need"},
++    {"bri", "Putt", 11064, "my husband", "my wife"},
++    {"bri", "Anis", 12541, "Daddy!", "Mummy!"},
++    {"bri", "Anis", 12552, "Daddy!", "Mummy!"},
++    {"bri", "Lumi", 12725, "a lot of guys", "a lot of people"},
++    {"bri", "Lumi", 13161, "Daddy!", "Mummy!"},
++    {"bri", "Lumi", 13172, "Daddy!", "Mummy!"},
++    {"bri", "Lumi", 13163, "Is Daddy okay?", "Is Mama okay?"},
++    {"bri", "Lumi", 13173, "Is Daddy okay?", "Is Mama okay?"},
++    // British English, two men.
++    {"bri", "Gil", 13469, "kiss the bride", "kiss the groom"},
++    {"bri", "Wong", 14089, "kiss the bride", "kiss the groom"},
++    {"bri", "Tao", 14709, "kiss the bride", "kiss the groom"},
++    {"bri", "Ose", 15329, "kiss the bride", "kiss the groom"},
++    {"bri", "Luke", 15949, "kiss the bride", "kiss the groom"},
++    {"bri", "Juli", 16569, "kiss the bride", "kiss the groom"},
++    {"bri", "Chya", 17189, "kiss the bride", "kiss the groom"},
++    {"bri", "Clvn", 17809, "kiss the bride", "kiss the groom"},
++    {"bri", "Gil", 13780, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Wong", 14400, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Tao", 15020, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Ose", 15640, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Luke", 16260, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Juli", 16880, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Chya", 17500, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Clvn", 18120, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "Gil", 13785, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Wong", 14405, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Tao", 15025, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Ose", 15645, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Luke", 16265, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Juli", 16885, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Chya", 17505, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Clvn", 18125, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "Gil", 13643, "Wife's birthday!", "Husband's birthday!"},
++    {"bri", "Gil", 13656, "Wife's birthday!", "Husband's birthday!"},
++    {"bri", "Gil", 13662, "Wife's birthday!", "Husband's birthday!"},
++    {"bri", "Gil", 13682, "Wife's birthday!", "Husband's birthday!"},
++    {"bri", "Gil", 13705, "Ask your wife.", "Ask your husband."},
++    {"bri", "Wong", 14098, "husband and wife", "married"},
++    {"bri", "Juli", 16486, "boyfriend and girlfriend", "boyfriends"},
++    {"bri", "Juli", 16574, "Now we're husband and wife.", "Now we're married."},
++};
++
++// UTF-16 big-endian (the packs' text) to UTF-8 and back.
++std::string Utf8(const std::string& utf16) {
++    std::string out;
++    for (size_t i = 0; i + 1 < utf16.size(); i += 2) {
++        const uint32_t unit = (static_cast<uint8_t>(utf16[i]) << 8) | static_cast<uint8_t>(utf16[i + 1]);
++        if (unit < 0x80) {
++            out.push_back(static_cast<char>(unit));
++        } else if (unit < 0x800) {
++            out.push_back(static_cast<char>(0xC0 | (unit >> 6)));
++            out.push_back(static_cast<char>(0x80 | (unit & 0x3F)));
++        } else {
++            out.push_back(static_cast<char>(0xE0 | (unit >> 12)));
++            out.push_back(static_cast<char>(0x80 | ((unit >> 6) & 0x3F)));
++            out.push_back(static_cast<char>(0x80 | (unit & 0x3F)));
++        }
++    }
++    return out;
++}
++
++std::string Utf16(const std::string& utf8) {
++    std::string out;
++    for (size_t i = 0; i < utf8.size();) {
++        const uint8_t byte = static_cast<uint8_t>(utf8[i]);
++        uint32_t unit = byte;
++        size_t length = 1;
++        if (byte >= 0xE0) {
++            unit = byte & 0x0F;
++            length = 3;
++        } else if (byte >= 0xC0) {
++            unit = byte & 0x1F;
++            length = 2;
++        }
++        for (size_t k = 1; k < length && i + k < utf8.size(); ++k) {
++            unit = (unit << 6) | (static_cast<uint8_t>(utf8[i + k]) & 0x3F);
++        }
++        out.push_back(static_cast<char>(unit >> 8));
++        out.push_back(static_cast<char>(unit & 0xFF));
++        i += length;
++    }
++    return out;
++}
++
++// The longest line as the text shows it: characters, not codes (%...%), a name (%A%, %0D%, %1D%)
++// as 8.
++uint32_t LongestLine(const std::string& text) {
++    uint32_t longest = 0;
++    uint32_t line = 0;
++    for (size_t i = 0; i < text.size(); ++i) {
++        if (text[i] == '\n') {
++            line = 0;
++        } else if (text[i] == '%') {
++            const size_t close = text.find('%', i + 1);
++            if (close == std::string::npos) {
++                break;
++            }
++            const std::string code = text.substr(i + 1, close - i - 1);
++            if (code == "A" || code == "0D" || code == "1D") {
++                line += 8;
++            }
++            i = close;
++        } else if ((static_cast<uint8_t>(text[i]) & 0xC0) != 0x80) {
++            ++line;
++        }
++        longest = std::max(longest, line);
++    }
++    return longest;
++}
++
++} // namespace
++
++std::string WithSameSexLines(const std::string& pack, const std::string& language, const std::string& folder,
++                             const std::string& name, int& fixed) {
++    // Only the packs a couple of the same sex sees, and that have fixes.
++    if (folder != (WomanCandidate(name) ? "female" : "male")) {
++        return pack;
++    }
++    bool any = false;
++    for (const LineFix& fix : kFixes) {
++        any = any || (language == fix.language && name == fix.pack);
++    }
++    if (!any) {
++        return pack;
++    }
++    if (pack.size() < 0x14 || pack.compare(0, 4, "MSGP") != 0) {
++        return pack;
++    }
++    const uint32_t count = ReadBigEndian32(pack, 8);
++    const uint32_t data = ReadBigEndian32(pack, 0x10);
++    if (data > pack.size() || 0x14 + 12 * size_t(count) > data) {
++        return pack;
++    }
++    // The pack ("MSGP": a count at 8, the rows {message, offset, size} from 0x14, then the
++    // messages from the offset at 0x10), rebuilt with each message as it is or fixed. A message
++    // ("MSGB") keeps its header: its line breaks, pages and most line breaks in a page stay (no
++    // fix adds a line), the longest line grows with the fix, the text's size is the new one.
++    std::string rows = pack.substr(0x14, 12 * size_t(count));
++    std::string messages;
++    for (uint32_t i = 0; i < count; ++i) {
++        const uint32_t id = ReadBigEndian32(rows, 12 * size_t(i));
++        const size_t at = data + ReadBigEndian32(rows, 12 * size_t(i) + 4);
++        const size_t size = ReadBigEndian32(rows, 12 * size_t(i) + 8);
++        if (at + size > pack.size()) {
++            return pack;
++        }
++        std::string entry = pack.substr(at, size);
++        std::string text;
++        bool changed = false;
++        for (const LineFix& fix : kFixes) {
++            if (fix.message != id || language != fix.language || name != fix.pack) {
++                continue;
++            }
++            if (!changed) {
++                const uint32_t start = ReadBigEndian32(entry, 0x18);
++                const uint32_t length = ReadBigEndian32(entry, 0x1C);
++                if (entry.size() < 0x20 || start + size_t(length) > entry.size()) {
++                    break;
++                }
++                text = Utf8(entry.substr(start, length));
++            }
++            const std::string from = fix.from;
++            const std::string to = fix.to;
++            size_t found = text.find(from);
++            if (found == std::string::npos) {
++                std::fprintf(stderr, "[mod %s] lines: %s love%s.mpc message %u has no \"%s\"; left as is\n", kMod,
++                             language.c_str(), name.c_str(), id, fix.from);
++                continue;
++            }
++            for (; found != std::string::npos; found = text.find(from, found + to.size())) {
++                text.replace(found, from.size(), to);
++            }
++            changed = true;
++            ++fixed;
++        }
++        if (changed) {
++            const uint32_t start = ReadBigEndian32(entry, 0x18);
++            const std::string original = Utf8(entry.substr(start, ReadBigEndian32(entry, 0x1C)));
++            const uint32_t longest = ReadBigEndian32(entry, 0x10);
++            const uint32_t before = LongestLine(original);
++            const uint32_t after = LongestLine(text);
++            const std::string utf16 = Utf16(text);
++            entry = entry.substr(0, start) + utf16;
++            PutBigEndian32(entry, 0x10, after > before ? longest + (after - before) : longest);
++            PutBigEndian32(entry, 0x1C, static_cast<uint32_t>(utf16.size()));
++        }
++        PutBigEndian32(rows, 12 * size_t(i) + 4, static_cast<uint32_t>(messages.size()));
++        PutBigEndian32(rows, 12 * size_t(i) + 8, static_cast<uint32_t>(entry.size()));
++        messages += entry;
++    }
++    return pack.substr(0, 0x14) + rows + messages;
++}
 +
 +} // namespace RomanceAnyGender
 diff --git a/runtime/src/hle/gx/gx_copy.cpp b/runtime/src/hle/gx/gx_copy.cpp

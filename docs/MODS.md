@@ -59,10 +59,28 @@ game, giving the candidate the Blue Feather: its scene starts with the player ho
 out, and started any other way (talking with empty hands, leaving the house) the screen stayed
 black.
 
-The dialogue needs nothing new. The disc has every candidate's love text in a version for a
-male player and one for a female player (`msglang/<language>/male` and `female`). The game picks
-the folder by the player's sex, so in Spanish, for example, the lines already use the right
-gender.
+**The dialogue.** The disc has every candidate's love text in a version for a male player and one
+for a female player (`msglang/<language>/male` and `female`), and the game picks the folder by the
+player's sex. But in the original game a woman never courts Renee and a man never courts Gill, so
+the female packs of the women candidates and the male packs of the men candidates were never
+seen, and some of their lines still talk to the player, and of the couple, as the original pairing
+would. The mod (`romance_lines.cpp`) fixes those lines in its copies of the packs, so only couples
+of the same sex see the change:
+
+| Example (Spanish) | Two women | Two men |
+|---|---|---|
+| Coming home | "¡Bienvenido a casa!" → "¡Bienvenida a casa!" | "¡Bienvenida…" → "¡Bienvenido…" |
+| The wedding | — | "Puedes besar a la novia." → "Puedes besar al novio." |
+| What the spouse may call the player | "Marido" → "Esposa" | "Esposa" → "Esposo" |
+| What the child calls the player | "Papá / Papi / Papaíto / Padre" → "Mamá / Mami / Mamita / Madre" | the other way |
+| The two of them | "juntos", "los dos", "recién casados", "buenos padres" → "juntas", "las dos", "recién casadas", "buenas madres" | (already right) |
+| Talking to the player | "ocupado", "seguro", "tímido", "atento"… → "ocupada", "segura", "tímida", "atenta"… | the other way |
+
+Each fix is a piece of one message and what replaces it: 169 in Spanish, 58 in US English (where
+nearly everything is neutral: "Dad / Daddy" and "Mom / Mama", "kiss the bride", "husband and
+wife") and 60 in British English. A fix whose piece is not on the disc is left out and logged.
+Lines about the children keep the original's words, as the original does for every couple.
+French, German and Italian are not covered yet.
 
 **The wedding.** Each candidate's wedding (L000007) is the original scene, with one change for a
 couple of the same sex. Its last shot, the photo in front of the church, has the groom carrying the
@@ -190,10 +208,28 @@ juego, dándole al candidato la Pluma Azul: su escena empieza con quien juega of
 empezada de otra forma (hablando con las manos vacías, al salir de la casa) la pantalla se quedaba
 en negro.
 
-Los diálogos no necesitan nada nuevo. El disco trae los textos de amor de cada candidato en una
-versión para jugador hombre y otra para jugadora mujer (`msglang/<idioma>/male` y `female`). El
-juego elige la carpeta según el sexo de quien juega, así que en español, por ejemplo, las frases ya
-usan el género correcto.
+**Los diálogos.** El disco trae los textos de amor de cada candidato en una versión para jugador
+hombre y otra para jugadora mujer (`msglang/<idioma>/male` y `female`), y el juego elige la carpeta
+según el sexo de quien juega. Pero en el juego original una mujer nunca corteja a Renee y un hombre
+nunca corteja a Gill, así que los paquetes `female` de las candidatas y los `male` de los
+candidatos nunca se veían, y algunas de sus frases todavía le hablan a quien juega, y de la pareja,
+como lo haría la pareja original. El mod (`romance_lines.cpp`) corrige esas frases en sus copias de
+los paquetes, así que solo las parejas del mismo sexo ven el cambio:
+
+| Ejemplo (español) | Dos mujeres | Dos hombres |
+|---|---|---|
+| Al volver a casa | "¡Bienvenido a casa!" → "¡Bienvenida a casa!" | "¡Bienvenida…" → "¡Bienvenido…" |
+| La boda | — | "Puedes besar a la novia." → "Puedes besar al novio." |
+| Cómo puede llamar la pareja a quien juega | "Marido" → "Esposa" | "Esposa" → "Esposo" |
+| Cómo llama el hijo a quien juega | "Papá / Papi / Papaíto / Padre" → "Mamá / Mami / Mamita / Madre" | al revés |
+| Las dos personas | "juntos", "los dos", "recién casados", "buenos padres" → "juntas", "las dos", "recién casadas", "buenas madres" | (ya está bien) |
+| Hablándole a quien juega | "ocupado", "seguro", "tímido", "atento"… → "ocupada", "segura", "tímida", "atenta"… | al revés |
+
+Cada corrección es un trozo de un mensaje y lo que lo sustituye: 169 en español, 58 en inglés de
+EE. UU. (donde casi todo es neutro: "Dad / Daddy" y "Mom / Mama", "kiss the bride", "husband and
+wife") y 60 en inglés británico. Si el trozo no está en el disco, esa corrección se omite y queda en
+el registro. Las frases sobre los hijos mantienen las palabras del original, como hace el original
+con cualquier pareja. Francés, alemán e italiano todavía no están.
 
 **La boda.** La boda de cada candidato (L000007) es la escena original, con un cambio para una
 pareja del mismo sexo. Su última toma, la foto frente a la iglesia, tiene al novio cargando a la
