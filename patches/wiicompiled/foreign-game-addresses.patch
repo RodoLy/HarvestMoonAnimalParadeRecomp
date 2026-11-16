@@ -2072,10 +2072,10 @@ index 0000000..e348ccc
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..5663944
+index 0000000..e498de4
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,137 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -2084,13 +2084,16 @@ index 0000000..5663944
 +//   faster_walking = 1.5
 +//
 +// How the game moves the player: the player is a BB_CCharaObjePc (vtable 0x80482454), and every frame
-+// the game calls its update, 0x800CFB30, with the time since the last frame in f1, in seconds. Walking,
-+// the animations and the actions all advance by that time (the update keeps it at +0x56C; when
-+// +0x570 is set the game uses a fixed step of its own instead and the mods change nothing). So the
-+// mods hand the player a longer step: the player then does in one frame what takes longer in the
-+// original game, and nothing else in the world changes speed (the clock, the villagers, the animals).
-+//
-+// Which step is longer depends on what the player is doing, the action at +0x5EC. These were read
++// the game calls its update, 0x800CFB30, with the time since the last frame in f1, in seconds.
++// - Walking advances by that time, so faster_walking hands the player a longer time step: the player
++//   covers more ground in one frame, and nothing else in the world changes speed.
++// - The actions do not: their animations move on one step per update, whatever the time (tried: a
++//   longer step left them as slow as before). So faster_actions runs the player's update more than
++//   once in the frame while the action lasts: twice for x2, three times for x3, and for x1.5 twice
++//   every other frame. It stops repeating as soon as the action is over, and only the player is
++//   updated again: the clock, the villagers and the animals keep their speed.
++
++// Which mod applies depends on what the player is doing, the action at +0x5EC. These were read
 +// from the log while playing (the mods write every change of action there):
 +//   0, 1, 2      standing still: empty-handed, with a tool, carrying something
 +//   39, 40, 41   walking or running, the same three ways
@@ -2098,8 +2101,9 @@ index 0000000..5663944
 +//   94 then 86   picking something up from the ground into the rucksack
 +//   90 then 81   taking something out to carry it; 69 then 72 putting it down
 +//   90 then 87   taking out a tool
-+//   95 then 98   the hoe
-+//   119          filling the watering can; 115 then 118 watering
++//   95, 96 then 98 or 99   the hoe
++//   88           putting something down
++//   119          filling the watering can; 115, 116 then 118 watering
 +//   91, 92       the other tools tried (the sickle, the hammer)
 +// Only the actions in the lists below are sped up, so a scene, a talk or anything not listed plays
 +// as in the original game.
@@ -2127,7 +2131,7 @@ index 0000000..5663944
 +// The player's walking (and running), and the short stop or turn after it.
 +const std::set<uint32_t> kWalking = {39, 40, 41, 21, 22, 23};
 +// Picking things up and putting them down, taking things out of the rucksack, and the tools.
-+const std::set<uint32_t> kQuickActions = {94, 86, 90, 81, 69, 72, 87, 95, 98, 119, 115, 118, 91, 92};
++const std::set<uint32_t> kQuickActions = {94, 86, 90, 81, 69, 72, 88, 87, 95, 96, 98, 99, 119, 115, 116, 118, 91, 92};
 +
 +// A mod's speed: its number in [mods], 1.5 for a plain "true", and 1 (the original) when it is off.
 +double Speed(const char* mod) {
@@ -2177,16 +2181,36 @@ index 0000000..5663944
 +    using namespace PlayerSpeed;
 +    const double walking = WalkingSpeed();
 +    const double actions = ActionSpeed();
-+    if (walking != 1.0 || actions != 1.0) {
-+        const uint32_t action = Memory::Read32(ctx->gpr[3] + kAction);
-+        NoteAction(action);
-+        if (kWalking.count(action) != 0) {
-+            ctx->fpr[1].d *= walking;
-+        } else if (kQuickActions.count(action) != 0) {
-+            ctx->fpr[1].d *= actions;
++    if (walking == 1.0 && actions == 1.0) {
++        GuestFunctions::BaseTranslation(0x800CFB30u)(ctx);
++        return;
++    }
++    const uint32_t player = ctx->gpr[3];
++    const double step = ctx->fpr[1].d;
++    const uint32_t action = Memory::Read32(player + kAction);
++    NoteAction(action);
++    if (kWalking.count(action) != 0) {
++        ctx->fpr[1].d = step * walking;
++        GuestFunctions::BaseTranslation(0x800CFB30u)(ctx);
++        return;
++    }
++    if (kQuickActions.count(action) == 0) {
++        GuestFunctions::BaseTranslation(0x800CFB30u)(ctx);
++        return;
++    }
++    // How many updates this frame: the speed, carried over from frame to frame for x1.5.
++    static double s_owed = 0.0;
++    s_owed += actions;
++    int updates = static_cast<int>(s_owed);
++    s_owed -= updates;
++    for (int i = 0; i < updates; ++i) {
++        ctx->gpr[3] = player;
++        ctx->fpr[1].d = step;
++        GuestFunctions::BaseTranslation(0x800CFB30u)(ctx);
++        if (kQuickActions.count(Memory::Read32(player + kAction)) == 0) {
++            break;  // the action is over: the rest of the frame is the original game's
 +        }
 +    }
-+    GuestFunctions::BaseTranslation(0x800CFB30u)(ctx);
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 800CFB30, AnimalParadePlayerUpdate);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp

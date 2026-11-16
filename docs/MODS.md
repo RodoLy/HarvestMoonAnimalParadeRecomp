@@ -178,15 +178,20 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
 - The player is a `BB_CCharaObjePc` (vtable 0x80482454). Every frame the game calls its update,
   0x800CFB30, with the time since the last frame in f1, in seconds; walking, the animations and the
   actions all advance by that time.
-- The mods wrap the update and hand the player a longer time step, but only while the player's
-  action (+0x5EC) is in one of two lists: walking (39, 40, 41, and 21, 22, 23 for the stop after it)
-  or the quick actions (picking up 94 and 86, carrying 90 and 81, putting down 69 and 72, taking out a
-  tool 90 and 87, the hoe 95 and 98, the watering can 119, 115 and 118, other tools 91 and 92). A
-  scene, a talk or anything not listed plays as in the original game.
+- The mods wrap the update and act only while the player's action (+0x5EC) is in one of two lists:
+  walking (39, 40, 41, and 21, 22, 23 for the stop after it) or the quick actions (picking up 94
+  and 86, carrying 90 and 81, putting down 69, 72 and 88, taking out a tool 90 and 87, the hoe 95,
+  96, 98 and 99, the watering can 119, 115, 116 and 118, other tools 91 and 92). A scene, a talk or
+  anything not listed plays as in the original game.
+- Walking advances by the time step, so `faster_walking` hands the player a longer one. The actions'
+  animations move one step per update whatever the time, so `faster_actions` runs the player's update
+  more than once in the frame instead (twice for ×2, three times for ×3, twice every other frame for
+  ×1.5) and stops as soon as the action is over.
 - The numbers were read from the log while playing: with either mod on, every change of action goes
   there as `[player-action] <action> for <ms> ms, then <next>`.
 
-**Being tested.** Tried: walking at ×2 in the cloud and on a Windows ARM PC.
+**Being tested.** Tried at ×2 on a Windows ARM PC: walking, and the hoe, the watering can and the
+sickle take half the time.
 
 ---
 
@@ -368,12 +373,17 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
 - Quien juega es un `BB_CCharaObjePc` (vtable 0x80482454). En cada cuadro el juego llama a su
   actualización, 0x800CFB30, con el tiempo desde el cuadro anterior en f1, en segundos; la caminata,
   las animaciones y las acciones avanzan todas con ese tiempo.
-- Los mods envuelven la actualización y le dan un paso de tiempo más largo, pero solo mientras la
-  acción de quien juega (+0x5EC) está en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al
-  frenar) o las acciones rápidas (recoger 94 y 86, cargar 90 y 81, soltar 69 y 72, sacar una
-  herramienta 90 y 87, la azada 95 y 98, la regadera 119, 115 y 118, otras herramientas 91 y 92). Una
-  escena, una plática o cualquier cosa fuera de las listas va como en el juego original.
+- Los mods envuelven la actualización y actúan solo mientras la acción de quien juega (+0x5EC) está
+  en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al frenar) o las acciones rápidas (recoger
+  94 y 86, cargar 90 y 81, soltar 69, 72 y 88, sacar una herramienta 90 y 87, la azada 95, 96, 98 y
+  99, la regadera 119, 115, 116 y 118, otras herramientas 91 y 92). Una escena, una plática o
+  cualquier cosa fuera de las listas va como en el juego original.
+- Caminar avanza con el paso de tiempo, así que `faster_walking` le da uno más largo. Las animaciones
+  de las acciones avanzan un paso por actualización sin importar el tiempo, así que `faster_actions`
+  corre la actualización de quien juega más de una vez en el cuadro (dos veces para ×2, tres para
+  ×3, dos veces cada dos cuadros para ×1.5) y para en cuanto la acción termina.
 - Los números salieron del log jugando: con cualquiera de los dos mods activo, cada cambio de acción
   se anota ahí como `[player-action] <acción> for <ms> ms, then <siguiente>`.
 
-**En pruebas.** Probado: caminar a ×2 en la nube y en una PC Windows ARM.
+**En pruebas.** Probado a ×2 en una PC Windows ARM: caminar, y la azada, la regadera y la hoz tardan
+la mitad.
