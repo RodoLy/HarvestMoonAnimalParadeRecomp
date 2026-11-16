@@ -64,6 +64,17 @@ male player and one for a female player (`msglang/<language>/male` and `female`)
 the folder by the player's sex, so in Spanish, for example, the lines already use the right
 gender.
 
+**The wedding.** Each candidate's wedding (L000007) is the original scene, with one change for a
+couple of the same sex. Its last shot, the photo in front of the church, has the groom carrying the
+bride: both are placed on the same spot and play motion `0x225`, so two brides or two grooms end up
+inside each other. The mod (`romance_adoption.cpp`) answers those weddings (the `0x801320B4` wrap
+below) with copies of `loveGirl/LG_L000007.opb` (two brides) and `loveBoy/LB_L000007.opb` (two
+grooms) written into the unused `script/test/sample/sample_120.opb` and `sample_121.opb` (files
+18421 and 18422). In the copies, that shot has them side by side, as in the vows: the player moves
+0.45 along x and the spouse the other way, and they play `0x8D` (the player's cheer earlier in the
+scene) and `0x33F` (the spouse's, which candidates of both sexes play) instead of `0x225`. Nothing
+else changes.
+
 **The children: adoption.** After the wedding, each candidate's events go on with the family:
 L000015, at bedtime, the spouse asks to have a child (and whether a boy or a girl); L000016, days
 later, the birth; L000017 to L000020 the baby growing; L000029 and L000030 the second child, the
@@ -83,7 +94,7 @@ already comes by magic.
 
 | | How |
 |---|---|
-| Which scene an event plays | A table at `0x80485160`, 12 bytes per event; `0x801320B4` returns the scene's file. The mod wraps it: for a same-sex couple's L000015 and L000029 it answers with the disc's unused test scenes `script/test/sample/sample_125.opb` to `sample_127.opb` (files 18426 to 18428) |
+| Which scene an event plays | A table at `0x80485160`, 12 bytes per event; `0x801320B4` returns the scene's file. The mod wraps it: for a same-sex couple's L000015 and L000029 it answers with the disc's unused test scenes `script/test/sample/sample_125.opb` to `sample_127.opb` (files 18426 to 18428), and for a same-sex couple's wedding with `sample_120.opb` or `sample_121.opb` |
 | The scene | OPAL bytecode the mod writes into its copies of those files, staged like the game's own scenes (`LC_L000015.opb`, the Goddess's `GDSS_L000016.opb`, the births `LG/LB_L000016.opb`) |
 | The spouse's lines | Their own: the question's message set (`event/msgSet_love*.db`) gets ten lines of the birth's set added (slots 20 to 29: the name, what the baby will be like, good night, the book) |
 | The Goddess's lines | New: messages `0xE000` on, added to every `msglang/<language>/<male|female>/love*.mpc` (Spanish in `spa`, English in the others) |
@@ -101,18 +112,18 @@ typed goes on the first baby's record, which no one has yet and a real birth nam
 The spouse calls the player by the name the wedding sets (game variable 0x51). A test that makes a
 marriage by changing the game's memory has to set it too (to 0), or those lines show no name.
 
-**Still to do:**
-- Try it all in the game: the proposal, the wedding and the spouse at home. Both adoptions were
-  tried in the cloud: the first with a marriage made in memory (question, Goddess, name, book,
-  flags), the second after the developers' own set-up script `script/config/05_Child2.opb`
-  (married to Luke, first child grown) with the player's sex turned to the spouse's.
-
 The disc keeps the developers' set-up scripts in `script/config/` (`03_Marriage.opb`,
 `04_Child1.opb`, `05_Child2.opb`, `06_Child2Birth.opb` and more): each puts the game's state where a
 part of the family story starts. They are OPAL scenes like any other, so for testing one can be
 played in place of a scene the game already plays.
-- Check the rest of the places that read the player's sex: the wedding, the spouse at home and the
-  rivals.
+
+Tried so far: both adoptions in the cloud (the first with a marriage made in memory, the second
+after `script/config/05_Child2.opb`, married to Luke, with the player's sex turned to the
+spouse's); the confession, the proposal and the wedding of two women with Selena on a PC.
+
+**Still to do:**
+- Try the new wedding photo, and the spouse at home.
+- Check the rest of the places that read the player's sex: the spouse at home and the rivals.
 
 ---
 
@@ -180,6 +191,17 @@ versión para jugador hombre y otra para jugadora mujer (`msglang/<idioma>/male`
 juego elige la carpeta según el sexo de quien juega, así que en español, por ejemplo, las frases ya
 usan el género correcto.
 
+**La boda.** La boda de cada candidato (L000007) es la escena original, con un cambio para una
+pareja del mismo sexo. Su última toma, la foto frente a la iglesia, tiene al novio cargando a la
+novia: los dos se colocan en el mismo punto y hacen el movimiento `0x225`, así que dos novias o dos
+novios acaban uno dentro del otro. El mod (`romance_adoption.cpp`) responde a esas bodas (el
+envoltorio de `0x801320B4`, abajo) con copias de `loveGirl/LG_L000007.opb` (dos novias) y
+`loveBoy/LB_L000007.opb` (dos novios) escritas en `script/test/sample/sample_120.opb` y
+`sample_121.opb`, que el disco no usa (archivos 18421 y 18422). En las copias esa toma los pone uno
+al lado del otro, como en los votos: quien juega se mueve 0,45 en x y la pareja al otro lado, y
+hacen `0x8D` (el festejo de quien juega antes en la escena) y `0x33F` (el de la pareja, que hacen
+candidatos de los dos sexos) en lugar de `0x225`. Nada más cambia.
+
 **Los hijos: la adopción.** Después de la boda, los eventos de cada candidato siguen con la
 familia: L000015, a la hora de dormir, la pareja propone tener un hijo (y si niño o niña); L000016,
 días después, el parto; L000017 a L000020 el bebé creciendo; L000029 y L000030 el segundo hijo,
@@ -199,7 +221,7 @@ Con la Diosa o el Rey de la Cosecha como pareja no cambia nada: su hijo ya llega
 
 | | Cómo |
 |---|---|
-| Qué escena pone un evento | Una tabla en `0x80485160`, 12 bytes por evento; `0x801320B4` devuelve el archivo de la escena. El mod la envuelve: para L000015 y L000029 de una pareja del mismo sexo responde con escenas de prueba que el disco no usa, `script/test/sample/sample_125.opb` a `sample_127.opb` (archivos 18426 a 18428) |
+| Qué escena pone un evento | Una tabla en `0x80485160`, 12 bytes por evento; `0x801320B4` devuelve el archivo de la escena. El mod la envuelve: para L000015 y L000029 de una pareja del mismo sexo responde con escenas de prueba que el disco no usa, `script/test/sample/sample_125.opb` a `sample_127.opb` (archivos 18426 a 18428), y para la boda de una pareja del mismo sexo con `sample_120.opb` o `sample_121.opb` |
 | La escena | Código OPAL que el mod escribe en sus copias de esos archivos, montado como las escenas del juego (`LC_L000015.opb`, la de la Diosa `GDSS_L000016.opb`, los partos `LG/LB_L000016.opb`) |
 | Las frases de la pareja | Las suyas: al conjunto de mensajes de la pregunta (`event/msgSet_love*.db`) se le añaden diez frases del conjunto del parto (posiciones 20 a 29: el nombre, cómo será el bebé, buenas noches, el libro) |
 | Las frases de la Diosa | Nuevas: mensajes `0xE000` en adelante, añadidos a cada `msglang/<idioma>/<male|female>/love*.mpc` (español en `spa`, inglés en los demás) |
@@ -218,16 +240,15 @@ La pareja llama a quien juega por el nombre que fija la boda (variable 0x51 del 
 que hace un matrimonio cambiando la memoria del juego también tiene que fijarla (a 0), o esas frases
 salen sin nombre.
 
-**Falta:**
-- Probarlo todo en el juego: la pedida, la boda y la pareja en casa. Las dos adopciones se
-  probaron en la nube: la primera con un matrimonio hecho en memoria (pregunta, Diosa, nombre,
-  libro, banderas), la segunda tras el script de preparación de los propios desarrolladores
-  `script/config/05_Child2.opb` (casada con Luke, primer hijo ya crecido) cambiando el sexo de quien
-  juega al de la pareja.
-
 El disco guarda los scripts de preparación de los desarrolladores en `script/config/`
 (`03_Marriage.opb`, `04_Child1.opb`, `05_Child2.opb`, `06_Child2Birth.opb` y más): cada uno deja el
 estado del juego donde empieza una parte de la historia de la familia. Son escenas OPAL como las
 demás, así que para probar se puede poner una en lugar de una escena que el juego ya pone.
-- Revisar el resto de los lugares que leen el sexo de quien juega: la boda, la pareja en casa y
-  los rivales.
+
+Probado hasta ahora: las dos adopciones en la nube (la primera con un matrimonio hecho en memoria,
+la segunda tras `script/config/05_Child2.opb`, casada con Luke, cambiando el sexo de quien juega al
+de la pareja); la declaración, la pedida y la boda de dos mujeres con Selena en un PC.
+
+**Falta:**
+- Probar la nueva foto de la boda, y la pareja en casa.
+- Revisar el resto de los lugares que leen el sexo de quien juega: la pareja en casa y los rivales.

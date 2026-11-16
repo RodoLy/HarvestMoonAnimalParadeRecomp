@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..4afa2fd
+index 0000000..1ecfb25
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1096 @@
+@@ -0,0 +1,1187 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -1917,6 +1917,12 @@ index 0000000..4afa2fd
 +//   on, in Spanish for the Spanish packs and in English for the others.
 +// - The Harvest Goddess and the Harvest King as spouses keep their own scenes: their child already
 +//   comes by magic.
++//
++// The wedding (each candidate's L000007) keeps the original scene but for its last shot: there
++// the groom carries the bride in his arms (motion 0x225 for both, placed on the same spot), and two
++// brides or two grooms end up inside each other. For a same-sex couple the wedding plays a copy
++// (sample_120.opb for two brides, sample_121.opb for two grooms) where that shot has them side by
++// side, both cheering (motion 0x8D).
 +
 +#include "romance_any_gender.h"
 +
@@ -1951,6 +1957,9 @@ index 0000000..4afa2fd
 +constexpr uint32_t kSecondChildFile = 18428;         // sample_127.opb
 +// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on).
 +constexpr uint32_t kFirstPreviewFile = 18401;
++// The wedding with its last shot changed (sample_120.opb and sample_121.opb).
++constexpr uint32_t kWeddingOfBridesFile = 18421;
++constexpr uint32_t kWeddingOfGroomsFile = 18422;
 +
 +// The characters of the scene, as the game's scenes name them.
 +constexpr uint32_t kPlayer = 0;
@@ -1977,6 +1986,7 @@ index 0000000..4afa2fd
 +    int preview;  // which preview file shows this character
 +};
 +std::map<uint32_t, Adoption> g_adoptions;  // by the question's event
++std::map<uint32_t, uint32_t> g_weddings;    // a candidate's wedding event: the candidate
 +bool g_testAdoption = false;
 +uint32_t g_sceneBaby = 0;  // the baby of the last adoption scene started (62 or 63)
 +
@@ -1989,8 +1999,19 @@ index 0000000..4afa2fd
 +    if (!Enabled()) {
 +        return;
 +    }
++    if (Memory::Read32(kGameState) == 0) {
++        return;
++    }
++    const auto wedding = g_weddings.find(event);
++    if (wedding != g_weddings.end()) {
++        const int partnerSex = NaturalPartnerSex(wedding->second);
++        if (partnerSex != static_cast<int>(Memory::Read32(VariableAddress(0x23)))) {
++            ctx->gpr[3] = partnerSex == kMan ? kWeddingOfBridesFile : kWeddingOfGroomsFile;
++        }
++        return;
++    }
 +    const auto found = g_adoptions.find(event);
-+    if (found == g_adoptions.end() || Memory::Read32(kGameState) == 0) {
++    if (found == g_adoptions.end()) {
 +        return;
 +    }
 +    if (g_testAdoption && found->second.child == 0 && found->second.character == AdoptionPreviewCharacter()) {
@@ -2845,6 +2866,51 @@ index 0000000..4afa2fd
 +    return out;
 +}
 +
++// A wedding scene (loveGirl/LG_L000007.opb or loveBoy/LB_L000007.opb) whose last shot has the
++// couple side by side instead of one carrying the other. In that shot both are placed (0x086) on
++// the same spot and play motion 0x225; here the player moves `playerShift` along x and the spouse
++// the other way (the vows put them about one unit apart along x), the player plays 0x8D (the
++// player's cheer earlier in the scene) and the spouse 0x33F (the spouse's, which candidates of
++// both sexes play). Empty if the scene is not as expected.
++std::string WeddingSideBySide(std::string data, float playerShift) {
++    if (data.size() < 0x1C || data.compare(0, 4, "OPAL") != 0) {
++        return {};
++    }
++    const uint32_t table = ReadBigEndian32(data, 0xC);
++    const uint32_t code = ReadBigEndian32(data, 0x10);
++    const uint32_t count = ReadBigEndian32(data, 0x14);
++    if (table + 4 * size_t(count) > data.size()) {
++        return {};
++    }
++    size_t lastPlace[2] = {0, 0};  // the player's and the spouse's last 0x086 so far
++    int changed = 0;
++    for (uint32_t i = 0; i < count; ++i) {
++        const size_t at = code + ReadBigEndian32(data, table + 4 * size_t(i));
++        if (at + 12 > data.size()) {
++            return {};
++        }
++        const uint32_t command = ReadBigEndian32(data, at) & 0xFFF;
++        const uint32_t who = ReadBigEndian32(data, at + 4);
++        const int which = who == kPlayer ? 0 : who == kSpouse ? 1 : -1;
++        if (which < 0) {
++            continue;
++        }
++        if (command == 0x086) {
++            lastPlace[which] = at;
++        } else if (command == 0x08B && ReadBigEndian32(data, at + 8) == 0x225 && lastPlace[which] != 0) {
++            PutBigEndian32(data, at + 8, which == 0 ? 0x8D : 0x33F);
++            // 0x086: who, then x and z, each after the word 0x02000000.
++            const size_t x = lastPlace[which] + 12;
++            const uint32_t bits = ReadBigEndian32(data, x);
++            float value;
++            std::memcpy(&value, &bits, 4);
++            PutBigEndian32(data, x, Bits(value + (which == 0 ? playerShift : -playerShift)));
++            ++changed;
++        }
++    }
++    return changed == 2 ? data : std::string();
++}
++
 +void PrepareAdoption() {
 +    if (!Enabled() || ::GuestRegion::ForeignGameAddress("RBIEE9", 1u) == 0) {
 +        return;
@@ -2869,6 +2935,18 @@ index 0000000..4afa2fd
 +            const std::string which = match[1].str();
 +            (which == "15" ? spouse.askEvent[0] : which == "29" ? spouse.askEvent[1]
 +             : which == "16" ? spouse.birthEvent[0] : spouse.birthEvent[1]) = event;
++        }
++    }
++    // The candidates' weddings (their L000007 events).
++    g_weddings.clear();
++    static const std::regex weddingEvent("msg0_0\\s+\"[A-Z]+_L000007\"");
++    for (const char* name : {"varSet_loveM.db", "varSet_loveW.db"}) {
++        for (const std::string& block : Blocks(ReadFile(events / name))) {
++            const long character = Number(block, "chara0");
++            const long event = Number(block, "evtNo");
++            if (std::regex_search(block, weddingEvent) && character >= 1 && character <= 16 && event >= 0) {
++                g_weddings[static_cast<uint32_t>(event)] = static_cast<uint32_t>(character);
++            }
 +        }
 +    }
 +    const std::map<long, uint32_t> flags = OwnFlags(ReadFile(events / "prm_love.epc"));
@@ -2901,6 +2979,7 @@ index 0000000..4afa2fd
 +    }
 +    if (g_spouses.empty()) {
 +        std::fprintf(stderr, "[mod %s] adoption: no child events found; the scene is off\n", kMod);
++        g_weddings.clear();
 +        return;
 +    }
 +
@@ -2912,6 +2991,17 @@ index 0000000..4afa2fd
 +    std::ofstream(scenes / "sample_125.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, true, g_spouses);
 +    std::ofstream(scenes / "sample_126.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, false, g_spouses);
 +    std::ofstream(scenes / "sample_127.opb", std::ios::binary | std::ios::trunc) << BuildScene(1, true, g_spouses);
++    // The weddings of two brides and of two grooms. The groom stands on the larger x in the vows.
++    const std::filesystem::path love = files / "script" / "love";
++    const std::string brides = WeddingSideBySide(ReadFile(love / "loveGirl" / "LG_L000007.opb"), 0.45f);
++    const std::string grooms = WeddingSideBySide(ReadFile(love / "loveBoy" / "LB_L000007.opb"), -0.45f);
++    if (brides.empty() || grooms.empty()) {
++        std::fprintf(stderr, "[mod %s] wedding: the last shot is not as expected; it stays as is\n", kMod);
++        g_weddings.clear();
++    } else {
++        std::ofstream(scenes / "sample_120.opb", std::ios::binary | std::ios::trunc) << brides;
++        std::ofstream(scenes / "sample_121.opb", std::ios::binary | std::ios::trunc) << grooms;
++    }
 +    g_testAdoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
 +    if (g_testAdoption) {
 +        for (size_t i = 0; i < g_spouses.size(); ++i) {
@@ -2971,7 +3061,8 @@ index 0000000..4afa2fd
 +        }
 +    }
 +    GameMods::RegisterDiscOverlay(root);
-+    std::fprintf(stderr, "[mod %s] adoption: %zu spouses, %d message packs\n", kMod, g_spouses.size(), packs);
++    std::fprintf(stderr, "[mod %s] adoption: %zu spouses, %d message packs, %zu weddings\n", kMod, g_spouses.size(),
++                 packs, g_weddings.size());
 +}
 +
 +const GameMods::Registration kRegistration(PrepareAdoption);
