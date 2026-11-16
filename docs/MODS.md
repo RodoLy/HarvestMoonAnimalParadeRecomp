@@ -147,6 +147,25 @@ spouse's), and the Goddess coming on the birth's day after the scenes were split
 - Try the spouse at home.
 - Check the rest of the places that read the player's sex: the spouse at home and the rivals.
 
+### No area sign when loading (`no_place_sign`)
+
+Quality of life. Every change of area fades to black, loads the next area, and then shows a sign
+with a picture of the place and its name: it fades in, stays a second and a half, fades out, and
+only then does the new area appear. With this mod the new area fades in as soon as it has loaded.
+
+What the game does, and what the mod changes (`runtime/src/hle/game_mods/no_place_sign.cpp`):
+
+- The change of area is a list of steps (0x801259F4, and 0x80126B84 for the other kind of change
+  of area), kept at 0x8050C590 with the current step at +0x30.
+- Four steps are the sign: make it, show it, count 1.5 s (a time, not a number of frames) and put it
+  away, wait until it is gone. Each first reads 0x8050C590+0x68, "show the place sign", and does
+  nothing when it is 0. The game sets it to 1 when a change of area starts (0x80124C14) and clears
+  it itself for the changes of area that have no sign.
+- The mod wraps both step functions and clears that flag before each step, so the sign is never
+  made. Nothing else in the change of area is touched.
+
+Tried: on a Windows ARM PC, crossing several areas.
+
 ---
 
 ## Español
@@ -295,3 +314,22 @@ de la pareja), y la Diosa llegando el día del parto tras separar las escenas; l
 **Falta:**
 - Probar la pareja en casa.
 - Revisar el resto de los lugares que leen el sexo de quien juega: la pareja en casa y los rivales.
+
+### Sin letrero de las zonas al cargar (`no_place_sign`)
+
+Calidad de vida. Cada cambio de zona funde a negro, carga la zona siguiente y luego muestra un
+letrero con la foto del lugar y su nombre: aparece, se queda segundo y medio, desaparece, y solo
+entonces sale la zona nueva. Con este mod la zona nueva aparece en cuanto termina de cargar.
+
+Qué hace el juego y qué cambia el mod (`runtime/src/hle/game_mods/no_place_sign.cpp`):
+
+- El cambio de zona es una lista de pasos (0x801259F4, y 0x80126B84 para el otro tipo de cambio de
+  zona), guardada en 0x8050C590 con el paso actual en +0x30.
+- Cuatro pasos son del letrero: crearlo, mostrarlo, contar 1.5 s (un tiempo, no un número de
+  cuadros) y quitarlo, y esperar a que desaparezca. Cada uno lee antes 0x8050C590+0x68, "mostrar el
+  letrero del lugar", y no hace nada si vale 0. El juego lo pone en 1 al empezar un cambio de zona
+  (0x80124C14) y lo apaga él mismo en los cambios de zona que no llevan letrero.
+- El mod envuelve las dos funciones de pasos y apaga esa bandera antes de cada paso, así que el
+  letrero nunca se crea. No toca nada más del cambio de zona.
+
+Probado: en una PC Windows ARM, cruzando varias zonas.

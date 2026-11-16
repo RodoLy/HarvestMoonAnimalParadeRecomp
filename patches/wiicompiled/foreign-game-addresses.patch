@@ -1987,6 +1987,74 @@ index 0000000..e9bc399
 +}
 +
 +} // namespace GameMods
+diff --git a/runtime/src/hle/game_mods/no_place_sign.cpp b/runtime/src/hle/game_mods/no_place_sign.cpp
+new file mode 100644
+index 0000000..e348ccc
+--- /dev/null
++++ b/runtime/src/hle/game_mods/no_place_sign.cpp
+@@ -0,0 +1,62 @@
++// Harvest Moon: Animal Parade mod "no_place_sign": no place sign after a change of area. Off unless
++// Config.toml says
++//   [mods]
++//   no_place_sign = true
++//
++// What the game does: every time the player walks into another area, the screen fades to black, the
++// next area loads, and a sign with a picture of the place and its name fades in on the black, stays
++// a second and a half, fades out, and only then does the new area fade in. The player waits through
++// all of it.
++//
++// The change of area is a list of steps (0x801259F4, and 0x80126B84 for the other kind of change of
++// area), kept at 0x8050C590; +0x30 is the step it is on. Four of the steps are the sign: make it,
++// show it, count 1.5 s and put it away, wait until it is gone. Each of them first looks at
++// 0x8050C590+0x68, "show the place sign": when it is 0 the step does nothing and the next one runs.
++// The game itself clears it for the changes of area that have no sign. This mod clears it before
++// every step, so the sign is never made and the new area fades in as soon as it has loaded.
++//
++//   0x8050C590+0x68  show the place sign (1 when a change of area starts, 0x80124C14)
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "memory.h"
++#include "runtime_config.h"
++
++#include <cstdint>
++
++// Its own namespace: the runtime is built in unity batches, where another mod's Enabled() can share
++// this file's translation unit.
++namespace NoPlaceSign {
++namespace {
++
++constexpr const char* kMod = "no_place_sign";
++constexpr uint32_t kShowPlaceSign = 0x8050C590u + 0x68u;
++
++bool Enabled() {
++    static const bool enabled = RuntimeConfigFile::ModEnabled(kMod);
++    return enabled;
++}
++
++void RunAreaChangeStep(uint32_t function, CpuContext* ctx) {
++    if (Enabled()) {
++        Memory::Write32(kShowPlaceSign, 0);
++    }
++    GuestFunctions::BaseTranslation(function)(ctx);
++}
++
++} // namespace
++} // namespace NoPlaceSign
++
++// 0x801259F4: one step of a change of area.
++extern "C" void AnimalParadeAreaChangeStep(CpuContext* ctx) {
++    NoPlaceSign::RunAreaChangeStep(0x801259F4u, ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 801259F4, AnimalParadeAreaChangeStep);
++
++// 0x80126B84: one step of the other kind of change of area (the same steps for the sign).
++extern "C" void AnimalParadeOtherAreaChangeStep(CpuContext* ctx) {
++    NoPlaceSign::RunAreaChangeStep(0x80126B84u, ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
 index 0000000..420775c
