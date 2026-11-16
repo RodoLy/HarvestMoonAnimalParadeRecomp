@@ -198,11 +198,11 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
 **Being tested.** Tried at 200% on a Windows ARM PC: walking, and the hoe, the watering can and the
 sickle take half the time.
 
-### Cheats (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_materials`, `cheat_infinite_feed`, `cheat_stop_time`)
+### Cheats (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
 In the launcher's Mods tab, in a group of their own, all off until turned on. Infinite stamina keeps
-the stamina bar full; infinite money keeps the money at 999,999 G; infinite materials keeps the
-lumber and the material stone at 9,999; infinite feed keeps the fodder and the bird feed at 9,999;
+the stamina bar full; infinite money keeps the money at 999,999 G; infinite lumber and infinite
+material stone keep each at 9,999; infinite feed keeps the fodder and the bird feed at 9,999;
 stop time leaves the clock still
 while you play (sleeping still goes on to the next day, and scenes that move the time on still do).
 
@@ -220,7 +220,7 @@ Where the game keeps what they change (`runtime/src/hle/game_mods/animal_parade_
   while the clock runs (from 0x80129580); stop time leaves out that call only, so a script that moves
   the time on (0x8010EEFC, thirty ticks for a minute) still does.
 
-Tried: the money, the stamina, the materials and the feed in the cloud. Stop time still has to be tried outdoors.
+Tried: the money, the stamina, the lumber, the stone and the feed in the cloud. Stop time still has to be tried outdoors.
 
 ---
 
@@ -424,11 +424,11 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
 **En pruebas.** Probado a 200% en una PC Windows ARM: caminar, y la azada, la regadera y la hoz tardan
 la mitad.
 
-### Trucos (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_materials`, `cheat_infinite_feed`, `cheat_stop_time`)
+### Trucos (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
 En la pestaña Mods del launcher, en su propio grupo, todos apagados hasta que se encienden. Estamina
-infinita mantiene llena la barra de estamina; dinero infinito deja el dinero en 999,999 G; materiales
-infinitos dejan la madera y la piedra en 9,999; alimento infinito deja el heno y el pienso en 9,999;
+infinita mantiene llena la barra de estamina; dinero infinito deja el dinero en 999,999 G; madera
+infinita y piedra infinita dejan cada una en 9,999; alimento infinito deja el heno y el pienso en 9,999;
 detener el tiempo deja quieto el reloj mientras juegas (dormir sí lleva al día siguiente, y las escenas que
 adelantan la hora lo siguen haciendo).
 
@@ -447,4 +447,4 @@ Dónde guarda el juego lo que cambian (`runtime/src/hle/game_mods/animal_parade_
   cada cuadro mientras el reloj corre (desde 0x80129580); detener el tiempo quita solo esa llamada,
   así que un guion que adelanta la hora (0x8010EEFC, treinta tics por minuto) lo sigue haciendo.
 
-Probado: el dinero, la estamina, los materiales y el alimento en la nube. Detener el tiempo falta probarlo al aire libre.
+Probado: el dinero, la estamina, la madera, la piedra y el alimento en la nube. Detener el tiempo falta probarlo al aire libre.

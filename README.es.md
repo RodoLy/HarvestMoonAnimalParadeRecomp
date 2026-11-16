@@ -116,9 +116,9 @@ derecho es B. Los botones del mando y del teclado se cambian en la pestaña Cont
 **El juego se cerró con un mensaje.** El mensaje dice por qué. Abre un issue con él y la
 carpeta más reciente de `UserData\Logs`.
 
-**¿Hay trucos?** Cinco, en la pestaña Mods del launcher, en Trucos, todos apagados hasta que los
-enciendas: estamina infinita, dinero infinito (se queda en 999,999 G), materiales infinitos (madera
-y piedra), alimento infinito (heno y pienso) y detener el tiempo (dormir sí lleva al día
+**¿Hay trucos?** Seis, en la pestaña Mods del launcher, en Trucos, todos apagados hasta que los
+enciendas: estamina infinita, dinero infinito (se queda en 999,999 G), madera infinita, piedra
+infinita, alimento infinito (heno y pienso) y detener el tiempo (dormir sí lleva al día
 siguiente). Cómo funcionan: [docs/MODS.md](docs/MODS.md). Los códigos que cambian
 las instrucciones del juego (Gecko, Action Replay) no pueden funcionar en un juego recompilado.
 
