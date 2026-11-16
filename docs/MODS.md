@@ -119,10 +119,10 @@ played in place of a scene the game already plays.
 
 Tried so far: both adoptions in the cloud (the first with a marriage made in memory, the second
 after `script/config/05_Child2.opb`, married to Luke, with the player's sex turned to the
-spouse's); the confession, the proposal and the wedding of two women with Selena on a PC.
+spouse's); the confession, the proposal and the wedding of two women with Selena on a PC, and the new wedding photo with that game in the cloud.
 
 **Still to do:**
-- Try the new wedding photo, and the spouse at home.
+- Try the spouse at home.
 - Check the rest of the places that read the player's sex: the spouse at home and the rivals.
 
 ---
@@ -247,8 +247,8 @@ demás, así que para probar se puede poner una en lugar de una escena que el ju
 
 Probado hasta ahora: las dos adopciones en la nube (la primera con un matrimonio hecho en memoria,
 la segunda tras `script/config/05_Child2.opb`, casada con Luke, cambiando el sexo de quien juega al
-de la pareja); la declaración, la pedida y la boda de dos mujeres con Selena en un PC.
+de la pareja); la declaración, la pedida y la boda de dos mujeres con Selena en un PC, y la nueva foto de la boda con esa partida en la nube.
 
 **Falta:**
-- Probar la nueva foto de la boda, y la pareja en casa.
+- Probar la pareja en casa.
 - Revisar el resto de los lugares que leen el sexo de quien juega: la pareja en casa y los rivales.
