@@ -166,15 +166,27 @@ const PAD_LABEL = { south: 'A', east: 'B', west: 'X', north: 'Y', left_shoulder:
   disabled: '—', unmapped: '—' };
 function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 
-// The game's mods: each one is a switch in Config.toml [mods] (host/launcher.cpp kMods), off until
-// it is turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods).
+// The game's mods: each one is a line in Config.toml [mods] (host/launcher.cpp kMods), off until it is
+// turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods). A mod with
+// "speeds" is not just on or off: its line holds the speed chosen (false when it is off). The mods of
+// one "group" are listed together under the group's title.
+const MOD_GROUPS = {
+  game: { es: 'Juego', en: 'Game' },
+  qol: { es: 'Calidad de vida', en: 'Quality of life' },
+};
 const MODS = [
-  { id: 'romance_any_gender', es: 'Amor para todos', en: 'Romance for everyone',
+  { id: 'romance_any_gender', group: 'game', es: 'Amor para todos', en: 'Romance for everyone',
     hint: { es: 'Cualquier candidato o candidata puede enamorarse de ti y casarse contigo, seas chico o chica. En pruebas.',
       en: 'Any bachelor or bachelorette can fall in love with you and marry you, whether you play as a boy or a girl. Being tested.' } },
-  { id: 'no_place_sign', es: 'Sin letrero de las zonas al cargar', en: 'No area sign when loading',
+  { id: 'no_place_sign', group: 'qol', es: 'Sin letrero de las zonas al cargar', en: 'No area sign when loading',
     hint: { es: 'Al cambiar de zona no sale el letrero con la foto y el nombre del lugar: la zona nueva aparece en cuanto carga.',
       en: 'Changing area shows no sign with the picture and name of the place: the new area appears as soon as it loads.' } },
+  { id: 'faster_actions', group: 'qol', es: 'Acciones más rápidas', en: 'Faster actions', speeds: [1.5, 2, 3],
+    hint: { es: 'Recoger y soltar cosas, sacarlas de la mochila y usar las herramientas, a la velocidad que elijas. El resto del juego va igual.',
+      en: 'Picking things up and putting them down, taking them out of the rucksack and using the tools, at the speed you choose. The rest of the game is unchanged.' } },
+  { id: 'faster_walking', group: 'qol', es: 'Caminar más rápido', en: 'Faster walking', speeds: [1.5, 2, 3],
+    hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Los aldeanos, los animales y el reloj van igual.',
+      en: 'Your character walks and runs at the speed you choose. The villagers, the animals and the clock are unchanged.' } },
 ];
 
 // The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
@@ -324,10 +336,28 @@ function rows() {
     return list;
   }
   if (state.tab === 2) {
-    return MODS.map((m) => {
-      const on = !!state.modsOn[m.id];
+    // Grouped: each group's mods together, its title above the first one.
+    const order = Object.keys(MOD_GROUPS);
+    const sorted = MODS.slice().sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+    return sorted.map((m, i) => {
+      const value = state.modsOn[m.id];
+      const section = i === 0 || sorted[i - 1].group !== m.group ? MOD_GROUPS[m.group][state.lang] : null;
+      if (m.speeds) {
+        // Off, then each speed; the arrows go through them.
+        const choices = [false].concat(m.speeds);
+        const at = Math.max(0, choices.findIndex((c) => c === value || (c !== false && value === true && c === m.speeds[0])));
+        const change = (step) => {
+          const next = choices[(at + step + choices.length) % choices.length];
+          state.modsOn[m.id] = next;
+          send({ cmd: 'setMod', name: m.id, value: next });
+        };
+        const shown = choices[at] === false ? w.off : '×' + choices[at];
+        return { section, label: m[state.lang], value: shown, tone: choices[at] === false ? 'off' : 'on', arrows: true,
+          hint: m.hint[state.lang] + ' ' + w.modNext, change, activate: () => change(1) };
+      }
+      const on = !!value;
       const toggle = () => { state.modsOn[m.id] = !on; send({ cmd: 'setMod', name: m.id, value: !on }); };
-      return { label: m[state.lang], value: on ? w.on : w.off, tone: on ? 'on' : 'off', arrows: true,
+      return { section, label: m[state.lang], value: on ? w.on : w.off, tone: on ? 'on' : 'off', arrows: true,
         hint: m.hint[state.lang] + ' ' + w.modNext, change: toggle, activate: toggle };
     });
   }
@@ -391,6 +421,11 @@ function playRow(r, i, chosen) {
       '</div></div></div>';
 }
 
+// A group's title in the list, above its first row (the Mods tab).
+function sectionTitle(text) {
+  return '<div style="flex:none;padding:6px 4px 0 10px;font:800 21px/1.2 \'Baloo 2\',sans-serif;letter-spacing:.06em;color:#3f7d14">' + esc(text) + '</div>';
+}
+
 function normalRow(r, i, chosen) {
   const pet = ROW_ANIMALS[state.tab][i % ROW_ANIMALS[state.tab].length];
   const value = r.html ? r.html : !r.value ? '' : r.tone === 'key'
@@ -443,7 +478,7 @@ function render() {
   if (list.length) {
     html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
       '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:1124px">' +
-      list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
+      list.map((r, i) => (r.section ? sectionTitle(r.section) : '') + (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
   if (!list.length) {
     html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + w.noMods + '</div>';

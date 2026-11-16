@@ -732,8 +732,25 @@ int ConnectedControllers() {
 }
 
 // The game's mods (runtime/src/hle/game_mods in WiiCompiled's patch): each is a line in [mods] of
-// Config.toml, off unless it says true. The page has their names and descriptions.
-const char* const kMods[] = {"romance_any_gender", "no_place_sign"};
+// Config.toml, off unless it says true, or a speed (a number) for the mods that have one. The page
+// has their names, descriptions and speeds.
+const char* const kMods[] = {"romance_any_gender", "no_place_sign", "faster_actions", "faster_walking"};
+
+// A mod's line as the page's value: true, false, or the number it holds.
+bool IsModNumber(const std::string& text) {
+    if (text.empty() || text.size() > 6) return false;
+    bool dot = false;
+    for (char c : text) {
+        if (c == '.' && !dot) dot = true;
+        else if (!isdigit(static_cast<unsigned char>(c))) return false;
+    }
+    return text != ".";
+}
+
+std::wstring ModJson(const std::string& line) {
+    if (line == "true") return L"true";
+    return IsModNumber(line) ? Wide(line) : L"false";
+}
 
 std::wstring StateJson(const wchar_t* status) {
     const ConfigFile config = ConfigFile::Load();
@@ -752,7 +769,7 @@ std::wstring StateJson(const wchar_t* status) {
     json << L"},\"controls\":" << ControlsJson(config) << L",\"mods\":{";
     for (size_t i = 0; i < std::size(kMods); ++i) {
         json << (i ? L"," : L"") << L"\"" << Wide(kMods[i]) << L"\":"
-             << (config.Get("mods", kMods[i]).value_or("false") == "true" ? L"true" : L"false");
+             << ModJson(config.Get("mods", kMods[i]).value_or("false"));
     }
     json << L"}}";
     return json.str();
@@ -829,7 +846,9 @@ void OnPageMessage(const std::wstring& json) {
         const std::string name = Utf8(message[L"name"]);
         if (std::find_if(std::begin(kMods), std::end(kMods), [&](const char* mod) { return name == mod; }) != std::end(kMods)) {
             ConfigFile config = ConfigFile::Load();
-            config.Set("mods", name, message[L"value"] == L"true" ? "true" : "false");
+            // true, false, or a speed: anything else turns the mod off.
+            const std::string value = Utf8(message[L"value"]);
+            config.Set("mods", name, value == "true" || IsModNumber(value) ? value : "false");
             config.Save();
         }
         PostToPage(StateJson(CurrentStatus()));
