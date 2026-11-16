@@ -5244,10 +5244,10 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
-index 54e15fa..9fd1fbe 100644
+index 54e15fa..b9d49b0 100644
 --- a/runtime/src/hle/gx/gx_transform.cpp
 +++ b/runtime/src/hle/gx/gx_transform.cpp
-@@ -1,6 +1,11 @@
+@@ -1,6 +1,12 @@
  // gx_transform.cpp - Viewport, Projection, and Matrix Functions
  #include "isa/big_endian.h"
  #include "gx_internal.h"
@@ -5256,10 +5256,11 @@ index 54e15fa..9fd1fbe 100644
 +#include "aurora_events.h"
 +
 +#include <cmath>
++#include <unordered_map>
  
  namespace {
      static inline void SwapBeF32ArrayToHost(const uint32_t* srcBe, float* dst, size_t count) {
-@@ -45,6 +50,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
+@@ -45,6 +51,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
  PPC_NATIVE_OVERRIDE_VOID(80173378, GX__SetViewportJitter_80173378, (float l, float t, float w, float h, float nz, float fz, uint32_t f), (l, t, w, h, nz, fz, f));
  
  extern "C" void GX__SetViewport_801733b4(float l, float t, float w, float h, float nz, float fz) {
@@ -5269,7 +5270,7 @@ index 54e15fa..9fd1fbe 100644
      g_viewportState[0]=l; g_viewportState[1]=t; g_viewportState[2]=w; g_viewportState[3]=h; g_viewportState[4]=nz; g_viewportState[5]=fz;
      GxWorker::Run([=] { GXSetViewport(l, t, w, h, nz, fz); });
  }
-@@ -104,6 +112,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
+@@ -104,6 +113,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
      // No viewport replay here: aurora recomputes viewport and scissor together
      // on every scissor change (set_logical_scissor -> apply_logical_render_state),
      // so re-issuing the current viewport would be duplicate work.
@@ -5279,7 +5280,7 @@ index 54e15fa..9fd1fbe 100644
      GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
  }
  PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
-@@ -112,9 +123,88 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+@@ -112,9 +124,99 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
  // Projection
  // ============================================================================
  
@@ -5298,11 +5299,18 @@ index 54e15fa..9fd1fbe 100644
 +// tan(fovy / 2) * aspect), so it has to be the wide one as well. Going back from the matrix:
 +constexpr int32_t kGameCameraAspectFromMatrix = 0x1AC - 0x1CC - 0x5C;
 +
-+// The aspect the game asked for last time and the one handed out for it. A camera that comes back
-+// with the handed-out value still means the one it asked for: that is how it is not widened twice,
-+// and how it gets its own shape back when wide picture is turned off or the window changes shape.
-+static float g_lastRequestedAspect = 0.0f;
-+static float g_lastHandedOutAspect = 0.0f;
++// For each camera (by its matrix's address): the aspect it asked for and the one handed out for it.
++// A camera that comes back with the handed-out value still means the one it asked for: that is how it
++// is not widened twice, and how it gets its own shape back when wide picture is turned off or the
++// window changes shape, even with the game open. Kept per camera because the game builds more than
++// one projection a frame (a camera for the TV picture and others of other shapes), and one memory
++// for all of them forgot the TV camera's as soon as another camera came by: the picture then stayed
++// wide after switching to the original picture.
++struct CameraAspect {
++    float requested = 0.0f;
++    float handedOut = 0.0f;  // 0 when it was not changed
++};
++static std::unordered_map<uint32_t, CameraAspect> g_cameraAspects;
 +
 +// Writes the aspect into a field of the game's camera, but only while that field still holds the
 +// value the camera passed in: then it is that camera's field and not some other memory.
@@ -5318,8 +5326,13 @@ index 54e15fa..9fd1fbe 100644
 +    // callers (a cut-scene, a model drawn in a menu) are widened too but leave nothing behind.
 +    auto* aspectField = static_cast<uint8_t*>(GuestToHostPtr(ma + kCameraAspectFromMatrix, 4));
 +    const bool fromCamera = aspectField != nullptr && BigEndian::ReadFloat32(aspectField) == aspect;
-+    const bool handedOut = fromCamera && g_lastHandedOutAspect != 0.0f && aspect == g_lastHandedOutAspect;
-+    const float requested = handedOut ? g_lastRequestedAspect : aspect;
++    CameraAspect* known = nullptr;
++    if (fromCamera) {
++        const auto found = g_cameraAspects.find(ma);
++        known = found != g_cameraAspects.end() ? &found->second : nullptr;
++    }
++    const bool handedOut = known != nullptr && known->handedOut != 0.0f && aspect == known->handedOut;
++    const float requested = handedOut ? known->requested : aspect;
 +    const float wanted = requested * WidePictureAspectScale(requested);
 +    if (fromCamera) {
 +        if (wanted != aspect) {
@@ -5327,8 +5340,7 @@ index 54e15fa..9fd1fbe 100644
 +            // The game's camera keeps the value from now on and hands it down every frame.
 +            ReplaceCameraAspect(ma + static_cast<uint32_t>(kGameCameraAspectFromMatrix), aspect, wanted);
 +        }
-+        g_lastRequestedAspect = requested;
-+        g_lastHandedOutAspect = wanted != requested ? wanted : 0.0f;
++        g_cameraAspects[ma] = {requested, wanted != requested ? wanted : 0.0f};
 +    }
 +    aspect = wanted;
 +    // As in the SDK: fovY is the whole vertical angle, in degrees.
@@ -5368,7 +5380,7 @@ index 54e15fa..9fd1fbe 100644
      GxWorker::Run([mtx = std::to_array(m), pt]() mutable { GXSetProjection(mtx.data(), (GXProjectionType)pt); });
      UpdateProjectionVectorFromMatrix(m, (GXProjectionType)pt);
  }
-@@ -126,6 +216,9 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
+@@ -126,6 +228,9 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
      GXProjectionType pt=(v[0]!=0.f)?GX_ORTHOGRAPHIC:GX_PERSPECTIVE;
      float m[16]={0.f}; m[0]=v[1]; m[5]=v[3]; m[10]=v[5]; m[11]=v[6];
      if(pt==GX_PERSPECTIVE){ m[2]=v[2]; m[6]=v[4]; m[14]=-1.f; } else { m[3]=v[2]; m[7]=v[4]; m[15]=1.f; }
