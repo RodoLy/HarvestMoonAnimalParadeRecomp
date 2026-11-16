@@ -1673,13 +1673,14 @@ index 0000000..1d2a9f9
 +} // namespace Bluetooth
 diff --git a/runtime/src/hle/bluetooth/emulated_remote_host.cpp b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
 new file mode 100644
-index 0000000..972620f
+index 0000000..b0f07c3
 --- /dev/null
 +++ b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,211 @@
 +// Routes the first remote slot to the emulated Wii Remote (emulated_remote.h) for a foreign game while
-+// no real remote is attached there, and feeds it the PC's controls: the GameCube pad as the runtime's
-+// input bindings map it (F10), and the mouse as the pointer, its buttons as A and B.
++// no real remote is attached there, and feeds it the PC's controls: every GameCube pad as the runtime's
++// input bindings map it (F10), the keyboard and any controller together, and the mouse as the pointer,
++// its buttons as A and B.
 +
 +#include "bluetooth/emulated_remote_host.h"
 +
@@ -1694,6 +1695,7 @@ index 0000000..972620f
 +#include <SDL3/SDL_video.h>
 +#include <dolphin/pad.h>
 +
++#include <algorithm>
 +#include <chrono>
 +
 +namespace Bluetooth {
@@ -1707,7 +1709,11 @@ index 0000000..972620f
 +    return static_cast<uint64_t>(duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count());
 +}
 +
-+GameCubePad ReadFirstGameCubePad() {
++// Every connected pad together, as one: the buttons of all of them, and the stick pushed the furthest.
++// The keyboard plays on port 0 and a controller gets whatever port the system gave it (a PlayStation
++// controller often lands on the second), but the game has one Wii Remote: whichever the player
++// picks up drives it, with nothing to set up.
++GameCubePad ReadGameCubePads() {
 +    static bool padStarted = false;
 +    if (!padStarted) {
 +        // The game may never start the GameCube pads itself; PADInit only once.
@@ -1717,21 +1723,29 @@ index 0000000..972620f
 +    PADStatus statuses[PAD_CHANMAX]{};
 +    PADRead(statuses);
 +    InputBindings::Apply(statuses);
-+    const PADStatus& status = statuses[0];
 +    GameCubePad pad;
-+    pad.connected = status.err == PAD_ERR_NONE;
-+    pad.buttons = status.button;
-+    pad.stickX = status.stickX;
-+    pad.stickY = status.stickY;
-+    pad.substickX = status.substickX;
-+    pad.substickY = status.substickY;
++    auto further = [](int8_t& x, int8_t& y, int8_t newX, int8_t newY) {
++        if (newX * newX + newY * newY > x * x + y * y) {
++            x = newX;
++            y = newY;
++        }
++    };
++    for (const PADStatus& status : statuses) {
++        if (status.err != PAD_ERR_NONE) {
++            continue;
++        }
++        pad.connected = true;
++        pad.buttons |= status.button;
++        further(pad.stickX, pad.stickY, status.stickX, status.stickY);
++        further(pad.substickX, pad.substickY, status.substickX, status.substickY);
++        pad.triggerL = std::max(pad.triggerL, status.triggerL);
++        pad.triggerR = std::max(pad.triggerR, status.triggerR);
++    }
 +    // A game mod that uses the right stick itself (hle/game_mods/game_mods.h) keeps it from the game.
 +    if (GameMods::RightStickTaken()) {
 +        pad.substickX = 0;
 +        pad.substickY = 0;
 +    }
-+    pad.triggerL = status.triggerL;
-+    pad.triggerR = status.triggerR;
 +    return pad;
 +}
 +
@@ -1740,7 +1754,7 @@ index 0000000..972620f
 +        // The settings overlay owns the controls: the remote is at rest.
 +        return {};
 +    }
-+    EmulatedInput input = MapGameCubePad(ReadFirstGameCubePad());
++    EmulatedInput input = MapGameCubePad(ReadGameCubePads());
 +
 +    float x = 0.0f;
 +    float y = 0.0f;
