@@ -78,28 +78,32 @@ else changes.
 **The children: adoption.** After the wedding, each candidate's events go on with the family:
 L000015, at bedtime, the spouse asks to have a child (and whether a boy or a girl); L000016, days
 later, the birth; L000017 to L000020 the baby growing; L000029 and L000030 the second child, the
-same way. For a couple of the same sex the mod (`romance_adoption.cpp`) plays a new scene instead
-of L000015 and L000029:
+same way. For a couple of the same sex the mod (`romance_adoption.cpp`) plays new scenes instead,
+with the same timing as the original:
 
-1. At bedtime the spouse asks, with their own lines, as in the original: a child? a boy or a girl?
-2. They say they will ask the Harvest Goddess, who listens to those who truly love each other.
-3. The Harvest Goddess appears in the house with a baby: she has seen their great love and gives
-   them the baby to adopt. The player names the baby.
+1. L000015 (L000029): at bedtime the spouse asks, with their own lines, as in the original: a
+   child? a boy or a girl? They say they will ask the Harvest Goddess, who listens to those who
+   truly love each other.
+2. As after the original question, the question is marked done and command `0x319` puts the birth
+   on the game's calendar two weeks ahead (`0x8021B150`; the day's entry `0x10`, or `0x11` for the
+   second child). On that day the game itself starts L000016 (L000030).
+3. L000016 (L000030): the Harvest Goddess appears in the house with a baby: she has seen their
+   great love and gives them the baby to adopt. The player names the baby.
 4. The Goddess leaves, and the scene ends as the birth does: what the baby will be like, the
    parenting book (first child), the spouse's hearts, the baby in the family.
 
-It marks the question and the birth as done, so there is no pregnancy and L000016/L000030 never
-come. With the Harvest Goddess or the Harvest King as the spouse nothing changes: their child
-already comes by magic.
+With the Harvest Goddess or the Harvest King as the spouse nothing changes: their child already
+comes by magic.
 
 | | How |
 |---|---|
-| Which scene an event plays | A table at `0x80485160`, 12 bytes per event; `0x801320B4` returns the scene's file. The mod wraps it: for a same-sex couple's L000015 and L000029 it answers with the disc's unused test scenes `script/test/sample/sample_125.opb` to `sample_127.opb` (files 18426 to 18428), and for a same-sex couple's wedding with `sample_120.opb` or `sample_121.opb` |
+| Which scene an event plays | A table at `0x80485160`, 12 bytes per event; `0x801320B4` returns the scene's file. The mod wraps it: for a same-sex couple's L000015 and L000029 it answers with the disc's unused test scenes in `script/test/sample/`: for L000015 and L000029 `sample_125.opb` and `sample_126.opb` (the question), for L000016 and L000030 `sample_127.opb`, `sample_122.opb` (first child, a man or a woman playing) and `sample_123.opb` (the Goddess), and for a same-sex couple's wedding with `sample_120.opb` or `sample_121.opb` |
 | The scene | OPAL bytecode the mod writes into its copies of those files, staged like the game's own scenes (`LC_L000015.opb`, the Goddess's `GDSS_L000016.opb`, the births `LG/LB_L000016.opb`) |
-| The spouse's lines | Their own: the question's message set (`event/msgSet_love*.db`) gets ten lines of the birth's set added (slots 20 to 29: the name, what the baby will be like, good night, the book) |
+| The spouse's lines | Their own: the question's message set (`event/msgSet_love*.db`) in the question, the birth's in the Goddess's scene (the name, what the baby will be like, good night, the book). The preview plays both halves as the question, so the question sets also get those ten birth lines (slots 20 to 29) |
 | The Goddess's lines | New: messages `0xE000` on, added to every `msglang/<language>/<male|female>/love*.mpc` (Spanish in `spa`, English in the others) |
-| Flags | Each spouse's question and birth "done" flags (their own condition in `prm_love.epc`), and the game's "first child" or "second child" flag |
-| The baby's name | The name entry (scene command `0x3C2`, `0x8020DA98`) with "2, -16" names the family's child 0, the character in the table at `0x805021F0`. The game fills that table when it loads its own birth scene; the adoption is a bedtime scene, the table says 0, the player, and the name would replace the player's. The mod wraps `0x8020DA98` and, while an adoption scene names its baby, the table says the baby |
+| Flags | Each spouse's question "done" flag in the question, the birth's in the Goddess's scene (their own condition in `prm_love.epc`), and the game's "first child" or "second child" flag |
+| When | The game's family values (condition kind 9, written by `0x3A2` and by the day's update `0x8012C24C`): 6 says a child can be asked for, 7 that the birth is today (from the calendar entry `0x319` wrote) |
+| The baby's name | The name entry (scene command `0x3C2`, `0x8020DA98`) with "2, -16" names the family's child 0, the character in the table at `0x805021F0`. The game fills that table on the birth's day, when the Goddess's scene plays; the preview is a bedtime scene, where the table says 0, the player, and the name would replace the player's. The mod wraps `0x8020DA98` and, while an adoption scene names its baby and the table does not say it, the table says the baby |
 
 The scene's files are written at start-up to `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
@@ -119,7 +123,7 @@ played in place of a scene the game already plays.
 
 Tried so far: both adoptions in the cloud (the first with a marriage made in memory, the second
 after `script/config/05_Child2.opb`, married to Luke, with the player's sex turned to the
-spouse's); the confession, the proposal and the wedding of two women with Selena on a PC, and the new wedding photo with that game in the cloud.
+spouse's), and the Goddess coming on the birth's day after the scenes were split; the confession, the proposal and the wedding of two women with Selena on a PC, and the new wedding photo with that game in the cloud.
 
 **Still to do:**
 - Try the spouse at home.
@@ -205,28 +209,31 @@ candidatos de los dos sexos) en lugar de `0x225`. Nada más cambia.
 **Los hijos: la adopción.** Después de la boda, los eventos de cada candidato siguen con la
 familia: L000015, a la hora de dormir, la pareja propone tener un hijo (y si niño o niña); L000016,
 días después, el parto; L000017 a L000020 el bebé creciendo; L000029 y L000030 el segundo hijo,
-igual. Para una pareja del mismo sexo el mod (`romance_adoption.cpp`) pone una escena nueva en lugar
-de L000015 y L000029:
+igual. Para una pareja del mismo sexo el mod (`romance_adoption.cpp`) pone escenas nuevas en su
+lugar, con los mismos tiempos que el original:
 
-1. A la hora de dormir la pareja pregunta, con sus propias frases, como en el original: ¿un hijo?
-   ¿niño o niña?
-2. Dice que se lo pedirán a la Diosa de la Cosecha, que escucha a quienes se quieren de verdad.
-3. La Diosa de la Cosecha aparece en la casa con un bebé: ha visto su gran amor y les da el bebé en
-   adopción. Quien juega le pone nombre.
+1. L000015 (L000029): a la hora de dormir la pareja pregunta, con sus propias frases, como en el
+   original: ¿un hijo? ¿niño o niña? Dice que se lo pedirán a la Diosa de la Cosecha, que escucha a
+   quienes se quieren de verdad.
+2. Como tras la pregunta original, la pregunta queda hecha y la orden `0x319` pone el parto en el
+   calendario del juego dos semanas después (`0x8021B150`; la entrada del día `0x10`, o `0x11` para
+   el segundo hijo). Ese día el propio juego inicia L000016 (L000030).
+3. L000016 (L000030): la Diosa de la Cosecha aparece en la casa con un bebé: ha visto su gran amor
+   y les da el bebé en adopción. Quien juega le pone nombre.
 4. La Diosa se va y la escena termina como el parto: cómo será el bebé, el libro de crianza (primer
    hijo), los corazones de la pareja, el bebé en la familia.
 
-Marca la pregunta y el parto como hechos, así que no hay embarazo y L000016/L000030 nunca llegan.
 Con la Diosa o el Rey de la Cosecha como pareja no cambia nada: su hijo ya llega por magia.
 
 | | Cómo |
 |---|---|
-| Qué escena pone un evento | Una tabla en `0x80485160`, 12 bytes por evento; `0x801320B4` devuelve el archivo de la escena. El mod la envuelve: para L000015 y L000029 de una pareja del mismo sexo responde con escenas de prueba que el disco no usa, `script/test/sample/sample_125.opb` a `sample_127.opb` (archivos 18426 a 18428), y para la boda de una pareja del mismo sexo con `sample_120.opb` o `sample_121.opb` |
+| Qué escena pone un evento | Una tabla en `0x80485160`, 12 bytes por evento; `0x801320B4` devuelve el archivo de la escena. El mod la envuelve: para L000015 y L000029 de una pareja del mismo sexo responde con escenas de prueba que el disco no usa, en `script/test/sample/`: para L000015 y L000029 `sample_125.opb` y `sample_126.opb` (la pregunta), para L000016 y L000030 `sample_127.opb`, `sample_122.opb` (primer hijo, si juega un hombre o una mujer) y `sample_123.opb` (la Diosa), y para la boda de una pareja del mismo sexo con `sample_120.opb` o `sample_121.opb` |
 | La escena | Código OPAL que el mod escribe en sus copias de esos archivos, montado como las escenas del juego (`LC_L000015.opb`, la de la Diosa `GDSS_L000016.opb`, los partos `LG/LB_L000016.opb`) |
-| Las frases de la pareja | Las suyas: al conjunto de mensajes de la pregunta (`event/msgSet_love*.db`) se le añaden diez frases del conjunto del parto (posiciones 20 a 29: el nombre, cómo será el bebé, buenas noches, el libro) |
+| Las frases de la pareja | Las suyas: el conjunto de mensajes de la pregunta (`event/msgSet_love*.db`) en la pregunta, el del parto en la escena de la Diosa (el nombre, cómo será el bebé, buenas noches, el libro). La versión de prueba pone las dos mitades como la pregunta, así que a los conjuntos de la pregunta también se les añaden esas diez frases del parto (posiciones 20 a 29) |
 | Las frases de la Diosa | Nuevas: mensajes `0xE000` en adelante, añadidos a cada `msglang/<idioma>/<male|female>/love*.mpc` (español en `spa`, inglés en los demás) |
-| Banderas | Las de "hecho" de la pregunta y del parto de cada pareja (su propia condición en `prm_love.epc`) y la del juego de "primer hijo" o "segundo hijo" |
-| El nombre del bebé | La pantalla de nombre (orden de escena `0x3C2`, `0x8020DA98`) con "2, -16" nombra al hijo 0 de la familia, el personaje de la tabla en `0x805021F0`. El juego llena esa tabla al cargar su propia escena de parto; la adopción es una escena de antes de dormir, la tabla dice 0, quien juega, y el nombre sustituiría al suyo. El mod envuelve `0x8020DA98` y, mientras una escena de adopción nombra a su bebé, la tabla dice el bebé |
+| Banderas | La de "hecho" de la pregunta de cada pareja en la pregunta, la del parto en la escena de la Diosa (su propia condición en `prm_love.epc`) y la del juego de "primer hijo" o "segundo hijo" |
+| Cuándo | Los valores de familia del juego (condición tipo 9, escritos por `0x3A2` y por la actualización del día `0x8012C24C`): el 6 dice que se puede pedir un hijo, el 7 que el parto es hoy (por la entrada del calendario que escribió `0x319`) |
+| El nombre del bebé | La pantalla de nombre (orden de escena `0x3C2`, `0x8020DA98`) con "2, -16" nombra al hijo 0 de la familia, el personaje de la tabla en `0x805021F0`. El juego llena esa tabla el día del parto, cuando sale la escena de la Diosa; la versión de prueba es una escena de antes de dormir, donde la tabla dice 0, quien juega, y el nombre sustituiría al suyo. El mod envuelve `0x8020DA98` y, mientras una escena de adopción nombra a su bebé y la tabla no lo dice, la tabla dice el bebé |
 
 Los archivos de la escena se escriben al abrir el juego en `UserData\Cache\Mods\romance_any_gender_adoption\`.
 
@@ -247,7 +254,7 @@ demás, así que para probar se puede poner una en lugar de una escena que el ju
 
 Probado hasta ahora: las dos adopciones en la nube (la primera con un matrimonio hecho en memoria,
 la segunda tras `script/config/05_Child2.opb`, casada con Luke, cambiando el sexo de quien juega al
-de la pareja); la declaración, la pedida y la boda de dos mujeres con Selena en un PC, y la nueva foto de la boda con esa partida en la nube.
+de la pareja), y la Diosa llegando el día del parto tras separar las escenas; la declaración, la pedida y la boda de dos mujeres con Selena en un PC, y la nueva foto de la boda con esa partida en la nube.
 
 **Falta:**
 - Probar la pareja en casa.

@@ -1877,10 +1877,10 @@ index 0000000..e9bc399
 +} // namespace GameMods
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..1ecfb25
+index 0000000..e5607f5
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1187 @@
+@@ -0,0 +1,1253 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -1890,29 +1890,31 @@ index 0000000..1ecfb25
 +// candidate has their own copy of these events: GIL_L000015 is Gill's event 1811, for example;
 +// event/varSet_love*.db gives each event its character and its messages.)
 +//
-+// For a couple of the same sex, the mod plays a new scene instead of L000015 and L000029. The
-+// spouse asks the same questions with their own lines, the couple wishes for a baby, and the
-+// Harvest Goddess appears in the house and gives them a baby to adopt, for their great love. The
-+// scene then ends the way the birth does (the baby's name, what the baby will be like, the
-+// parenting book) and marks both the question and the birth as done, so there is no pregnancy and
-+// L000016 or L000030 never comes.
++// For a couple of the same sex, the mod plays new scenes instead of these four. In place of
++// L000015 and L000029 the spouse asks the same questions with their own lines and the couple
++// wishes for a baby; the question is marked done as in the game, so the game's own wait for the
++// birth starts. Days later, in place of L000016 and L000030, the Harvest Goddess appears in the
++// house and gives them a baby to adopt, for their great love, and the scene ends the way the
++// birth does (the baby's name, what the baby will be like, the parenting book).
 +//
 +// How it is done:
 +// - The scene an event plays comes from a table at 0x80485160, 12 bytes per event: {kind, file,
 +//   message files}. 0x801320B4 (event in r3) returns the file, a number in the game's file table
 +//   at 0x80431340 (16 bytes per file, a pointer to its name first). The mod wraps 0x801320B4: for
-+//   a same-sex couple's L000015 or L000029 it answers with one of the disc's unused test scenes,
-+//   script/test/sample/sample_125.opb to sample_127.opb (files 18426 to 18428), and the mod's
-+//   copies of those hold the new scene.
++//   a same-sex couple's L000015, L000016, L000029 or L000030 it answers with one of the disc's
++//   unused test scenes in script/test/sample/ (sample_125 and sample_126 the questions,
++//   sample_127, sample_122 and sample_123 the Goddess), and the mod's copies of those hold the
++//   new scenes.
 +// - The scene is OPAL bytecode built here (OpalScene below); tools/game_files.py describes the
 +//   format. The commands are the ones the game's own scenes use for the same things: the bedtime
 +//   talk is staged like loveCommon/LC_L000015.opb, the Goddess like the Harvest Goddess's own
 +//   baby scene (loveGdss/GDSS_L000016.opb), and the end does what the birth scenes do
 +//   (loveGirl/LG_L000016.opb and loveBoy/LB_L000016.opb).
 +// - The spouse's lines are their own: an event's messages are 32 slots, -320 to -289, filled from
-+//   its message set (event/msgSet_love*.db). L000015's and L000029's sets use 20; the mod's copy of
-+//   the file adds ten lines of the spouse's birth set (the baby's name, what the baby will be like,
-+//   good night and the book) as slots 20 to 29. The Goddess's lines are new: the mod adds them to
++//   its message set (event/msgSet_love*.db). The questions use their sets, the Goddess's scenes
++//   the births' (the baby's name, what the baby will be like, good night and the book). The
++//   preview plays both halves as the question, so the mod's copy of the sets file adds those ten
++//   birth lines to the question sets too, as slots 20 to 29. The Goddess's lines are new: the mod adds them to
 +//   every love message pack (msglang/<language>/<male|female>/love*.mpc) as messages 0xE000 and
 +//   on, in Spanish for the Spanish packs and in English for the others.
 +// - The Harvest Goddess and the Harvest King as spouses keep their own scenes: their child already
@@ -1922,7 +1924,7 @@ index 0000000..1ecfb25
 +// the groom carries the bride in his arms (motion 0x225 for both, placed on the same spot), and two
 +// brides or two grooms end up inside each other. For a same-sex couple the wedding plays a copy
 +// (sample_120.opb for two brides, sample_121.opb for two grooms) where that shot has them side by
-+// side, both cheering (motion 0x8D).
++// side, cheering.
 +
 +#include "romance_any_gender.h"
 +
@@ -1952,9 +1954,13 @@ index 0000000..1ecfb25
 +// Where the scene goes.
 +
 +// The disc's unused test scenes that carry the adoption (script/test/sample/), by file number.
-+constexpr uint32_t kFirstChildForMenFile = 18426;    // sample_125.opb
-+constexpr uint32_t kFirstChildForWomenFile = 18427;  // sample_126.opb
-+constexpr uint32_t kSecondChildFile = 18428;         // sample_127.opb
++// The question (in place of L000015 and L000029):
++constexpr uint32_t kFirstQuestionFile = 18426;   // sample_125.opb
++constexpr uint32_t kSecondQuestionFile = 18427;  // sample_126.opb
++// The Goddess with the baby (in place of the births, L000016 and L000030):
++constexpr uint32_t kFirstGoddessForMenFile = 18428;    // sample_127.opb
++constexpr uint32_t kFirstGoddessForWomenFile = 18423;  // sample_122.opb
++constexpr uint32_t kSecondGoddessFile = 18424;         // sample_123.opb
 +// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on).
 +constexpr uint32_t kFirstPreviewFile = 18401;
 +// The wedding with its last shot changed (sample_120.opb and sample_121.opb).
@@ -1982,10 +1988,11 @@ index 0000000..1ecfb25
 +
 +struct Adoption {
 +    uint32_t character;
-+    int child;    // 0 the first, 1 the second
-+    int preview;  // which preview file shows this character
++    int child;     // 0 the first, 1 the second
++    bool goddess;  // the birth's event (the Goddess's half), not the question's
++    int preview;   // which preview file shows this character
 +};
-+std::map<uint32_t, Adoption> g_adoptions;  // by the question's event
++std::map<uint32_t, Adoption> g_adoptions;  // by the question's and the birth's events
 +std::map<uint32_t, uint32_t> g_weddings;    // a candidate's wedding event: the candidate
 +bool g_testAdoption = false;
 +uint32_t g_sceneBaby = 0;  // the baby of the last adoption scene started (62 or 63)
@@ -2014,7 +2021,8 @@ index 0000000..1ecfb25
 +    if (found == g_adoptions.end()) {
 +        return;
 +    }
-+    if (g_testAdoption && found->second.child == 0 && found->second.character == AdoptionPreviewCharacter()) {
++    if (g_testAdoption && !found->second.goddess && found->second.child == 0 &&
++        found->second.character == AdoptionPreviewCharacter()) {
 +        ctx->gpr[3] = kFirstPreviewFile + static_cast<uint32_t>(found->second.preview);
 +        g_sceneBaby = kFirstChild;
 +        return;
@@ -2023,20 +2031,26 @@ index 0000000..1ecfb25
 +    if (NaturalPartnerSex(found->second.character) == playerSex) {
 +        return;  // a couple the original game already has: its own scenes
 +    }
-+    if (found->second.child == 0) {
-+        ctx->gpr[3] = playerSex == kMan ? kFirstChildForMenFile : kFirstChildForWomenFile;
-+    } else {
-+        ctx->gpr[3] = kSecondChildFile;
++    const Adoption& adoption = found->second;
++    if (!adoption.goddess) {
++        ctx->gpr[3] = adoption.child == 0 ? kFirstQuestionFile : kSecondQuestionFile;
++        return;
 +    }
-+    g_sceneBaby = found->second.child == 0 ? kFirstChild : kSecondChild;
++    if (adoption.child == 0) {
++        ctx->gpr[3] = playerSex == kMan ? kFirstGoddessForMenFile : kFirstGoddessForWomenFile;
++    } else {
++        ctx->gpr[3] = kSecondGoddessFile;
++    }
++    g_sceneBaby = adoption.child == 0 ? kFirstChild : kSecondChild;
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 801320B4, AnimalParadeEventScene);
 +
 +// 0x8020DA98: the scene command 0x3C2, the name entry; its arguments (at r6) are what is named and
 +// who. "2, -16" names the family's child 0: the character in the family table at 0x805021F0
-+// (0x8010CBDC). The game fills that table when it loads its own birth scene; the adoption is a
-+// bedtime scene, so the table still says 0 there, and 0 is the player: the baby's name would
-+// become the player's. While an adoption scene names its baby, the table says the baby.
++// (0x8010CBDC). The game fills that table on the birth's day, when the Goddess's scene plays;
++// the preview is a bedtime scene, where the table still says 0, and 0 is the player: the baby's
++// name would become the player's. While an adoption scene names its baby and the table does not
++// say it, the table says the baby.
 +extern "C" void AnimalParadeNameEntry(CpuContext* ctx) {
 +    constexpr uint32_t kFamilyChildren = 0x805021F0u;
 +    const uint32_t what = Memory::Read32(ctx->gpr[6]);
@@ -2244,19 +2258,27 @@ index 0000000..1ecfb25
 +constexpr uint32_t kLetUsAskAgain = 0xE007;
 +constexpr uint32_t kLookItIsTheGoddess = 0xE008;
 +
-+// The ten lines the mod adds to the question's message set, from the spouse's birth set.
++// The spouse's lines from the birth's message set (L000016 and L000030 share it) that the end of
++// the scene uses. The Goddess's scene plays as the birth event and has them in their own slots;
++// the preview plays as the question, so the mod adds copies to the question's set (slots 20 on).
++struct BirthLines {
++    uint32_t nameReaction;        // "%0D%... what a lovely name!"
++    uint32_t whatWillTheyBeLike;
++    uint32_t likeQuestion;
++    uint32_t likeChoices;         // healthy / kind
++    uint32_t healthyAnswer;
++    uint32_t kindAnswer;
++    uint32_t goodNight;
++    uint32_t bookNotice;
++    uint32_t secondNameReaction;  // "%1D%..."
++    uint32_t secondGoodNight;
++};
++constexpr BirthLines kBirthSetLines{Slot(6),  Slot(8),  Slot(9),  Slot(10), Slot(11),
++                                    Slot(12), Slot(13), Slot(17), Slot(15), Slot(16)};
 +constexpr int kAddedSlot = 20;
 +constexpr int kBirthSlotsAdded[10] = {6, 8, 9, 10, 11, 12, 13, 17, 15, 16};
-+constexpr uint32_t kNameReaction = Slot(20);        // "%0D%... what a lovely name!"
-+constexpr uint32_t kWhatWillTheyBeLike = Slot(21);
-+constexpr uint32_t kLikeQuestion = Slot(22);
-+constexpr uint32_t kLikeChoices = Slot(23);         // healthy / kind
-+constexpr uint32_t kHealthyAnswer = Slot(24);
-+constexpr uint32_t kKindAnswer = Slot(25);
-+constexpr uint32_t kGoodNight = Slot(26);
-+constexpr uint32_t kBookNotice = Slot(27);
-+constexpr uint32_t kSecondNameReaction = Slot(28);  // "%1D%..."
-+constexpr uint32_t kSecondGoodNight = Slot(29);
++constexpr BirthLines kAddedBirthLines{Slot(20), Slot(21), Slot(22), Slot(23), Slot(24),
++                                      Slot(25), Slot(26), Slot(27), Slot(28), Slot(29)};
 +
 +// The spouse's own lines in the question's set (L000015 and L000029 share them).
 +struct QuestionLines {
@@ -2276,19 +2298,30 @@ index 0000000..1ecfb25
 +constexpr Shot kGoddessGoodbye{14.868f, 1.854f, 3.737f, 0.985f, 0.166f, 0.048f};
 +constexpr Shot kCouple{12.221f, 1.697f, 4.933f, -0.716f, 0.219f, 0.663f};        // the couple, from her place
 +
-+// The whole scene. `child` is 0 for the first child, 1 for the second; `playerIsMan` picks the
-+// first child's "born" flag the way the birth scenes do (0x7DE after a wife's, 0x7DD after a
++// The two halves of the adoption, as in the game the question and, days later, the birth.
++enum class Part {
++    kQuestion,  // at bedtime the spouse asks for a child (plays as L000015 or L000029)
++    kGoddess,   // the Harvest Goddess brings the baby (plays as L000016 or L000030)
++    kPreview,   // both at once with nothing kept (see below)
++};
++
++// A scene of the adoption. `child` is 0 for the first child, 1 for the second; `playerIsMan` picks
++// the first child's "born" flag the way the birth scenes do (0x7DE after a wife's, 0x7DD after a
 +// husband's; the second child's is 0x7EF either way).
 +//
-+// A preview (`previewCharacter` not 0) is the same scene with that character in the spouse's place
-+// and nothing the game keeps: no child, no flags, no hearts (only the name typed goes on the
-+// first baby's record, which no one has yet and a real birth names again). It is for trying the scene
-+// in any game (see kTestAdoptionKey in romance_any_gender.h).
-+std::string BuildScene(int child, bool playerIsMan, const std::vector<Spouse>& spouses,
++// The question marks the spouse's question as done, which starts the game's own wait for the
++// birth; the Goddess's half then comes when the birth would.
++//
++// A preview (`previewCharacter`) is the question and the Goddess in one scene with that character
++// in the spouse's place and nothing the game keeps: no child, no flags, no hearts (only the name
++// typed goes on the first baby's record, which no one has yet and a real birth names again). It is
++// for trying the scene in any game (see kTestAdoptionKey in romance_any_gender.h).
++std::string BuildScene(Part part, int child, bool playerIsMan, const std::vector<Spouse>& spouses,
 +                       uint32_t previewCharacter = 0) {
 +    OpalScene scene;
 +    Commands c{scene};
-+    const bool preview = previewCharacter != 0;
++    const bool preview = part == Part::kPreview;
++    const BirthLines& birth = preview ? kAddedBirthLines : kBirthSetLines;
 +    const uint32_t partner = preview ? previewCharacter : kSpouse;
 +    const uint32_t baby = child == 0 ? kFirstChild : kSecondChild;
 +    const QuestionLines& lines = child == 0 ? kFirstQuestion : kSecondQuestion;
@@ -2326,6 +2359,13 @@ index 0000000..1ecfb25
 +    c.Hold(baby, kGoddess);
 +    c.Vanish(kGoddess, 0.1f);
 +    c.Vanish(baby, 0.1f);
++    // The scene holds both halves; the question ends before the Goddess comes, and the Goddess's
++    // half starts by jumping over the question.
++    const int end = scene.NewLabel();
++    const int goddess = scene.NewLabel();
++    if (part == Part::kGoddess) {
++        c.Goto(goddess);
++    }
 +    c.Camera(kBedtimeTwoShot);
 +    scene.Add(0x28A, Int(0) + OpalScene::Words{kPlayer, 0});
 +    scene.Add(0x28A, Int(1) + OpalScene::Words{partner, 0});
@@ -2335,7 +2375,6 @@ index 0000000..1ecfb25
 +    // The spouse asks.
 +    const int yes = scene.NewLabel();
 +    const int no = scene.NewLabel();
-+    const int end = scene.NewLabel();
 +    c.Face(partner, 4);
 +    c.Motion(partner, 0x33F, 1, 0x331, -1, 0.3f);
 +    c.Say(lines.ask, partner);
@@ -2414,10 +2453,29 @@ index 0000000..1ecfb25
 +    c.Say(lines.healthy, partner);
 +    c.Face(partner, 0);
 +    c.Say(child == 0 ? kLetUsAskTheGoddess : kLetUsAskAgain, partner);
++    if (part == Part::kQuestion) {
++        // The question is done (each spouse has their own flag), and 0x319 puts the birth on the
++        // game's calendar two weeks ahead (0x8021B150), as LC_L000015 does after a yes.
++        const int flagDone = scene.NewLabel();
++        c.StartSpouseTest();
++        for (const Spouse& spouse : spouses) {
++            const int match = scene.NewLabel();
++            const int next = scene.NewLabel();
++            c.IfSpouseIs(spouse.character, match, next);
++            scene.Mark(match);
++            c.SetFlag(spouse.askFlag[child]);
++            c.Goto(flagDone);
++            scene.Mark(next);
++        }
++        scene.Mark(flagDone);
++        scene.Add(0x319, {0});
++        c.Goto(end);
++    }
 +    c.FadeOut(1);
 +    c.Wait(1);
 +
 +    // The Harvest Goddess appears with the baby (staged like GDSS_L000016).
++    scene.Mark(goddess);
 +    c.Place(kPlayer, 13.835f, 3.383f);
 +    c.Turn(kPlayer, 90.064f);
 +    c.Motion(kPlayer, 0x00);
@@ -2503,7 +2561,7 @@ index 0000000..1ecfb25
 +        scene.Add(0x142, OpalScene::Words{baby, 7} + Int(1));
 +    }
 +    coupleShot(false);
-+    c.Say(child == 0 ? kNameReaction : kSecondNameReaction, partner);
++    c.Say(child == 0 ? birth.nameReaction : birth.secondNameReaction, partner);
 +
 +    // The Goddess says goodbye and goes.
 +    c.Face(kGoddess, 1);
@@ -2529,14 +2587,14 @@ index 0000000..1ecfb25
 +    const int decided = scene.NewLabel();
 +    c.Face(partner, 0);
 +    c.Camera(kCouple);
-+    c.Say(kWhatWillTheyBeLike, partner);
-+    c.Choose(kLikeQuestion, kLikeChoices, 0);
++    c.Say(birth.whatWillTheyBeLike, partner);
++    c.Choose(birth.likeQuestion, birth.likeChoices, 0);
 +    scene.Add(0x00D, {0});
 +    scene.AddJump(0x00E, {0, 0}, 1, healthy);
 +    c.Goto(checkKind);
 +    scene.Mark(healthy);
 +    c.Face(partner, 1);
-+    c.Say(kHealthyAnswer, partner);
++    c.Say(birth.healthyAnswer, partner);
 +    if (!preview) {
 +        scene.Add(0x30B, {baby, 0, 1});
 +    }
@@ -2545,19 +2603,19 @@ index 0000000..1ecfb25
 +    c.Goto(decided);
 +    scene.Mark(kind);
 +    c.Face(partner, 1);
-+    c.Say(kKindAnswer, partner);
++    c.Say(birth.kindAnswer, partner);
 +    if (!preview) {
 +        scene.Add(0x30B, {baby, 3, 1});
 +    }
 +    scene.Mark(decided);
-+    c.Say(child == 0 ? kGoodNight : kSecondGoodNight, partner);
++    c.Say(child == 0 ? birth.goodNight : birth.secondGoodNight, partner);
 +
 +    if (!preview) {
 +        // What the birth does: the book (first child), the spouse's hearts, the baby in the family.
 +        if (child == 0) {
 +            scene.Add(0x0E4, {Bits(1), 0, 0xFF});
 +            c.Wait(1);
-+            c.Notice(kBookNotice);
++            c.Notice(birth.bookNotice);
 +            scene.Add(0x0E3, {Bits(0.3f), 0});
 +            scene.Add(0x0E5, {Bits(-1), 0, 0xFF});
 +            scene.Add(0x30C, {0x1B});
@@ -2568,7 +2626,7 @@ index 0000000..1ecfb25
 +        scene.Add(0x31A, {0});
 +        scene.Add(0x307, {0x14, 0, 0});
 +
-+        // The spouse's question and birth are done (each spouse has their own flags).
++        // The spouse's birth is done (each spouse has their own flag).
 +        const int flagsDone = scene.NewLabel();
 +        c.StartSpouseTest();
 +        for (const Spouse& spouse : spouses) {
@@ -2576,7 +2634,6 @@ index 0000000..1ecfb25
 +            const int next = scene.NewLabel();
 +            c.IfSpouseIs(spouse.character, match, next);
 +            scene.Mark(match);
-+            c.SetFlag(spouse.askFlag[child]);
 +            c.SetFlag(spouse.birthFlag[child]);
 +            c.Goto(flagsDone);
 +            scene.Mark(next);
@@ -2585,12 +2642,12 @@ index 0000000..1ecfb25
 +        c.SetFlag(child == 1 ? 0x7EF : (playerIsMan ? 0x7DE : 0x7DD));
 +    }
 +
-+    // Bedtime ends the day (as LC_L000015 ends).
++    // The end (as LC_L000015's; its 0x3A2 6 clears the game's "a child can be asked for", which
++    // the game sets again when it is time for the next question).
 +    scene.Mark(end);
-+    scene.Add(0x319, {0});
 +    scene.Add(0x2C3, {0xFFFFFFFFu, Bits(1)});
 +    c.FadeOut(1);
-+    if (!preview) {
++    if (part == Part::kQuestion) {
 +        scene.Add(0x3A2, OpalScene::Words{6} + Int(0));
 +    }
 +    c.LetGo(kPlayer);
@@ -2600,7 +2657,9 @@ index 0000000..1ecfb25
 +    scene.Add(0x285, Int(0));
 +    scene.Add(0x285, Int(1));
 +    scene.Add(0x0A3, {0xFFFFFFFFu, 0});
-+    return scene.Build(preview ? "ADOPTION_PREVIEW.op" : child == 0 ? "ADOPTION_1.op" : "ADOPTION_2.op");
++    const char* names[2][3] = {{"ADOPTION_ASK_1.op", "ADOPTION_GODDESS_1.op", "ADOPTION_PREVIEW.op"},
++                               {"ADOPTION_ASK_2.op", "ADOPTION_GODDESS_2.op", "ADOPTION_PREVIEW.op"}};
++    return scene.Build(names[child][static_cast<int>(part)]);
 +}
 +
 +// ---------------------------------------------------------------------------------------------
@@ -2619,9 +2678,9 @@ index 0000000..1ecfb25
 +     nullptr,
 +     "Don't be afraid.\nI am the Harvest Goddess.\n%k%"},
 +    {kIHaveSeenYourLove,
-+     "Desde el manantial he visto\nel gran amor que os tenéis.\n%k%%g%Esta noche he escuchado\nvuestro deseo de formar\nuna familia.\n%k%",
++     "Desde el manantial he visto\nel gran amor que os tenéis.\n%k%%g%He escuchado\nvuestro deseo de formar\nuna familia.\n%k%",
 +     nullptr,
-+     "From my spring, I have seen\nhow much you love each other.\n%k%%g%Tonight I heard your wish\nto start a family.\n%k%"},
++     "From my spring, I have seen\nhow much you love each other.\n%k%%g%I have heard your wish\nto start a family.\n%k%"},
 +    {kIEntrustThisBaby,
 +     "Este bebé no tiene a nadie\nque lo cuide.\n%k%%g%Por vuestro gran amor,\nquiero confiároslo\na vosotros.\n%k%",
 +     "Este bebé no tiene a nadie\nque lo cuide.\n%k%%g%Por vuestro gran amor,\nquiero confiároslo\na vosotras.\n%k%",
@@ -2639,9 +2698,9 @@ index 0000000..1ecfb25
 +     nullptr,
 +     "We meet again.\n%k%%g%Your home is so full of love\nthat I want to entrust you\nwith another little one.\n%k%"},
 +    {kLetUsAskTheGoddess,
-+     "Dicen que la Diosa de la\nCosecha escucha a quienes\nse quieren de verdad...\n%k%%g%Pidámosle esta noche\nque nos traiga un bebé.\n%k%",
++     "Dicen que la Diosa de la\nCosecha escucha a quienes\nse quieren de verdad...\n%k%%g%Pidámosle cada noche\nque nos traiga un bebé.\n%k%",
 +     nullptr,
-+     "They say the Harvest Goddess\nlistens to those who truly\nlove each other...\n%k%%g%Let's ask her tonight\nto bring us a baby.\n%k%"},
++     "They say the Harvest Goddess\nlistens to those who truly\nlove each other...\n%k%%g%Let's ask her every night\nto bring us a baby.\n%k%"},
 +    {kLetUsAskAgain,
 +     "Pidámoselo otra vez a la\nDiosa de la Cosecha...\n%k%",
 +     nullptr,
@@ -2974,8 +3033,10 @@ index 0000000..1ecfb25
 +        spouse.preferredSex = sex != sexes.end() ? sex->second : 0;
 +        const int preview = static_cast<int>(g_spouses.size());
 +        g_spouses.push_back(spouse);
-+        g_adoptions[static_cast<uint32_t>(spouse.askEvent[0])] = {character, 0, preview};
-+        g_adoptions[static_cast<uint32_t>(spouse.askEvent[1])] = {character, 1, preview};
++        for (int child = 0; child < 2; ++child) {
++            g_adoptions[static_cast<uint32_t>(spouse.askEvent[child])] = {character, child, false, preview};
++            g_adoptions[static_cast<uint32_t>(spouse.birthEvent[child])] = {character, child, true, preview};
++        }
 +    }
 +    if (g_spouses.empty()) {
 +        std::fprintf(stderr, "[mod %s] adoption: no child events found; the scene is off\n", kMod);
@@ -2988,9 +3049,14 @@ index 0000000..1ecfb25
 +    std::filesystem::create_directories(root / "script" / "test" / "sample", ec);
 +    std::filesystem::create_directories(root / "event", ec);
 +    const std::filesystem::path scenes = root / "script" / "test" / "sample";
-+    std::ofstream(scenes / "sample_125.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, true, g_spouses);
-+    std::ofstream(scenes / "sample_126.opb", std::ios::binary | std::ios::trunc) << BuildScene(0, false, g_spouses);
-+    std::ofstream(scenes / "sample_127.opb", std::ios::binary | std::ios::trunc) << BuildScene(1, true, g_spouses);
++    const auto write = [&](const char* name, const std::string& scene) {
++        std::ofstream(scenes / name, std::ios::binary | std::ios::trunc) << scene;
++    };
++    write("sample_125.opb", BuildScene(Part::kQuestion, 0, true, g_spouses));
++    write("sample_126.opb", BuildScene(Part::kQuestion, 1, true, g_spouses));
++    write("sample_127.opb", BuildScene(Part::kGoddess, 0, true, g_spouses));
++    write("sample_122.opb", BuildScene(Part::kGoddess, 0, false, g_spouses));
++    write("sample_123.opb", BuildScene(Part::kGoddess, 1, true, g_spouses));
 +    // The weddings of two brides and of two grooms. The groom stands on the larger x in the vows.
 +    const std::filesystem::path love = files / "script" / "love";
 +    const std::string brides = WeddingSideBySide(ReadFile(love / "loveGirl" / "LG_L000007.opb"), 0.45f);
@@ -3007,7 +3073,7 @@ index 0000000..1ecfb25
 +        for (size_t i = 0; i < g_spouses.size(); ++i) {
 +            const std::string name = "sample_" + std::to_string(100 + i) + ".opb";
 +            std::ofstream(scenes / name, std::ios::binary | std::ios::trunc)
-+                << BuildScene(0, true, g_spouses, g_spouses[i].character);
++                << BuildScene(Part::kPreview, 0, true, g_spouses, g_spouses[i].character);
 +        }
 +    }
 +
