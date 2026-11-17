@@ -901,7 +901,7 @@ index 55fe416..99fc9ef 100644
      if (RegistryFrozen().load(std::memory_order_acquire)) {
          RT_LOG(RT_TAG_RUNTIME) << "ERROR: Attempted to register function after registry was finalized: 0x"
 diff --git a/runtime/src/dynamic_aspect.cpp b/runtime/src/dynamic_aspect.cpp
-index 67f94fb..f8430b6 100644
+index 67f94fb..1b53143 100644
 --- a/runtime/src/dynamic_aspect.cpp
 +++ b/runtime/src/dynamic_aspect.cpp
 @@ -23,29 +23,29 @@ uint32_t g_lastEggWidth169 = 0;
@@ -946,7 +946,7 @@ index 67f94fb..f8430b6 100644
  constexpr uint32_t kEggScreenFlagsOffset = 0x34u;
  constexpr uint16_t kEggScreenFlagFramebufferCanvas = 0x0008u;
  constexpr uint16_t kEggScreenFlagKeepFrustumScale = 0x0040u;
-@@ -159,10 +159,64 @@ void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
+@@ -159,10 +159,71 @@ void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
      }
  }
  
@@ -994,9 +994,16 @@ index 67f94fb..f8430b6 100644
 +    if (!(requestedAspect > 1.2f && requestedAspect < 1.5f)) {
 +        return 1.0f;
 +    }
++    // The shape of the frame being drawn, not of the window: after the window grows, the frame keeps
++    // its old size for a moment, and aurora fits the flat drawings (the clock, the text boxes) to the
++    // frame. A camera that followed the window got ahead of them for that moment, so a 3D piece of the
++    // clock (the pink pinwheel) sat apart from the rest of it until the frame caught up.
 +    u32 width = 0;
 +    u32 height = 0;
-+    AuroraGetSurfaceSize(&width, &height);
++    AuroraGetFrameBufferSize(&width, &height);
++    if (width == 0 || height == 0) {
++        AuroraGetSurfaceSize(&width, &height);  // before the first frame is made
++    }
 +    if (width == 0 || height == 0) {
 +        return 1.0f;
 +    }
@@ -1011,7 +1018,7 @@ index 67f94fb..f8430b6 100644
      static int lastSweptFrame = -1;
      if (lastSweptFrame == g_gxFrameCount) {
          return;
-@@ -172,6 +226,10 @@ void AssertMkwOffscreenScreenBypass() {
+@@ -172,6 +233,10 @@ void AssertMkwOffscreenScreenBypass() {
  }
  
  void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight) {
@@ -1022,7 +1029,7 @@ index 67f94fb..f8430b6 100644
      const bool requestedForceAspect = g_requestedForceAspect.load(std::memory_order_acquire);
      if (g_forceAspect != requestedForceAspect) {
          g_forceAspect = requestedForceAspect;
-@@ -198,6 +256,11 @@ void SetMkwForceAspect(bool enabled) {
+@@ -198,6 +263,11 @@ void SetMkwForceAspect(bool enabled) {
  }
  
  void ConfigureMkwDynamicAspect(bool widescreen, bool forceAspect, uint32_t surfaceWidth, uint32_t surfaceHeight) {
