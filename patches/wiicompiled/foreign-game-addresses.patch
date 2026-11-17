@@ -2169,10 +2169,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..b162c63
+index 0000000..96b3cef
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,436 @@
+@@ -0,0 +1,446 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2232,7 +2232,9 @@ index 0000000..b162c63
 +// Talks. The game's camera system keeps what it is doing at 0x805B0710, a state of the table at
 +// 0x804A8818 (each entry: the state, what starts it, what runs it every frame): 2 follows the player
 +// in the field, 3 goes into a talk, 4 holds it, and 5 comes back out of it and goes back to 2. While
-+// it is 3, 4 or 5, this mod leaves the game's camera as it is.
++// it is 3, 4 or 5, this mod leaves the game's camera as it is. Between two text boxes of one talk
++// the game goes back to 2 for a moment; so the player's camera only comes back once it has stayed
++// 2 for a while (kAfterTalk), not as a flash between the boxes.
 +//
 +// The current area is game variables 0x36 (its kind: 0 the outdoors, 1 the buildings, 2 the mines)
 +// and 0x37 (which one), at the game's state + 0x148C and + 0x1490 (the getter is 0x8010B154).
@@ -2292,6 +2294,7 @@ index 0000000..b162c63
 +constexpr uint32_t kCameraMode = 0x805B0710u;  // the game's camera system: what it is doing
 +constexpr uint32_t kIntoTalk = 3;              // 3 into a talk, 4 in it, 5 out of it
 +constexpr uint32_t kOutOfTalk = 5;
++constexpr auto kAfterTalk = std::chrono::milliseconds(500);
 +
 +bool Enabled() {
 +    static const bool enabled = RuntimeConfigFile::ModEnabled("free_camera");
@@ -2308,9 +2311,16 @@ index 0000000..b162c63
 +    return on;
 +}
 +
++// In a talk, or out of one for less than kAfterTalk.
 +bool Talking() {
++    static std::chrono::steady_clock::time_point lastTalk;
++    const auto now = std::chrono::steady_clock::now();
 +    const uint32_t mode = Memory::Read32(kCameraMode);
-+    return mode >= kIntoTalk && mode <= kOutOfTalk;
++    if (mode >= kIntoTalk && mode <= kOutOfTalk) {
++        lastTalk = now;
++        return true;
++    }
++    return now - lastTalk < kAfterTalk;
 +}
 +
 +float ReadFloat(uint32_t address) {
