@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..77a5b20
+index 0000000..ee9d74f
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,56 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -279,12 +279,13 @@ index 0000000..77a5b20
 +// D-pad.
 +void SetRightStickTaken(bool taken);
 +
-+// A mod that turns the camera somewhere the game never pointed it (the free camera): the lights'
-+// specular highlights (channels set with GX_AF_SPEC) are left out while this is on, since the
-+// game's surfaces were made for its own camera angles and shine white from others.
-+void SetHideSpecular(bool hide);
-+bool HideSpecular();
 +bool RightStickTaken();
++
++// A mod that changes a texture matrix the game loads (the free camera): called with the matrix
++// (2x4 or 3x4, rows of four) and the address the game loaded it from, before it reaches the GPU.
++using TextureMatrixFilter = void (*)(uint32_t caller, uint32_t id, float* matrix, bool threeRows);
++void SetTextureMatrixFilter(TextureMatrixFilter filter);
++TextureMatrixFilter GetTextureMatrixFilter();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
 +using PrepareFn = void (*)();
@@ -2169,10 +2170,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..96b3cef
+index 0000000..7bc5321
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,522 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2222,9 +2223,16 @@ index 0000000..96b3cef
 +// face the sun, but a turned one can, and then the picture washes out. While this mod holds the
 +// camera, 0x80249048 is skipped, so the glare stays as it was when the right stick took the camera.
 +//
-+// Shine. The game's surfaces were lit for its own camera angles; from others, the sun's specular
-+// highlights wash the ground out white. While this mod holds the camera, channels lit as specular
-+// highlights get no lights (gx_lighting.cpp, through GameMods::SetHideSpecular).
++// The light from the sky. Every frame the game draws the sky's clouds, as seen from under the
++// ground looking up (a camera of 10 degrees), into a texture, and the ground and the buildings add
++// it to their colour (0x80055660: the texture in map 1, read through texture matrix 30, which
++// 0x80055898 or 0x800558AC loads). That matrix reads the texture by which way each surface faces
++// in the picture, and the game only ever made it for its own camera, looking down at the player
++// from one side: turned to the other side, or brought down near the ground, the ground facing up
++// reads the bright part of the texture and washes out nearly white. So while this mod holds the
++// camera, that matrix is the one the game made for its own camera, turned by the difference
++// between the two cameras: every surface reads the light it read with the game's camera (through
++// GameMods::SetTextureMatrixFilter, at gx_transform.cpp's texture matrices).
 +//
 +// While the camera is held, the console log gets the boxes around the player every two seconds
 +// ("[free-camera]"), to find walls the camera still goes through.
@@ -2376,6 +2384,17 @@ index 0000000..96b3cef
 +// The camera once the right stick has taken it: its own angles and distance around the player,
 +// whatever the game's camera does in that place. Until then (and after R3 or a change of area) it is
 +// the game's camera.
++// The light from the sky (see above): texture matrix 30 as the game last made it for its own
++// camera, and that camera's angles then.
++struct SkyLight {
++    bool known = false;
++    float matrix[8] = {};
++    float pitch = 0, yaw = 0;
++};
++SkyLight g_skyLight;
++float g_gamePitch = 0, g_gameYaw = 0;  // the game's camera this frame, before the mod's
++bool g_shownThisFrame = false;         // the mod's camera is the one in the picture this frame
++
 +struct Orbit {
 +    bool taken = false;
 +    uint32_t camera = 0;        // the one engine camera the stick took: no other is ever touched
@@ -2524,7 +2543,6 @@ index 0000000..96b3cef
 +// Once a frame, with the main camera.
 +void TurnCamera(CpuContext* ctx, uint32_t camera) {
 +    Orbit& o = g_orbit;
-+    GameMods::SetHideSpecular(false);  // until this frame turns out to be the mod's
 +    const auto now = std::chrono::steady_clock::now();
 +    const float dt = std::min(0.1f, std::chrono::duration<float>(now - o.last).count());
 +    o.last = now;
@@ -2568,7 +2586,6 @@ index 0000000..96b3cef
 +    if (!o.taken) {
 +        return;
 +    }
-+    GameMods::SetHideSpecular(true);
 +    o.yaw = std::remainder(o.yaw + in.turn * kTurnSpeed * dt, 6.28318530718f);
 +    o.pitch = std::clamp(o.pitch + in.tilt * kTiltSpeed * dt, kLowestPitch, kHighestPitch);
 +
@@ -2588,7 +2605,64 @@ index 0000000..96b3cef
 +    }
 +    WriteFloat(camera + kPitch, o.pitch);
 +    WriteFloat(camera + kYaw, o.yaw);
++    g_shownThisFrame = true;
 +}
++
++// The engine's turn from the world to a camera's view: its rows are the camera's right, up and
++// back, for a camera with this pitch and yaw (see Forward).
++void ViewTurn(float pitch, float yaw, float out[3][3]) {
++    float f[3];
++    Forward(pitch, yaw, f);
++    float right[3] = {-f[2], 0.0f, f[0]};  // forward x the world's up
++    const float length = std::sqrt(right[0] * right[0] + right[2] * right[2]);
++    for (float& v : right) {
++        v /= length;
++    }
++    const float up[3] = {right[1] * f[2] - right[2] * f[1], right[2] * f[0] - right[0] * f[2],
++                         right[0] * f[1] - right[1] * f[0]};
++    for (int i = 0; i < 3; ++i) {
++        out[0][i] = right[i];
++        out[1][i] = up[i];
++        out[2][i] = -f[i];
++    }
++}
++
++// Texture matrix 30, the light from the sky (see above). With the game's camera in the picture it
++// is kept as the game made it; with the mod's, it becomes the game's last one, turned from the
++// mod's view to the game's: matrix * game turn * (mod turn) transposed.
++void SkyLightMatrix(uint32_t caller, uint32_t id, float* matrix, bool threeRows) {
++    if (!Enabled() || threeRows || id != 30 || (caller != 0x8005589Cu && caller != 0x800558B0u)) {
++        return;
++    }
++    SkyLight& light = g_skyLight;
++    if (!g_shownThisFrame) {
++        light.known = true;
++        std::copy(matrix, matrix + 8, light.matrix);
++        light.pitch = g_gamePitch;
++        light.yaw = g_gameYaw;
++        return;
++    }
++    if (!light.known) {
++        return;
++    }
++    float game[3][3], mod[3][3], turn[3][3];
++    ViewTurn(light.pitch, light.yaw, game);
++    ViewTurn(g_orbit.pitch, g_orbit.yaw, mod);
++    for (int r = 0; r < 3; ++r) {
++        for (int c = 0; c < 3; ++c) {
++            turn[r][c] = game[r][0] * mod[c][0] + game[r][1] * mod[c][1] + game[r][2] * mod[c][2];
++        }
++    }
++    for (int r = 0; r < 2; ++r) {
++        for (int c = 0; c < 3; ++c) {
++            matrix[r * 4 + c] = light.matrix[r * 4 + 0] * turn[0][c] + light.matrix[r * 4 + 1] * turn[1][c] +
++                                light.matrix[r * 4 + 2] * turn[2][c];
++        }
++        matrix[r * 4 + 3] = light.matrix[r * 4 + 3];
++    }
++}
++
++const bool kSkyLightFilter = (GameMods::SetTextureMatrixFilter(SkyLightMatrix), true);
 +
 +} // namespace
 +} // namespace FreeCamera
@@ -2603,6 +2677,9 @@ index 0000000..96b3cef
 +        GameMods::SetRightStickTaken(true);
 +        const uint32_t camera = ctx->gpr[3];
 +        if (g_orbit.taken ? camera == g_orbit.camera : IsMainCamera(camera)) {
++            g_gamePitch = ReadFloat(camera + kPitch);
++            g_gameYaw = ReadFloat(camera + kYaw);
++            g_shownThisFrame = false;
 +            TurnCamera(ctx, camera);
 +        }
 +    }
@@ -2621,7 +2698,7 @@ index 0000000..96b3cef
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80249048, AnimalParadeSunGlare);
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..e283e2e
+index 0000000..db4f536
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
 @@ -0,0 +1,122 @@
@@ -2714,14 +2791,14 @@ index 0000000..e283e2e
 +    return g_rightStickTaken.load(std::memory_order_relaxed);
 +}
 +
-+std::atomic<bool> g_hideSpecular{false};
++std::atomic<TextureMatrixFilter> g_textureMatrixFilter{nullptr};
 +
-+void SetHideSpecular(bool hide) {
-+    g_hideSpecular.store(hide, std::memory_order_relaxed);
++void SetTextureMatrixFilter(TextureMatrixFilter filter) {
++    g_textureMatrixFilter.store(filter, std::memory_order_relaxed);
 +}
 +
-+bool HideSpecular() {
-+    return g_hideSpecular.load(std::memory_order_relaxed);
++TextureMatrixFilter GetTextureMatrixFilter() {
++    return g_textureMatrixFilter.load(std::memory_order_relaxed);
 +}
 +
 +Registration::Registration(PrepareFn prepare) {
@@ -6044,35 +6121,6 @@ index b8270a9..0f6a2b9 100644
      g_auroraFrameHadWork.store(true, std::memory_order_release);
  }
  
-diff --git a/runtime/src/hle/gx/gx_lighting.cpp b/runtime/src/hle/gx/gx_lighting.cpp
-index 3b186cf..2ca2143 100644
---- a/runtime/src/hle/gx/gx_lighting.cpp
-+++ b/runtime/src/hle/gx/gx_lighting.cpp
-@@ -1,5 +1,6 @@
- // gx_lighting.cpp - Lighting and Channel Control
- #include "gx_internal.h"
-+#include "game_mods.h"
- #include "runtime_log.h"
- 
- #include <cstdio>
-@@ -93,6 +94,17 @@ extern "C" void GX__SetNumChans_8017054c(uint32_t n) {
- PPC_NATIVE_OVERRIDE_VOID(8017054c, GX__SetNumChans_8017054c, (uint32_t n), (n));
- 
- extern "C" void GX__SetChanCtrl_80170570(uint32_t ch, uint32_t en, uint32_t as, uint32_t ms, uint32_t lm, uint32_t df, uint32_t af) {
-+    // A game mod that turns the camera (game_mods.h): a channel lit as specular highlights gets no
-+    // lights, only its ambient colour.
-+    if (af == GX_AF_SPEC && lm != 0 && GameMods::HideSpecular()) {
-+        static int s_noted = 0;
-+        if (s_noted < 8) {
-+            ++s_noted;
-+            RT_LOGF(RT_TAG_GX, "[free-camera] specular channel %u (lights 0x%02X, ambient %u, material %u) left unlit\n",
-+                    ch, lm, as, ms);
-+        }
-+        lm = 0;
-+    }
-     GX_DEFER_CALL(GX__SetChanCtrl_80170570, ch, en, as, ms, lm, df, af);
-     GXSetChanCtrl((GXChannelID)ch, en!=0, (GXColorSrc)as, (GXColorSrc)ms, lm, (GXDiffuseFn)df, (GXAttnFn)af);
- }
 diff --git a/runtime/src/hle/gx/gx_pixel.cpp b/runtime/src/hle/gx/gx_pixel.cpp
 index 68182a5..5dd834a 100644
 --- a/runtime/src/hle/gx/gx_pixel.cpp
@@ -6206,15 +6254,16 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
-index 54e15fa..b9d49b0 100644
+index 54e15fa..7336a8f 100644
 --- a/runtime/src/hle/gx/gx_transform.cpp
 +++ b/runtime/src/hle/gx/gx_transform.cpp
-@@ -1,6 +1,12 @@
+@@ -1,6 +1,13 @@
  // gx_transform.cpp - Viewport, Projection, and Matrix Functions
  #include "isa/big_endian.h"
  #include "gx_internal.h"
 +#include "gx_frame_trace.h"
 +#include "hle_stubs.h"
++#include "game_mods.h"
 +#include "aurora_events.h"
 +
 +#include <cmath>
@@ -6222,7 +6271,7 @@ index 54e15fa..b9d49b0 100644
  
  namespace {
      static inline void SwapBeF32ArrayToHost(const uint32_t* srcBe, float* dst, size_t count) {
-@@ -45,6 +51,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
+@@ -45,6 +52,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
  PPC_NATIVE_OVERRIDE_VOID(80173378, GX__SetViewportJitter_80173378, (float l, float t, float w, float h, float nz, float fz, uint32_t f), (l, t, w, h, nz, fz, f));
  
  extern "C" void GX__SetViewport_801733b4(float l, float t, float w, float h, float nz, float fz) {
@@ -6232,7 +6281,7 @@ index 54e15fa..b9d49b0 100644
      g_viewportState[0]=l; g_viewportState[1]=t; g_viewportState[2]=w; g_viewportState[3]=h; g_viewportState[4]=nz; g_viewportState[5]=fz;
      GxWorker::Run([=] { GXSetViewport(l, t, w, h, nz, fz); });
  }
-@@ -104,6 +113,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
+@@ -104,6 +114,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
      // No viewport replay here: aurora recomputes viewport and scissor together
      // on every scissor change (set_logical_scissor -> apply_logical_render_state),
      // so re-issuing the current viewport would be duplicate work.
@@ -6242,7 +6291,7 @@ index 54e15fa..b9d49b0 100644
      GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
  }
  PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
-@@ -112,9 +124,99 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+@@ -112,9 +125,99 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
  // Projection
  // ============================================================================
  
@@ -6342,7 +6391,7 @@ index 54e15fa..b9d49b0 100644
      GxWorker::Run([mtx = std::to_array(m), pt]() mutable { GXSetProjection(mtx.data(), (GXProjectionType)pt); });
      UpdateProjectionVectorFromMatrix(m, (GXProjectionType)pt);
  }
-@@ -126,6 +228,9 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
+@@ -126,6 +229,9 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
      GXProjectionType pt=(v[0]!=0.f)?GX_ORTHOGRAPHIC:GX_PERSPECTIVE;
      float m[16]={0.f}; m[0]=v[1]; m[5]=v[3]; m[10]=v[5]; m[11]=v[6];
      if(pt==GX_PERSPECTIVE){ m[2]=v[2]; m[6]=v[4]; m[14]=-1.f; } else { m[3]=v[2]; m[7]=v[4]; m[15]=1.f; }
@@ -6352,6 +6401,19 @@ index 54e15fa..b9d49b0 100644
      GxWorker::Run([mtx = std::to_array(m), pt]() mutable { GXSetProjection(mtx.data(), pt); });
      UpdateProjectionVectorFromProjV(v);
  }
+@@ -209,6 +315,12 @@ extern "C" void GX__LoadTexMtxImm_80173234(uint32_t ma, uint32_t id, uint32_t t)
+     size_t c=(t==(uint32_t)GX_MTX3x4)?12:8;
+     const uint32_t* raw=(const uint32_t*)GuestToHostPtr(ma,c*4); float l[12]={};
+     SwapBeF32ArrayToHost(raw,l,c);
++    // A game mod may change it (game_mods.h): the free camera, for the light the game takes from
++    // the surfaces' facing in the picture.
++    if (const auto filter = GameMods::GetTextureMatrixFilter()) {
++        auto* cpu = TryGetCpuContext();
++        filter(cpu != nullptr ? cpu->lr : 0u, id, l, t == (uint32_t)GX_MTX3x4);
++    }
+     GxWorker::Run([mtx = std::to_array(l), id, t]() mutable { GXLoadTexMtxImm(mtx.data(), id, (GXTexMtxType)t); });
+ }
+ PPC_NATIVE_OVERRIDE_VOID(80173234, GX__LoadTexMtxImm_80173234, (uint32_t ma, uint32_t id, uint32_t t), (ma, id, t));
 diff --git a/runtime/src/hle/gx/gx_vertex.cpp b/runtime/src/hle/gx/gx_vertex.cpp
 index 3a8c43b..1df0c2c 100644
 --- a/runtime/src/hle/gx/gx_vertex.cpp

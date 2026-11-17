@@ -27,6 +27,15 @@ What was learned building it:
   of it. The engine's collision manager (0x804D71DC: the count at +0x04, the entries at +0x08, 0xA4
   bytes each) holds boxes for walls and fences, cylinders for people and animals, and outdoors a
   mesh of triangles for each group of buildings; the question leaves out the people and animals.
+- The light from the sky: every frame the game draws the clouds, seen from under the ground looking
+  up, into a texture, and the ground and the buildings add it to their colour, read through texture
+  matrix 30 (0x80055660) by which way each surface faces in the picture. The game made that matrix
+  only for its own camera; from a turned or lowered camera the ground facing up read the bright part
+  and washed out nearly white (found with a frame trace, the brightness came with the view, and the
+  matrix changed with the camera). While the mod holds the camera, that matrix is the one the game
+  made for its own camera, turned by the difference between the two cameras, so every surface reads
+  the light it read before. A first try (leaving out the lights' specular highlights) did nothing:
+  the game has none.
 - Talks: with its setting "The game's camera in talks" (`free_camera_talk` in `[mods]`, on unless
   it says false), talking with someone shows the game's own camera, as in the original game, and the
   player's camera comes back where it was when the talk ends. The game's camera system keeps what
@@ -122,6 +131,15 @@ Lo que se aprendió al hacerlo:
   de colisiones del motor (0x804D71DC: la cuenta en +0x04, las entradas en +0x08, 0xA4 bytes cada
   una) guarda cajas para paredes y cercas, cilindros para personas y animales, y al aire libre una
   malla de triángulos por cada grupo de edificios; la pregunta deja fuera a personas y animales.
+- La luz del cielo: cada cuadro el juego dibuja las nubes, vistas desde debajo del suelo mirando
+  hacia arriba, en una textura, y el suelo y los edificios la suman a su color, leída con la matriz de
+  textura 30 (0x80055660) según hacia dónde mira cada superficie en la imagen. El juego hizo esa
+  matriz solo para su propia cámara; con una cámara girada o baja, el suelo que mira hacia arriba
+  leía la parte clara y se veía casi blanco (se encontró con una traza de un cuadro: el brillo venía
+  con la vista y la matriz cambiaba con la cámara). Mientras el mod tiene la cámara, esa matriz es la
+  que el juego hizo para su propia cámara, girada por la diferencia entre las dos cámaras, así que cada
+  superficie lee la luz que leía antes. Un primer intento (quitar los brillos especulares de las
+  luces) no hizo nada: el juego no tiene.
 - Pláticas: con su ajuste "Al hablar, la cámara del juego" (`free_camera_talk` en `[mods]`,
   encendido salvo que diga false), al hablar con alguien se ve la cámara del propio juego, como en
   el original, y al terminar la plática la cámara del jugador vuelve a donde estaba. El sistema de
