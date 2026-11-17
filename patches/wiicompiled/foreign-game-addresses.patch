@@ -2170,10 +2170,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..7bc5321
+index 0000000..7d0920e
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,522 @@
+@@ -0,0 +1,553 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2216,7 +2216,11 @@ index 0000000..7bc5321
 +// does, the nearest point it touches at 0x804D71DC + 0x0C) - the sun uses it to know when it is
 +// hidden. This mod asks it the same about the player and the camera, leaving out the people and
 +// animals, and pulls the camera in front of whatever is in between: it never ends up behind a house
-+// or a wall.
++// or a wall. Something low, a fence or a crate, does not count: the same question asked a little
++// higher (kLowThings above both points) finds nothing, and the camera stays where it is, looking
++// over it. Among many houses the nearest wall changes from one frame to the next (the line grazes
++// an edge, then misses it), so the camera keeps the nearest wall of the last moment (kWallMemory)
++// and moves to its new distance smoothly instead of at once: it does not tremble.
 +//
 +// The sun's glare. The sun (0x80248B68 every frame) ends with 0x80249048, which works out how much
 +// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
@@ -2294,7 +2298,10 @@ index 0000000..7bc5321
 +constexpr uint32_t kNotCharacters = 0xFFFBu;   // every shape but the people and animals (0x4)
 +constexpr float kClosest = 1.5f;          // the nearest the camera comes to the point it looks at
 +constexpr float kWallGap = 0.3f;          // how far in front of a wall the camera stops
-+constexpr float kBackOut = 3.0f;          // how fast it goes back out once the wall is gone, a second
++constexpr float kBackOut = 2.5f;          // how fast it goes back out once the wall is gone, a second
++constexpr float kPullIn = 20.0f;          // how quickly it comes in front of a wall (a share a second)
++constexpr float kLowThings = 1.2f;        // a thing this much lower than the line is not a wall
++constexpr auto kWallMemory = std::chrono::milliseconds(250);
 +constexpr float kLookHeight = 0.7f;       // the game's cameras look this far above the player's feet
 +constexpr float kFollowing = 1.5f;        // how close to the player's head the game's line of sight
 +                                          // passes while it follows the player
@@ -2402,6 +2409,8 @@ index 0000000..7bc5321
 +    float distance = 0;         // from the point it looks at
 +    float lookAt[3] = {};       // that point, from the player's feet
 +    float shown = 0;            // the distance shown now: shorter while a wall is in the way
++    float wallRoom = 0;         // the room in front of the nearest wall of the last moment
++    std::chrono::steady_clock::time_point wallSeen;  // when that wall was last found
 +    uint32_t areaKind = 0xFFFFFFFFu, areaId = 0xFFFFFFFFu;
 +    std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
 +};
@@ -2465,6 +2474,7 @@ index 0000000..7bc5321
 +    o.pitch = std::clamp(pitch, kLowestPitch, kHighestPitch);
 +    o.distance = along;
 +    o.shown = along;
++    o.wallRoom = along;
 +    for (int i = 0; i < 3; ++i) {
 +        o.lookAt[i] = target[i] - feet[i];
 +    }
@@ -2595,11 +2605,32 @@ index 0000000..7bc5321
 +        target[i] = feet[i] + o.lookAt[i];
 +        wanted[i] = target[i] - forward[i] * o.distance;
 +    }
-+    // In front of the first wall between the player and the camera; back out slowly once it is gone.
-+    const float wall = FirstWall(ctx, target, wanted);
++    // In front of the first wall between the player and the camera; a low thing (the same line a
++    // little higher misses it) is no wall.
++    float wall = FirstWall(ctx, target, wanted);
++    if (wall < 1.0f) {
++        float higherFrom[3] = {target[0], target[1] + kLowThings, target[2]};
++        float higherTo[3] = {wanted[0], wanted[1] + kLowThings, wanted[2]};
++        if (FirstWall(ctx, higherFrom, higherTo) >= 1.0f) {
++            wall = 1.0f;
++        }
++    }
 +    NoteShapes(feet, wall);
-+    const float room = std::max(kClosest, wall * o.distance - kWallGap);
-+    o.shown = room < o.shown ? room : std::min(room, o.shown + kBackOut * dt);
++    float room = std::max(kClosest, wall * o.distance - kWallGap);
++    // The nearest wall of the last moment still counts, so a line that grazes an edge every other
++    // frame does not move the camera in and out.
++    if (room <= o.wallRoom || now - o.wallSeen > kWallMemory) {
++        if (room < o.distance - kWallGap) {
++            o.wallRoom = room;
++            o.wallSeen = now;
++        } else if (now - o.wallSeen > kWallMemory) {
++            o.wallRoom = o.distance;
++        }
++    }
++    room = std::min(room, o.wallRoom);
++    // In front of a wall quickly, back out of it slowly, both without a jump.
++    o.shown = room < o.shown ? std::max(room, o.shown + (room - o.shown) * std::min(1.0f, kPullIn * dt))
++                             : std::min(room, o.shown + kBackOut * dt);
 +    for (int i = 0; i < 3; ++i) {
 +        WriteFloat(camera + kEye + 4 * i, target[i] - forward[i] * o.shown);
 +    }
