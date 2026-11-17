@@ -2162,10 +2162,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..890dd02
+index 0000000..7a68416
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,405 @@
+@@ -0,0 +1,418 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2273,6 +2273,9 @@ index 0000000..890dd02
 +constexpr float kFollowing = 1.5f;        // how close to the player's head the game's line of sight
 +                                          // passes while it follows the player
 +constexpr float kScene = 4.0f;            // farther than this, the game's camera is a scene's
++// A talk window draws the speaker's face through an engine camera of its own every frame; for this
++// long after the last one the talk counts as going on.
++constexpr auto kTalkGrace = std::chrono::milliseconds(300);
 +
 +bool Enabled() {
 +    static const bool enabled = RuntimeConfigFile::ModEnabled("free_camera");
@@ -2335,6 +2338,7 @@ index 0000000..890dd02
 +struct Orbit {
 +    bool taken = false;
 +    uint32_t camera = 0;        // the one engine camera the stick took: no other is ever touched
++    std::chrono::steady_clock::time_point talking;  // when a face was last drawn for a talk window
 +    float yaw = 0, pitch = 0;   // as the engine camera's
 +    float distance = 0;         // from the point it looks at
 +    float lookAt[3] = {};       // that point, from the player's feet
@@ -2510,6 +2514,10 @@ index 0000000..890dd02
 +    if (sight.miss > kScene) {
 +        return;
 +    }
++    // A talk: the game's own camera while it lasts, then the player's again, where it was.
++    if (o.taken && now - o.talking < kTalkGrace) {
++        return;
++    }
 +    const Input in = ReadInput();
 +    if (in.reset) {
 +        o.taken = false;
@@ -2548,12 +2556,17 @@ index 0000000..890dd02
 +// 0x80052778 (the camera in r3): the engine makes the picture's view from a camera. Every layer of
 +// the frame calls it with its own camera, and the game has more than the main one that look down
 +// at the world: the faces in the talk window are drawn through one of their own. Once the stick
-+// has taken a camera, only that one is ever changed.
++// has taken a camera, only that one is ever changed, and while another such camera shows up (a
++// talk), the game's own camera is left as it is: talking looks as in the original game, and the
++// player's angle comes back when the talk ends.
 +extern "C" void AnimalParadeCameraView(CpuContext* ctx) {
 +    using namespace FreeCamera;
 +    if (Enabled()) {
 +        GameMods::SetRightStickTaken(true);
 +        const uint32_t camera = ctx->gpr[3];
++        if (g_orbit.taken && camera != g_orbit.camera && IsMainCamera(camera)) {
++            g_orbit.talking = std::chrono::steady_clock::now();  // another camera looking down: a face
++        }
 +        if (g_orbit.taken ? camera == g_orbit.camera : IsMainCamera(camera)) {
 +            TurnCamera(ctx, camera);
 +        }
