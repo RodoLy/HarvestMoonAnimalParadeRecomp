@@ -669,7 +669,7 @@ index e3ba175..46585bb 100644
 +        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
 +        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..c661256 100644
+index ea5a12b..74add26 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
 @@ -51,6 +51,11 @@ struct RuntimeUserConfig {
@@ -684,18 +684,20 @@ index ea5a12b..c661256 100644
      std::optional<uint32_t> disabledPostProcessingPaths;
      std::optional<float> audioVolume;
      std::optional<float> audioMusicVolume;
-@@ -86,6 +91,10 @@ struct RuntimeUserConfig {
+@@ -86,6 +91,12 @@ struct RuntimeUserConfig {
      // it here instead of copying the pack, so an asset-only update is visible on the next launch.
      std::optional<std::string> retroRewindRoot;
      std::vector<std::string> overlayRoots;
 +    // [mods]: one line per game mod, name = true to turn it on. Every mod starts off. A mod with a
-+    // setting has a number instead (a speed, say): on with that value.
++    // setting has a number instead (a speed, say): on with that value. A line with words (a
++    // controller button's name, say) is a setting of a mod, kept as written.
 +    std::map<std::string, bool, std::less<>> mods;
 +    std::map<std::string, double, std::less<>> modNumbers;
++    std::map<std::string, std::string, std::less<>> modTexts;
      // Controller mappings use Wii/GameCube button names as keys and up to two
      // comma-separated SDL-style physical button names ("south", or
      // "dpad_up,left_shoulder") as values; pressing either bound button counts.
-@@ -146,6 +155,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+@@ -146,6 +157,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
  
  // Must stay in step with the backend table in main.cpp, which is what actually
  // maps these to AuroraBackend.
@@ -718,7 +720,7 @@ index ea5a12b..c661256 100644
  inline bool IsSupportedGraphicsApi(std::string_view value) {
  #if defined(__APPLE__)
      static constexpr std::array<std::string_view, 2> values{"auto", "metal"};
-@@ -168,7 +193,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
+@@ -168,7 +195,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
  // 240 was offered by an early build and is no longer supported; a saved 240 is
  // migrated to 180 at the parse site.
  inline bool IsSupportedFrameInterpolationFps(uint32_t value) {
@@ -727,7 +729,7 @@ index ea5a12b..c661256 100644
  }
  
  inline std::optional<std::filesystem::path> ExecutableDirectory() {
-@@ -298,6 +323,10 @@ inline void EnsureConfigFile() {
+@@ -298,6 +325,10 @@ inline void EnsureConfigFile() {
                "# replacement would need. Both are read once, at startup.\n"
                "texture_replacements = false\n"
                "texture_dumps = false\n\n"
@@ -738,7 +740,7 @@ index ea5a12b..c661256 100644
                "[audio]\n"
                "volume = 1.0\n"
                "music_volume = 1.0\n"
-@@ -464,6 +493,39 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
+@@ -464,6 +495,41 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
      config.gxWorker = FindConfigValue<bool>(document, "video", "gx_worker");
      config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
      config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
@@ -768,6 +770,8 @@ index ea5a12b..c661256 100644
 +                                                             : value.as_floating();
 +                    config.mods[name] = number > 0.0;
 +                    config.modNumbers[name] = number;
++                } else if (value.is_string()) {
++                    config.modTexts[name] = value.as_string();
 +                }
 +            }
 +        }
@@ -778,7 +782,7 @@ index ea5a12b..c661256 100644
      config.textureReplacements = FindConfigValue<bool>(document, "video", "texture_replacements");
      config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
      if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-@@ -665,6 +727,14 @@ inline bool SetDisplayMode(std::string value) {
+@@ -665,6 +731,14 @@ inline bool SetDisplayMode(std::string value) {
      return WriteSetting("video", "display_mode", FormatString(value));
  }
  
@@ -793,7 +797,7 @@ index ea5a12b..c661256 100644
  inline bool SetSkipUnreadyPipelines(bool value) {
      Mutable().skipUnreadyPipelines = value;
      return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
-@@ -680,6 +750,34 @@ inline bool SetDisableCopyFilter(bool value) {
+@@ -680,6 +754,34 @@ inline bool SetDisableCopyFilter(bool value) {
      return WriteSetting("video", "disable_copy_filter", value ? "true" : "false");
  }
  
@@ -828,7 +832,7 @@ index ea5a12b..c661256 100644
  inline bool SetShowFps(bool value) {
      Mutable().showFps = value;
      return WriteSetting("video", "show_fps", value ? "true" : "false");
-@@ -979,6 +1077,57 @@ inline bool DisableCopyFilter(bool fallback = true) {
+@@ -979,6 +1081,64 @@ inline bool DisableCopyFilter(bool fallback = true) {
      return Get().disableCopyFilter.value_or(fallback);
  }
  
@@ -868,6 +872,13 @@ index ea5a12b..c661256 100644
 +    const auto& numbers = Get().modNumbers;
 +    const auto found = numbers.find(name);
 +    return found != numbers.end() ? found->second : fallback;
++}
++
++// A game mod's setting when its line in [mods] is words, or `fallback` when it is not.
++inline std::string ModText(std::string_view name, std::string fallback) {
++    const auto& texts = Get().modTexts;
++    const auto found = texts.find(name);
++    return found != texts.end() ? found->second : std::move(fallback);
 +}
 +
 +inline bool SetModEnabled(std::string_view name, bool value) {
@@ -2170,10 +2181,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..b48ae6a
+index 0000000..9b426b5
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,662 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2184,6 +2195,13 @@ index 0000000..b48ae6a
 +//   right stick                turn the camera around the player, and tilt it up and down
 +//   R3 (right stick pressed)   put the camera back behind the player, as the game had it
 +//   keyboard: J and L turn, I and K tilt, U puts it back
++// Each of the five (left, right, up, down, back) can have another key and another controller button
++// or stick direction, chosen in the launcher (Controls) and kept in [mods]:
++//   free_camera_left_key = 13            an SDL scancode, as in the launcher; -1 none
++//   free_camera_left_button = "right_stick_left"   a [controller] name: a button ("left_shoulder"),
++//                                        a stick direction ("right_stick_up"), or "disabled"
++// and the same for right, up, down and reset. A stick direction turns the camera as far as it is
++// pushed; a button or a key turns it at full speed.
 +// Talking with someone (its own setting, on unless Config.toml says
 +//   free_camera_talk = false
 +// ): the game's camera, as in the original game, while the talk lasts; then the player's camera
@@ -2256,6 +2274,7 @@ index 0000000..b48ae6a
 +// The player comes from the player's update (player_speed.cpp).
 +
 +#include "animal_parade_player.h"
++#include "controller_button_names.h"
 +#include "game_mods.h"
 +#include "guest_abi/cpu_context.h"
 +#include "guest_function_imports.h"
@@ -2268,6 +2287,7 @@ index 0000000..b48ae6a
 +#include <SDL3/SDL_keyboard.h>
 +
 +#include <algorithm>
++#include <array>
 +#include <chrono>
 +#include <cmath>
 +#include <cstdint>
@@ -2356,17 +2376,65 @@ index 0000000..b48ae6a
 +}
 +
 +struct Input {
-+    float turn = 0, tilt = 0;   // right stick (or J L, I K)
-+    bool reset = false;         // R3 (or U)
++    float turn = 0, tilt = 0;   // the right stick (or J L, I K, or what was chosen instead)
++    bool reset = false;         // R3 (or U, or what was chosen instead)
 +};
 +
-+float Axis(SDL_Gamepad* pad, SDL_GamepadAxis axis) {
-+    const float value = static_cast<float>(SDL_GetGamepadAxis(pad, axis)) / 32767.0f;
-+    return std::fabs(value) < kDeadZone ? 0.0f : std::clamp(value, -1.0f, 1.0f);
++// One of the five controls: a key and a controller button or stick direction.
++struct Control {
++    int key = -1;                                  // an SDL scancode, or -1
++    uint32_t button = PAD_NATIVE_BUTTON_DISABLED;  // a button, or a stick direction (PADIsAxisButton)
++};
++enum ControlId { kLeft, kRight, kUp, kDown, kReset, kControlCount };
++
++// The controls as chosen in Config.toml, or as they start.
++const std::array<Control, kControlCount>& Controls() {
++    static const std::array<Control, kControlCount> controls = [] {
++        struct Start {
++            const char* name;
++            int key;
++            const char* button;
++        };
++        const Start starts[kControlCount] = {
++            {"left", SDL_SCANCODE_J, "right_stick_left"},
++            {"right", SDL_SCANCODE_L, "right_stick_right"},
++            {"up", SDL_SCANCODE_I, "right_stick_up"},
++            {"down", SDL_SCANCODE_K, "right_stick_down"},
++            {"reset", SDL_SCANCODE_U, "right_stick"},
++        };
++        std::array<Control, kControlCount> chosen;
++        for (int i = 0; i < kControlCount; ++i) {
++            const std::string prefix = std::string("free_camera_") + starts[i].name;
++            chosen[i].key = static_cast<int>(RuntimeConfigFile::ModNumber(prefix + "_key", starts[i].key));
++            const std::string name = RuntimeConfigFile::ModText(prefix + "_button", starts[i].button);
++            const auto* item = ControllerNames::FindNativeButton(name);
++            chosen[i].button = item != nullptr ? item->nativeButton : PAD_NATIVE_BUTTON_DISABLED;
++        }
++        return chosen;
++    }();
++    return controls;
 +}
 +
-+// The right stick, straight from SDL.
++// How far a controller's control is pushed, 0 to 1: a stick direction as far as the stick is pushed
++// that way (nothing inside kDeadZone), a button or trigger 1 while it is held.
++float Pushed(SDL_Gamepad* pad, uint32_t button) {
++    if (button == PAD_NATIVE_BUTTON_DISABLED || button == PAD_NATIVE_BUTTON_INVALID) {
++        return 0.0f;
++    }
++    if (PADIsAxisButton(button)) {
++        float value = static_cast<float>(SDL_GetGamepadAxis(pad, static_cast<SDL_GamepadAxis>(PADAxisButtonAxis(button)))) /
++                      32767.0f;
++        if (PADAxisButtonNegative(button)) {
++            value = -value;
++        }
++        return value < kDeadZone ? 0.0f : std::min(value, 1.0f);
++    }
++    return SDL_GetGamepadButton(pad, static_cast<SDL_GamepadButton>(button)) ? 1.0f : 0.0f;
++}
++
++// The controls, straight from SDL: every controller, and the keyboard while the game has it.
 +Input ReadInput() {
++    const auto& controls = Controls();
 +    Input in;
 +    auto keep = [](float& into, float value) { if (std::fabs(value) > std::fabs(into)) into = value; };
 +    int count = 0;
@@ -2376,18 +2444,21 @@ index 0000000..b48ae6a
 +        if (pad == nullptr) {
 +            continue;
 +        }
-+        keep(in.turn, Axis(pad, SDL_GAMEPAD_AXIS_RIGHTX));
-+        keep(in.tilt, Axis(pad, SDL_GAMEPAD_AXIS_RIGHTY));
-+        in.reset |= SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
++        keep(in.turn, Pushed(pad, controls[kRight].button) - Pushed(pad, controls[kLeft].button));
++        keep(in.tilt, Pushed(pad, controls[kDown].button) - Pushed(pad, controls[kUp].button));
++        in.reset |= Pushed(pad, controls[kReset].button) > 0.5f;
 +    }
 +    SDL_free(ids);
 +    if (SDL_GetKeyboardFocus() != nullptr) {
 +        int keys = 0;
 +        const bool* state = SDL_GetKeyboardState(&keys);
-+        auto key = [&](SDL_Scancode code) { return state != nullptr && code < keys && state[code]; };
-+        keep(in.turn, (key(SDL_SCANCODE_L) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_J) ? 1.0f : 0.0f));
-+        keep(in.tilt, (key(SDL_SCANCODE_K) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_I) ? 1.0f : 0.0f));
-+        in.reset |= key(SDL_SCANCODE_U);
++        auto held = [&](ControlId id) {
++            const int key = controls[id].key;
++            return state != nullptr && key > 0 && key < keys && state[key] ? 1.0f : 0.0f;
++        };
++        keep(in.turn, held(kRight) - held(kLeft));
++        keep(in.tilt, held(kDown) - held(kUp));
++        in.reset |= held(kReset) > 0.0f;
 +    }
 +    return in;
 +}

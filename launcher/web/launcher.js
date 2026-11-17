@@ -44,6 +44,7 @@ const T = {
     bindHint: (name) => 'Enter y luego presiona la tecla o el botón del control para ' + name + '.',
     bindKeyOnly: 'En el control es el stick izquierdo; aquí se cambia la tecla.',
     homeNote: 'Home es + y − a la vez.',
+    cameraNote: 'Es del mod Cámara libre: solo sale mientras está activado. En el control puede ser un botón o una dirección de un stick; el stick derecho ya no le llega al juego, otro botón sí. Cuenta al abrir el juego.',
     capture: (name) => 'Presiona una tecla o un botón del control para ' + name + '. Supr la deja sin tecla; Esc cancela.',
     captureKeyOnly: (name) => 'Presiona una tecla para ' + name + '. Supr la deja sin tecla; Esc cancela.',
     pressNow: 'Presiona…', none: 'Ninguno',
@@ -79,6 +80,7 @@ const T = {
     bindHint: (name) => 'Enter, then press the key or the controller button for ' + name + '.',
     bindKeyOnly: 'On a controller it is the left stick; here the key is changed.',
     homeNote: 'Home is + and − together.',
+    cameraNote: 'It belongs to the Free camera mod: it only shows while the mod is on. On a controller it can be a button or a direction of a stick; the right stick no longer reaches the game, any other button still does. It counts when the game starts.',
     capture: (name) => 'Press a key or a controller button for ' + name + '. Delete leaves it without a key; Esc cancels.',
     captureKeyOnly: (name) => 'Press a key for ' + name + '. Delete leaves it without a key; Esc cancels.',
     pressNow: 'Press…', none: 'None',
@@ -129,6 +131,12 @@ const ACTIONS = [
   { id: 'stickLeft', es: 'Stick del Nunchuk ←', en: 'Nunchuk stick ←', keyOnly: true },
   { id: 'stickRight', es: 'Stick del Nunchuk →', en: 'Nunchuk stick →', keyOnly: true },
   { id: 'fastForward', es: 'Avance rápido', en: 'Fast-forward' },
+  // The Free camera mod's controls ([mods] in Config.toml), only while it is on.
+  { id: 'cameraLeft', es: 'Cámara: girar ←', en: 'Camera: turn ←', camera: true },
+  { id: 'cameraRight', es: 'Cámara: girar →', en: 'Camera: turn →', camera: true },
+  { id: 'cameraUp', es: 'Cámara: inclinar ↑', en: 'Camera: tilt ↑', camera: true },
+  { id: 'cameraDown', es: 'Cámara: inclinar ↓', en: 'Camera: tilt ↓', camera: true },
+  { id: 'cameraReset', es: 'Cámara: regresar atrás de ti', en: 'Camera: back behind you', camera: true },
 ];
 
 // Keys: the browser's name for each key (KeyboardEvent.code), the game's number for it (an SDL
@@ -200,8 +208,8 @@ const MODS = [
     setting: { key: 'free_camera_talk', yesNo: true, fallback: true,
       es: 'Al hablar, la cámara del juego', en: 'The game\'s camera in talks' },
     summary: { es: 'Gira la cámara con el stick derecho, como en los juegos de hoy.', en: 'Turn the camera with the right stick, as in today\'s games.' },
-    hint: { es: 'Al aire libre, el stick derecho gira la cámara alrededor de tu personaje y la inclina; R3 (apretar el stick derecho) la regresa atrás de ti. Caminas con el stick izquierdo como siempre, hacia donde mira la cámara. Con teclado: J y L giran, I y K inclinan, U la regresa. Dentro de los edificios, las minas y las escenas se queda la cámara del juego. Con el ajuste en Sí, al hablar con alguien la cámara se pone como en el juego original y al terminar vuelve a donde la tenías. En pruebas.',
-      en: 'Outdoors, the right stick turns the camera around your character and tilts it; R3 (pressing the right stick) puts it back behind you. You walk with the left stick as always, towards where the camera looks. On the keyboard: J and L turn, I and K tilt, U puts it back. In buildings, the mines and scenes the game\'s camera stays. With the setting on Yes, talking with someone puts the camera as in the original game, and it goes back to where you had it when the talk ends. Being tested.' } },
+    hint: { es: 'Al aire libre, el stick derecho gira la cámara alrededor de tu personaje y la inclina; R3 (apretar el stick derecho) la regresa atrás de ti. Caminas con el stick izquierdo como siempre, hacia donde mira la cámara. Con teclado: J y L giran, I y K inclinan, U la regresa; estas teclas y botones se cambian en Controles. Dentro de los edificios, las minas y las escenas se queda la cámara del juego. Con el ajuste en Sí, al hablar con alguien la cámara se pone como en el juego original y al terminar vuelve a donde la tenías. En pruebas.',
+      en: 'Outdoors, the right stick turns the camera around your character and tilts it; R3 (pressing the right stick) puts it back behind you. You walk with the left stick as always, towards where the camera looks. On the keyboard: J and L turn, I and K tilt, U puts it back; these keys and buttons are changed in Controls. In buildings, the mines and scenes the game\'s camera stays. With the setting on Yes, talking with someone puts the camera as in the original game, and it goes back to where you had it when the talk ends. Being tested.' } },
   { id: 'cheat_infinite_stamina', group: 'cheats', es: 'Estamina infinita', en: 'Infinite stamina',
     summary: { es: 'Trabajar nunca te cansa.', en: 'Work never tires you.' },
     hint: { es: 'La barra de estamina siempre está llena: puedes trabajar todo el día sin cansarte ni desmayarte.',
@@ -368,12 +376,15 @@ function rows() {
     const list = [{ label: w.keyboard, value: c.keyboard ? w.on : w.off, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
       change: toggleKeyboard, activate: toggleKeyboard }];
     for (const a of ACTIONS) {
+      if (a.camera && !state.modsOn.free_camera) continue;
       const name = a[state.lang], waiting = state.capture && state.capture.action === a;
-      const key = a.id === 'fastForward' ? c.fastForwardKey : c.keys[a.id];
-      const pad = a.keyOnly ? null : a.id === 'fastForward' ? c.fastForwardButton : c.pad[a.id];
+      const camera = c.camera || { keys: {}, pad: {} };
+      const key = a.camera ? camera.keys[a.id] : a.id === 'fastForward' ? c.fastForwardKey : c.keys[a.id];
+      const pad = a.keyOnly ? null : a.camera ? camera.pad[a.id] : a.id === 'fastForward' ? c.fastForwardButton : c.pad[a.id];
       let hint = a.id === 'fastForward' ? w.fastForwardHint + ' ' + w.bindHint(name) : w.bindHint(name);
       if (a.keyOnly) hint += ' ' + w.bindKeyOnly;
       if (a.home) hint += ' ' + w.homeNote;
+      if (a.camera) hint += ' ' + w.cameraNote;
       list.push({ label: name, hint, html: waiting ? null : bindingChips(keyLabel(key), a.keyOnly ? null : (pad === 'disabled' ? w.none : padLabel(pad))),
         value: waiting ? w.pressNow : null, tone: 'warning', activate: () => startCapture(a) });
     }
@@ -811,14 +822,22 @@ function captureKey(code) {
   if (code === 'F10') { state.toast = w.reserved; state.capture = null; return render(); }
   const number = code === 'Delete' ? -1 : KEY_NUMBER[code];
   if (number == null) return;
-  if (action.id === 'fastForward') state.controls.fastForwardKey = number;
+  if (action.camera) cameraControls().keys[action.id] = number;
+  else if (action.id === 'fastForward') state.controls.fastForwardKey = number;
   else { state.controls.keys[action.id] = number; state.controls.keyboard = true; }
   send({ cmd: 'setKey', action: action.id, scancode: number });
   endCapture();
 }
 
+// The free camera's keys and buttons in the page's state (filled by the program's "controls").
+function cameraControls() {
+  if (!state.controls.camera) state.controls.camera = { keys: {}, pad: {} };
+  return state.controls.camera;
+}
+
 function bindPad(action, name) {
-  if (action.id === 'fastForward') state.controls.fastForwardButton = name;
+  if (action.camera) cameraControls().pad[action.id] = name;
+  else if (action.id === 'fastForward') state.controls.fastForwardButton = name;
   else state.controls.pad[action.id] = name;
   send({ cmd: 'setPad', action: action.id, value: name });
   endCapture();
@@ -873,7 +892,10 @@ if (window.chrome && window.chrome.webview) {
   state.controls = { keyboard: true, fastForwardKey: 43, fastForwardButton: 'disabled',
     keys: { a: 44, b: 225, x: 30, y: 31, start: 40, z: 42, l: 20, r: 8, up: 82, down: 81, left: 80, right: 79, stickRight: 7, stickLeft: 4, stickUp: 26, stickDown: 22 },
     pad: { a: 'south', b: 'east', x: 'west', y: 'north', start: 'start', z: 'right_shoulder', l: 'left_trigger', r: 'right_trigger',
-      up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right' } };
+      up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right' },
+    camera: { keys: { cameraLeft: 13, cameraRight: 15, cameraUp: 12, cameraDown: 14, cameraReset: 24 },
+      pad: { cameraLeft: 'right_stick_left', cameraRight: 'right_stick_right', cameraUp: 'right_stick_up', cameraDown: 'right_stick_down',
+        cameraReset: 'right_stick' } } };
   send = (m) => {
     if (m.cmd === 'prepare' || m.cmd === 'chooseDisc') {
       state.hasDisc = true;

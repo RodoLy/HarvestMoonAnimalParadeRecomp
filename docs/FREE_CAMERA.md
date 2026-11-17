@@ -9,6 +9,20 @@ orbit camera below: outdoors, the right stick turns the camera around the player
 puts it back, and the left stick walks as always (J L, I K and U on the keyboard). Code:
 `runtime/src/hle/game_mods/free_camera.cpp` in the WiiCompiled patch.
 
+Its five controls (turn left and right, tilt up and down, put it back) can each have another key
+and another controller button or stick direction, in the launcher's Controls tab, where they show
+while the mod is on. They are kept in `[mods]` of Config.toml, read when the game starts:
+
+```toml
+free_camera_left_key = 13                  # an SDL scancode (J); -1 for none
+free_camera_left_button = "right_stick_left"  # a [controller] name: a button or a stick direction
+# ...and right, up, down and reset the same way
+```
+
+A stick direction turns the camera as far as the stick is pushed; a button or a key at full speed.
+The right stick never reaches the game while the mod is on; any other button chosen here still
+does what the game gives it as well.
+
 What was learned building it:
 
 - The engine camera is an `AA_CCamera` (vtable 0x8040DDD8): the eye at +0x08..+0x10, the pitch at
@@ -121,6 +135,21 @@ El mod `free_camera` (apagado de inicio, en la pestaña Mods del launcher, en Ca
 cámara orbital de abajo: al aire libre, el stick derecho gira la cámara alrededor del personaje y la
 inclina, R3 la regresa, y el stick izquierdo camina como siempre (J L, I K y U con el teclado).
 Código: `runtime/src/hle/game_mods/free_camera.cpp` en el parche de WiiCompiled.
+
+Sus cinco controles (girar a la izquierda y a la derecha, inclinar hacia arriba y hacia abajo,
+regresarla) pueden tener cada uno otra tecla y otro botón o dirección de stick del control, en la
+pestaña Controles del launcher, donde salen mientras el mod está activado. Se guardan en `[mods]`
+de Config.toml y se leen al abrir el juego:
+
+```toml
+free_camera_left_key = 13                  # un scancode de SDL (J); -1 para ninguna
+free_camera_left_button = "right_stick_left"  # un nombre de [controller]: un botón o una dirección de stick
+# ...y right, up, down y reset igual
+```
+
+Una dirección de stick gira la cámara tanto como se empuja el stick; un botón o una tecla, a toda
+velocidad. El stick derecho nunca le llega al juego mientras el mod está activado; cualquier otro
+botón elegido aquí también sigue haciendo lo que el juego le da.
 
 Lo que se aprendió al hacerlo:
 
