@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..c8c8003
+index 0000000..77a5b20
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,55 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -278,6 +278,12 @@ index 0000000..c8c8003
 +// A mod that uses the right stick itself (the free camera): the game then never gets it as the
 +// D-pad.
 +void SetRightStickTaken(bool taken);
++
++// A mod that turns the camera somewhere the game never pointed it (the free camera): the lights'
++// specular highlights (channels set with GX_AF_SPEC) are left out while this is on, since the
++// game's surfaces were made for its own camera angles and shine white from others.
++void SetHideSpecular(bool hide);
++bool HideSpecular();
 +bool RightStickTaken();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
@@ -2156,10 +2162,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..73d36c1
+index 0000000..890dd02
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,394 @@
+@@ -0,0 +1,405 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2204,6 +2210,10 @@ index 0000000..73d36c1
 +// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
 +// face the sun, but a turned one can, and then the picture washes out. While this mod holds the
 +// camera, 0x80249048 is skipped, so the glare stays as it was when the right stick took the camera.
++//
++// Shine. The game's surfaces were lit for its own camera angles; from others, the sun's specular
++// highlights wash the ground out white. While this mod holds the camera, channels lit as specular
++// highlights get no lights (gx_lighting.cpp, through GameMods::SetHideSpecular).
 +//
 +// While the camera is held, the console log gets the boxes around the player every two seconds
 +// ("[free-camera]"), to find walls the camera still goes through.
@@ -2324,6 +2334,7 @@ index 0000000..73d36c1
 +// the game's camera.
 +struct Orbit {
 +    bool taken = false;
++    uint32_t camera = 0;        // the one engine camera the stick took: no other is ever touched
 +    float yaw = 0, pitch = 0;   // as the engine camera's
 +    float distance = 0;         // from the point it looks at
 +    float lookAt[3] = {};       // that point, from the player's feet
@@ -2386,6 +2397,7 @@ index 0000000..73d36c1
 +    const float* target = sight.target;
 +    const float along = sight.along;
 +    o.taken = true;
++    o.camera = camera;
 +    o.yaw = yaw;
 +    o.pitch = std::clamp(pitch, kLowestPitch, kHighestPitch);
 +    o.distance = along;
@@ -2468,6 +2480,7 @@ index 0000000..73d36c1
 +// Once a frame, with the main camera.
 +void TurnCamera(CpuContext* ctx, uint32_t camera) {
 +    Orbit& o = g_orbit;
++    GameMods::SetHideSpecular(false);  // until this frame turns out to be the mod's
 +    const auto now = std::chrono::steady_clock::now();
 +    const float dt = std::min(0.1f, std::chrono::duration<float>(now - o.last).count());
 +    o.last = now;
@@ -2507,6 +2520,7 @@ index 0000000..73d36c1
 +    if (!o.taken) {
 +        return;
 +    }
++    GameMods::SetHideSpecular(true);
 +    o.yaw = std::remainder(o.yaw + in.turn * kTurnSpeed * dt, 6.28318530718f);
 +    o.pitch = std::clamp(o.pitch + in.tilt * kTiltSpeed * dt, kLowestPitch, kHighestPitch);
 +
@@ -2532,13 +2546,16 @@ index 0000000..73d36c1
 +} // namespace FreeCamera
 +
 +// 0x80052778 (the camera in r3): the engine makes the picture's view from a camera. Every layer of
-+// the frame calls it with its own camera.
++// the frame calls it with its own camera, and the game has more than the main one that look down
++// at the world: the faces in the talk window are drawn through one of their own. Once the stick
++// has taken a camera, only that one is ever changed.
 +extern "C" void AnimalParadeCameraView(CpuContext* ctx) {
 +    using namespace FreeCamera;
 +    if (Enabled()) {
 +        GameMods::SetRightStickTaken(true);
-+        if (IsMainCamera(ctx->gpr[3])) {
-+            TurnCamera(ctx, ctx->gpr[3]);
++        const uint32_t camera = ctx->gpr[3];
++        if (g_orbit.taken ? camera == g_orbit.camera : IsMainCamera(camera)) {
++            TurnCamera(ctx, camera);
 +        }
 +    }
 +    GuestFunctions::BaseTranslation(0x80052778u)(ctx);
@@ -2556,10 +2573,10 @@ index 0000000..73d36c1
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80249048, AnimalParadeSunGlare);
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..fe265c4
+index 0000000..e283e2e
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,122 @@
 +// The list of game mods' disc overlays (see game_mods.h).
 +
 +#include "game_mods.h"
@@ -2647,6 +2664,16 @@ index 0000000..fe265c4
 +
 +bool RightStickTaken() {
 +    return g_rightStickTaken.load(std::memory_order_relaxed);
++}
++
++std::atomic<bool> g_hideSpecular{false};
++
++void SetHideSpecular(bool hide) {
++    g_hideSpecular.store(hide, std::memory_order_relaxed);
++}
++
++bool HideSpecular() {
++    return g_hideSpecular.load(std::memory_order_relaxed);
 +}
 +
 +Registration::Registration(PrepareFn prepare) {
@@ -5969,6 +5996,35 @@ index b8270a9..0f6a2b9 100644
      g_auroraFrameHadWork.store(true, std::memory_order_release);
  }
  
+diff --git a/runtime/src/hle/gx/gx_lighting.cpp b/runtime/src/hle/gx/gx_lighting.cpp
+index 3b186cf..2ca2143 100644
+--- a/runtime/src/hle/gx/gx_lighting.cpp
++++ b/runtime/src/hle/gx/gx_lighting.cpp
+@@ -1,5 +1,6 @@
+ // gx_lighting.cpp - Lighting and Channel Control
+ #include "gx_internal.h"
++#include "game_mods.h"
+ #include "runtime_log.h"
+ 
+ #include <cstdio>
+@@ -93,6 +94,17 @@ extern "C" void GX__SetNumChans_8017054c(uint32_t n) {
+ PPC_NATIVE_OVERRIDE_VOID(8017054c, GX__SetNumChans_8017054c, (uint32_t n), (n));
+ 
+ extern "C" void GX__SetChanCtrl_80170570(uint32_t ch, uint32_t en, uint32_t as, uint32_t ms, uint32_t lm, uint32_t df, uint32_t af) {
++    // A game mod that turns the camera (game_mods.h): a channel lit as specular highlights gets no
++    // lights, only its ambient colour.
++    if (af == GX_AF_SPEC && lm != 0 && GameMods::HideSpecular()) {
++        static int s_noted = 0;
++        if (s_noted < 8) {
++            ++s_noted;
++            RT_LOGF(RT_TAG_GX, "[free-camera] specular channel %u (lights 0x%02X, ambient %u, material %u) left unlit\n",
++                    ch, lm, as, ms);
++        }
++        lm = 0;
++    }
+     GX_DEFER_CALL(GX__SetChanCtrl_80170570, ch, en, as, ms, lm, df, af);
+     GXSetChanCtrl((GXChannelID)ch, en!=0, (GXColorSrc)as, (GXColorSrc)ms, lm, (GXDiffuseFn)df, (GXAttnFn)af);
+ }
 diff --git a/runtime/src/hle/gx/gx_pixel.cpp b/runtime/src/hle/gx/gx_pixel.cpp
 index 68182a5..5dd834a 100644
 --- a/runtime/src/hle/gx/gx_pixel.cpp
