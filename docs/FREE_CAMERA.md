@@ -27,9 +27,13 @@ What was learned building it:
   of it. The engine's collision manager (0x804D71DC: the count at +0x04, the entries at +0x08, 0xA4
   bytes each) holds boxes for walls and fences, cylinders for people and animals, and outdoors a
   mesh of triangles for each group of buildings; the question leaves out the people and animals.
-  Something low (a fence, a crate) is not a wall: the same question asked 1.2 higher finds nothing,
-  and the camera looks over it. Among many houses the nearest wall changed from frame to frame and the
-  camera trembled; it now keeps the nearest wall of the last quarter of a second and moves smoothly.
+  Something small is not a wall. In town the fences, their pillars and the lamp posts are in the same
+  mesh as the houses (a log of the shapes around the player at the town's bridge showed only that
+  mesh), so a small thing is told apart by asking again with the line moved a little: 1.2 higher,
+  0.7 to one side or the other, or both. If one of those lines finds nothing, the thing is low or
+  thin and the camera looks over it or past it; a house stops them all. Among many houses the nearest
+  wall changed from frame to frame and the camera trembled; it now keeps the nearest wall of the last
+  0.4 seconds and moves to its new distance smoothly.
 - The light from the sky: every frame the game draws the clouds, seen from under the ground looking
   up, into a texture, and the ground and the buildings add it to their colour, read through texture
   matrix 30 (0x80055660) by which way each surface faces in the picture. The game made that matrix
@@ -134,9 +138,14 @@ Lo que se aprendió al hacerlo:
   de colisiones del motor (0x804D71DC: la cuenta en +0x04, las entradas en +0x08, 0xA4 bytes cada
   una) guarda cajas para paredes y cercas, cilindros para personas y animales, y al aire libre una
   malla de triángulos por cada grupo de edificios; la pregunta deja fuera a personas y animales.
-  Algo bajo (una cerca, una caja) no es pared: la misma pregunta 1.2 más arriba no encuentra nada, y
-  la cámara mira por encima. Entre muchas casas la pared más cercana cambiaba de un cuadro a otro y
-  la cámara temblaba; ahora guarda la pared más cercana del último cuarto de segundo y se mueve suave.
+  Algo pequeño no es pared. En el pueblo las cercas, sus pilares y los postes de luz están en la
+  misma malla que las casas (un registro de las formas alrededor del personaje en el puente del
+  pueblo solo mostró esa malla), así que algo pequeño se distingue preguntando otra vez con la línea
+  movida un poco: 1.2 más arriba, 0.7 a un lado o al otro, o las dos cosas. Si una de esas líneas no
+  encuentra nada, la cosa es baja o delgada y la cámara mira por encima o a un lado; una casa las
+  detiene todas. Entre muchas casas la pared más cercana cambiaba de un cuadro a otro y la cámara
+  temblaba; ahora guarda la pared más cercana de los últimos 0.4 segundos y llega a su nueva
+  distancia suave.
 - La luz del cielo: cada cuadro el juego dibuja las nubes, vistas desde debajo del suelo mirando
   hacia arriba, en una textura, y el suelo y los edificios la suman a su color, leída con la matriz de
   textura 30 (0x80055660) según hacia dónde mira cada superficie en la imagen. El juego hizo esa

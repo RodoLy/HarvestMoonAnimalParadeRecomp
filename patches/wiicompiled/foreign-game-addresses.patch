@@ -2170,10 +2170,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..7d0920e
+index 0000000..cd13f05
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,553 @@
+@@ -0,0 +1,583 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2216,11 +2216,14 @@ index 0000000..7d0920e
 +// does, the nearest point it touches at 0x804D71DC + 0x0C) - the sun uses it to know when it is
 +// hidden. This mod asks it the same about the player and the camera, leaving out the people and
 +// animals, and pulls the camera in front of whatever is in between: it never ends up behind a house
-+// or a wall. Something low, a fence or a crate, does not count: the same question asked a little
-+// higher (kLowThings above both points) finds nothing, and the camera stays where it is, looking
-+// over it. Among many houses the nearest wall changes from one frame to the next (the line grazes
-+// an edge, then misses it), so the camera keeps the nearest wall of the last moment (kWallMemory)
-+// and moves to its new distance smoothly instead of at once: it does not tremble.
++// or a wall. Something small does not count: in town the fences, their pillars and the lamp posts
++// are in the same mesh as the houses, so a small thing is told apart by asking again with the line
++// moved a little - higher (kLowThings), to one side or the other (kThinThings), or both. If one of
++// those lines finds nothing, the thing is low or thin, and the camera stays where it is, looking
++// over it or past it; a house stops all of them. Among many houses the nearest wall changes from
++// one frame to the next (the line grazes an edge, then misses it), so the camera keeps the nearest
++// wall of the last moment (kWallMemory) and moves to its new distance smoothly instead of at once:
++// it does not tremble.
 +//
 +// The sun's glare. The sun (0x80248B68 every frame) ends with 0x80249048, which works out how much
 +// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
@@ -2299,9 +2302,10 @@ index 0000000..7d0920e
 +constexpr float kClosest = 1.5f;          // the nearest the camera comes to the point it looks at
 +constexpr float kWallGap = 0.3f;          // how far in front of a wall the camera stops
 +constexpr float kBackOut = 2.5f;          // how fast it goes back out once the wall is gone, a second
-+constexpr float kPullIn = 20.0f;          // how quickly it comes in front of a wall (a share a second)
++constexpr float kPullIn = 10.0f;          // how quickly it comes in front of a wall (a share a second)
 +constexpr float kLowThings = 1.2f;        // a thing this much lower than the line is not a wall
-+constexpr auto kWallMemory = std::chrono::milliseconds(250);
++constexpr float kThinThings = 0.7f;       // nor one the line misses this far to one side
++constexpr auto kWallMemory = std::chrono::milliseconds(400);
 +constexpr float kLookHeight = 0.7f;       // the game's cameras look this far above the player's feet
 +constexpr float kFollowing = 1.5f;        // how close to the player's head the game's line of sight
 +                                          // passes while it follows the player
@@ -2514,6 +2518,36 @@ index 0000000..7d0920e
 +    return whole > 0 ? std::clamp(std::sqrt(part / whole), 0.0f, 1.0f) : 1.0f;
 +}
 +
++// Whether what stands between `from` and `to` is small - a fence, a pillar, a lamp post: the same
++// line moved a little higher, a little to one side, or both, misses it. A house stops them all.
++bool SmallThing(CpuContext* ctx, const float from[3], const float to[3]) {
++    // Sideways: level with the ground, across the line.
++    float side[3] = {to[2] - from[2], 0.0f, from[0] - to[0]};
++    const float length = std::sqrt(side[0] * side[0] + side[2] * side[2]);
++    if (length > 0.0f) {
++        side[0] *= kThinThings / length;
++        side[2] *= kThinThings / length;
++    }
++    const float moves[5][3] = {
++        {0.0f, kLowThings, 0.0f},
++        {side[0], kLowThings, side[2]},
++        {-side[0], kLowThings, -side[2]},
++        {side[0], 0.0f, side[2]},
++        {-side[0], 0.0f, -side[2]},
++    };
++    for (const auto& move : moves) {
++        float movedFrom[3], movedTo[3];
++        for (int i = 0; i < 3; ++i) {
++            movedFrom[i] = from[i] + move[i];
++            movedTo[i] = to[i] + move[i];
++        }
++        if (FirstWall(ctx, movedFrom, movedTo) >= 1.0f) {
++            return true;
++        }
++    }
++    return false;
++}
++
 +// Every two seconds while the camera is held: the shapes within 12 units of the player, for the log.
 +void NoteShapes(const float feet[3], float wall) {
 +    using Clock = std::chrono::steady_clock;
@@ -2605,15 +2639,11 @@ index 0000000..7d0920e
 +        target[i] = feet[i] + o.lookAt[i];
 +        wanted[i] = target[i] - forward[i] * o.distance;
 +    }
-+    // In front of the first wall between the player and the camera; a low thing (the same line a
-+    // little higher misses it) is no wall.
++    // In front of the first wall between the player and the camera; a small thing (a fence, a
++    // pillar, a lamp post) is no wall.
 +    float wall = FirstWall(ctx, target, wanted);
-+    if (wall < 1.0f) {
-+        float higherFrom[3] = {target[0], target[1] + kLowThings, target[2]};
-+        float higherTo[3] = {wanted[0], wanted[1] + kLowThings, wanted[2]};
-+        if (FirstWall(ctx, higherFrom, higherTo) >= 1.0f) {
-+            wall = 1.0f;
-+        }
++    if (wall < 1.0f && SmallThing(ctx, target, wanted)) {
++        wall = 1.0f;
 +    }
 +    NoteShapes(feet, wall);
 +    float room = std::max(kClosest, wall * o.distance - kWallGap);
