@@ -2156,10 +2156,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..68c8cc0
+index 0000000..98755ab
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,435 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2195,11 +2195,20 @@ index 0000000..68c8cc0
 +//   +0x08 ... +0x34  where it stands: a 3x4 matrix, row by row (the turn and size, then x, y, z)
 +//   +0x38            its shape: 2 a box, 3 a cylinder (the people and animals)
 +//   +0x3C ... +0x50  a box's corners in its own space, the lowest then the highest
-+//   +0x78            what it belongs to (a character, an animal), 0 for the place itself
-+// The camera is pulled in, towards the player, when a box of the place stands between them, so it
-+// never ends up behind a house or a wall. The boxes are only as tall as the player needs (a house's
-+// may stop at its eaves): big ones, a house or a long wall, count as reaching all the way up, while
-+// small ones (a fence, a stone) can still be looked over.
++//   +0x78            what it belongs to (a character, an object), 0 for the place itself
++// The camera is pulled in, towards the player, when a box stands between them, so it never ends up
++// behind a house or a wall. The boxes are only as tall as the player needs (a house's may stop at its
++// eaves): big ones, a house, a stall or a long wall, count as reaching all the way up, while thin or
++// small ones (a fence, a stone) can still be looked over. (The game asks the same shapes whether
++// anything hides the sun: 0x80040DF4.)
++//
++// The sun's glare. The sun (0x80248B68 every frame) ends with 0x80249048, which works out how much
++// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
++// face the sun, but a turned one can, and then the picture washes out. While this mod holds the
++// camera, 0x80249048 is skipped, so the glare stays as it was when the right stick took the camera.
++//
++// While the camera is held, the console log gets the boxes around the player every two seconds
++// ("[free-camera]"), to find walls the camera still goes through.
 +//
 +// The current area is game variables 0x36 (its kind: 0 the outdoors, 1 the buildings, 2 the mines)
 +// and 0x37 (which one), at the game's state + 0x148C and + 0x1490 (the getter is 0x8010B154).
@@ -2212,6 +2221,7 @@ index 0000000..68c8cc0
 +#include "hle_stubs.h"
 +#include "memory.h"
 +#include "runtime_config.h"
++#include "runtime_log.h"
 +
 +#include <SDL3/SDL_gamepad.h>
 +#include <SDL3/SDL_keyboard.h>
@@ -2221,6 +2231,7 @@ index 0000000..68c8cc0
 +#include <cmath>
 +#include <cstdint>
 +#include <cstring>
++#include <iostream>
 +
 +// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
 +// file's translation unit.
@@ -2246,7 +2257,8 @@ index 0000000..68c8cc0
 +constexpr uint32_t kCollisionManager = 0x804D71DCu;
 +constexpr uint32_t kShapeSize = 0xA4;
 +constexpr uint32_t kBox = 2;
-+constexpr float kBigBox = 1.2f;           // half its width and depth at least this: a house, a wall
++constexpr float kBigBox = 1.0f;           // half its width or depth at least this ...
++constexpr float kThinBox = 0.4f;          // ... and the other at least this: a house, a stall, a wall
 +constexpr float kClosest = 1.5f;          // the nearest the camera comes to the point it looks at
 +constexpr float kWallGap = 0.3f;          // how far in front of a wall the camera stops
 +constexpr float kBackOut = 3.0f;          // how fast it goes back out once the wall is gone, a second
@@ -2398,7 +2410,7 @@ index 0000000..68c8cc0
 +    float nearest = 1.0f;
 +    for (uint32_t i = 0; i < count; ++i) {
 +        const uint32_t shape = shapes + i * kShapeSize;
-+        if (Memory::Read32(shape) != 1 || Memory::Read32(shape + 0x38) != kBox || Memory::Read32(shape + 0x78) != 0) {
++        if (Memory::Read32(shape) != 1 || Memory::Read32(shape + 0x38) != kBox) {
 +            continue;
 +        }
 +        float m[12];
@@ -2416,7 +2428,7 @@ index 0000000..68c8cc0
 +        // A house or a long wall reaches all the way up: its width and depth in the world.
 +        const float width = std::sqrt(a * a + d * d + g * g) * (high[0] - low[0]) * 0.5f;
 +        const float depth = std::sqrt(c * c + f * f + k9 * k9) * (high[2] - low[2]) * 0.5f;
-+        if (width >= kBigBox && depth >= kBigBox) {
++        if (std::max(width, depth) >= kBigBox && std::min(width, depth) >= kThinBox) {
 +            high[1] = 1e6f;
 +        }
 +        // The line in the box's own space: the inverse of the 3x3 part.
@@ -2456,6 +2468,42 @@ index 0000000..68c8cc0
 +        }
 +    }
 +    return nearest;
++}
++
++// Every two seconds while the camera is held: the shapes within 12 units of the player, for the log.
++void NoteShapes(const float feet[3], float wall) {
++    using Clock = std::chrono::steady_clock;
++    static Clock::time_point s_next;
++    static int s_reports = 0;
++    const auto now = Clock::now();
++    if (now < s_next || s_reports >= 120) {
++        return;
++    }
++    s_next = now + std::chrono::seconds(2);
++    ++s_reports;
++    const uint32_t count = Memory::Read32(kCollisionManager + 0x04);
++    const uint32_t shapes = Memory::Read32(kCollisionManager + 0x08);
++    RT_LOG(RT_TAG_VI) << "[free-camera] player " << feet[0] << " " << feet[1] << " " << feet[2] << ", shapes "
++                      << count << ", first wall at " << wall << std::endl;
++    if (shapes == 0 || count > 0x1000 || !Memory::Contains(shapes, count * kShapeSize)) {
++        return;
++    }
++    for (uint32_t i = 0; i < count; ++i) {
++        const uint32_t shape = shapes + i * kShapeSize;
++        const float x = ReadFloat(shape + 0x14), y = ReadFloat(shape + 0x24), z = ReadFloat(shape + 0x34);
++        const float dx = x - feet[0], dz = z - feet[2];
++        if (dx * dx + dz * dz > 144.0f) {
++            continue;
++        }
++        RT_LOG(RT_TAG_VI) << "[free-camera]   #" << i << " used " << Memory::Read32(shape) << " type "
++                          << Memory::Read32(shape + 0x38) << " at " << x << " " << y << " " << z << " scale "
++                          << ReadFloat(shape + 0x08) << " " << ReadFloat(shape + 0x1C) << " " << ReadFloat(shape + 0x30)
++                          << " low " << ReadFloat(shape + 0x3C) << " " << ReadFloat(shape + 0x40) << " "
++                          << ReadFloat(shape + 0x44) << " high " << ReadFloat(shape + 0x48) << " "
++                          << ReadFloat(shape + 0x4C) << " " << ReadFloat(shape + 0x50) << " owner 0x" << std::hex
++                          << Memory::Read32(shape + 0x78) << " mask 0x" << Memory::Read32(shape + 0x04) << " on 0x"
++                          << Memory::Read32(shape + 0x54) << std::dec << std::endl;
++    }
 +}
 +
 +// Once a frame, with the main camera.
@@ -2510,7 +2558,9 @@ index 0000000..68c8cc0
 +        wanted[i] = target[i] - forward[i] * o.distance;
 +    }
 +    // In front of the first wall between the player and the camera; back out slowly once it is gone.
-+    const float room = std::max(kClosest, FirstWall(target, wanted) * o.distance - kWallGap);
++    const float wall = FirstWall(target, wanted);
++    NoteShapes(feet, wall);
++    const float room = std::max(kClosest, wall * o.distance - kWallGap);
 +    o.shown = room < o.shown ? room : std::min(room, o.shown + kBackOut * dt);
 +    for (int i = 0; i < 3; ++i) {
 +        WriteFloat(camera + kEye + 4 * i, target[i] - forward[i] * o.shown);
@@ -2535,6 +2585,16 @@ index 0000000..68c8cc0
 +    GuestFunctions::BaseTranslation(0x80052778u)(ctx);
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80052778, AnimalParadeCameraView);
++
++// 0x80249048: the sun's glare over the picture (see above). Skipped while the mod holds the camera.
++extern "C" void AnimalParadeSunGlare(CpuContext* ctx) {
++    using namespace FreeCamera;
++    if (Enabled() && g_orbit.taken) {
++        return;
++    }
++    GuestFunctions::BaseTranslation(0x80249048u)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80249048, AnimalParadeSunGlare);
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
 index 0000000..fe265c4
