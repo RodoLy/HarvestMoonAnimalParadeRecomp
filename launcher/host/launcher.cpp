@@ -660,9 +660,12 @@ void StartPreparation(bool startGameAfter) {
                 const int oldStage = stage;
                 const double oldFraction = fraction;
                 ReadProgressLine(line, stage, fraction);
-                // Real work: extracting, translating (not "is current"), or compiling something.
+                // Real work: extracting, translating (not "is current"), configuring the build (a
+                // couple of minutes after an update, before the compiler prints anything), or
+                // compiling something.
                 if (!showSteps && (line.find(L"== Extracting") != std::wstring::npos ||
                                    line.find(L"== Translating") != std::wstring::npos ||
+                                   line.find(L"== Configuring") != std::wstring::npos ||
                                    (line.size() > 1 && line[0] == L'[' && line.find(L'/') != std::wstring::npos))) {
                     showSteps = true;
                     SendProgress(stage, fraction);
