@@ -22,11 +22,11 @@ What was learned building it:
 - Once the right stick moves, the camera keeps its own angle, tilt and distance around a point just
   above the player, so places where the game's camera holds a set angle do not turn it back. R3 or
   a change of area gives the camera back to the game.
-- Walls come from the engine's collision manager (0x804D71DC: the count at +0x04, the entries at
-  +0x08, 0xA4 bytes each: a 3x4 matrix at +0x08, the shape at +0x38, 2 for a box with its corners at
-  +0x3C and +0x48, and what it belongs to at +0x78, 0 for the place). The camera is pulled in front of
-  the first box between it and the player; big boxes (a house, a long wall) count as reaching all the
-  way up, since they stop at the height the player needs.
+- Walls: the camera asks the game's own question, 0x80040DF4 (the one the sun uses to know whether
+  something hides it), whether anything stands between the player and the camera, and stops in front
+  of it. The engine's collision manager (0x804D71DC: the count at +0x04, the entries at +0x08, 0xA4
+  bytes each) holds boxes for walls and fences, cylinders for people and animals, and outdoors a
+  mesh of triangles for each group of buildings; the question leaves out the people and animals.
 
 A first try let the camera fly on its own while the player stood still; the orbit camera replaced
 it. The study from before follows.
@@ -110,12 +110,11 @@ Lo que se aprendió al hacerlo:
 - En cuanto se mueve el stick derecho, la cámara guarda su propio giro, inclinación y distancia
   alrededor de un punto un poco arriba del personaje, así que los lugares donde la cámara del juego
   tiene un ángulo fijo ya no la regresan. R3 o un cambio de zona le devuelven la cámara al juego.
-- Las paredes salen del administrador de colisiones del motor (0x804D71DC: la cuenta en +0x04, las
-  entradas en +0x08, 0xA4 bytes cada una: una matriz de 3x4 en +0x08, la forma en +0x38, 2 para una
-  caja con sus esquinas en +0x3C y +0x48, y a qué pertenece en +0x78, 0 si es del lugar). La cámara se
-  acerca hasta quedar delante de la primera caja entre ella y el personaje; las cajas grandes (una
-  casa, un muro largo) cuentan como si llegaran hasta arriba, porque solo llegan a la altura que
-  necesita el personaje.
+- Paredes: la cámara hace la misma pregunta que el juego, 0x80040DF4 (la que usa el sol para saber si
+  algo lo tapa): si hay algo entre el personaje y la cámara, y se detiene delante. El administrador
+  de colisiones del motor (0x804D71DC: la cuenta en +0x04, las entradas en +0x08, 0xA4 bytes cada
+  una) guarda cajas para paredes y cercas, cilindros para personas y animales, y al aire libre una
+  malla de triángulos por cada grupo de edificios; la pregunta deja fuera a personas y animales.
 
 Un primer intento soltaba la cámara para volar sola mientras el personaje se quedaba quieto; la
 cámara orbital lo reemplazó. Sigue el estudio de antes.

@@ -2156,10 +2156,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..98755ab
+index 0000000..73d36c1
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,435 @@
+@@ -0,0 +1,394 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2190,17 +2190,15 @@ index 0000000..98755ab
 +// game's own camera is what shows.
 +//
 +// Walls. The engine's collision manager (aa_CollisionManager.cpp; at 0x804D71DC: +0x04 the count,
-+// +0x08 the entries, 0xA4 bytes each) keeps a shape for everything the player bumps into:
-+//   +0x00            1 while in use
-+//   +0x08 ... +0x34  where it stands: a 3x4 matrix, row by row (the turn and size, then x, y, z)
-+//   +0x38            its shape: 2 a box, 3 a cylinder (the people and animals)
-+//   +0x3C ... +0x50  a box's corners in its own space, the lowest then the highest
-+//   +0x78            what it belongs to (a character, an object), 0 for the place itself
-+// The camera is pulled in, towards the player, when a box stands between them, so it never ends up
-+// behind a house or a wall. The boxes are only as tall as the player needs (a house's may stop at its
-+// eaves): big ones, a house, a stall or a long wall, count as reaching all the way up, while thin or
-+// small ones (a fence, a stone) can still be looked over. (The game asks the same shapes whether
-+// anything hides the sun: 0x80040DF4.)
++// +0x08 the entries, 0xA4 bytes each) keeps a shape for everything the player bumps into: a box for
++// a wall or a fence (+0x38 = 2), a cylinder for the people and animals (3), and outdoors a mesh of
++// triangles for each group of buildings (4). Each says what may hit it at +0x04: 0x2 the meshes,
++// 0x4 the people and animals, 0xFFFF the walls. The game asks it whether anything stands between two
++// points with 0x80040DF4 (r3 and r4 the two points, r5 what may count; r3 back 1 when something
++// does, the nearest point it touches at 0x804D71DC + 0x0C) - the sun uses it to know when it is
++// hidden. This mod asks it the same about the player and the camera, leaving out the people and
++// animals, and pulls the camera in front of whatever is in between: it never ends up behind a house
++// or a wall.
 +//
 +// The sun's glare. The sun (0x80248B68 every frame) ends with 0x80249048, which works out how much
 +// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
@@ -2256,9 +2254,8 @@ index 0000000..98755ab
 +
 +constexpr uint32_t kCollisionManager = 0x804D71DCu;
 +constexpr uint32_t kShapeSize = 0xA4;
-+constexpr uint32_t kBox = 2;
-+constexpr float kBigBox = 1.0f;           // half its width or depth at least this ...
-+constexpr float kThinBox = 0.4f;          // ... and the other at least this: a house, a stall, a wall
++constexpr uint32_t kSomethingBetween = 0x80040DF4u;
++constexpr uint32_t kNotCharacters = 0xFFFBu;   // every shape but the people and animals (0x4)
 +constexpr float kClosest = 1.5f;          // the nearest the camera comes to the point it looks at
 +constexpr float kWallGap = 0.3f;          // how far in front of a wall the camera stops
 +constexpr float kBackOut = 3.0f;          // how fast it goes back out once the wall is gone, a second
@@ -2399,75 +2396,37 @@ index 0000000..98755ab
 +    return true;
 +}
 +
-+// How far along the line from `from` (0) to `to` (1) the first box of the place stands, or 1 when
-+// none does.
-+float FirstWall(const float from[3], const float to[3]) {
-+    const uint32_t count = Memory::Read32(kCollisionManager + 0x04);
-+    const uint32_t shapes = Memory::Read32(kCollisionManager + 0x08);
-+    if (shapes == 0 || count > 0x1000 || !Memory::Contains(shapes, count * kShapeSize)) {
++// How far along the line from `from` (0) to `to` (1) the first wall stands, or 1 when none does:
++// the game's own question (0x80040DF4), asked with a few bytes of the game's stack for the two
++// points. The game's registers are put back afterwards, as they were.
++float FirstWall(CpuContext* ctx, const float from[3], const float to[3]) {
++    const CpuContext saved = *ctx;
++    const uint32_t stack = (saved.gpr[1] - 0x60u) & ~0xFu;
++    Memory::Write32(stack, saved.gpr[1]);  // the back chain, as a real call would leave it
++    for (int i = 0; i < 3; ++i) {
++        WriteFloat(stack + 0x10 + 4 * i, from[i]);
++        WriteFloat(stack + 0x20 + 4 * i, to[i]);
++    }
++    ctx->gpr[1] = stack;
++    ctx->gpr[3] = stack + 0x10;
++    ctx->gpr[4] = stack + 0x20;
++    ctx->gpr[5] = kNotCharacters;
++    GuestFunctions::BaseTranslation(kSomethingBetween)(ctx);
++    const bool hit = ctx->gpr[3] != 0;
++    float point[3];
++    for (int i = 0; i < 3; ++i) {
++        point[i] = ReadFloat(kCollisionManager + 0x0C + 4 * i);
++    }
++    *ctx = saved;
++    if (!hit) {
 +        return 1.0f;
 +    }
-+    float nearest = 1.0f;
-+    for (uint32_t i = 0; i < count; ++i) {
-+        const uint32_t shape = shapes + i * kShapeSize;
-+        if (Memory::Read32(shape) != 1 || Memory::Read32(shape + 0x38) != kBox) {
-+            continue;
-+        }
-+        float m[12];
-+        for (int k = 0; k < 12; ++k) {
-+            m[k] = ReadFloat(shape + 0x08 + 4 * k);
-+        }
-+        float low[3], high[3];
-+        for (int k = 0; k < 3; ++k) {
-+            low[k] = ReadFloat(shape + 0x3C + 4 * k);
-+            high[k] = ReadFloat(shape + 0x48 + 4 * k);
-+        }
-+        // Rows of the 3x3 part, and where the box stands.
-+        const float a = m[0], b = m[1], c = m[2], d = m[4], e = m[5], f = m[6], g = m[8], h = m[9], k9 = m[10];
-+        const float place[3] = {m[3], m[7], m[11]};
-+        // A house or a long wall reaches all the way up: its width and depth in the world.
-+        const float width = std::sqrt(a * a + d * d + g * g) * (high[0] - low[0]) * 0.5f;
-+        const float depth = std::sqrt(c * c + f * f + k9 * k9) * (high[2] - low[2]) * 0.5f;
-+        if (std::max(width, depth) >= kBigBox && std::min(width, depth) >= kThinBox) {
-+            high[1] = 1e6f;
-+        }
-+        // The line in the box's own space: the inverse of the 3x3 part.
-+        const float det = a * (e * k9 - f * h) - b * (d * k9 - f * g) + c * (d * h - e * g);
-+        if (std::fabs(det) < 1e-6f) {
-+            continue;
-+        }
-+        const float inv[9] = {(e * k9 - f * h) / det, (c * h - b * k9) / det, (b * f - c * e) / det,
-+                              (f * g - d * k9) / det, (a * k9 - c * g) / det, (c * d - a * f) / det,
-+                              (d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det};
-+        float origin[3], along[3];
-+        for (int r = 0; r < 3; ++r) {
-+            origin[r] = along[r] = 0;
-+            for (int q = 0; q < 3; ++q) {
-+                origin[r] += inv[3 * r + q] * (from[q] - place[q]);
-+                along[r] += inv[3 * r + q] * (to[q] - from[q]);
-+            }
-+        }
-+        // Where the line enters the box (the slabs of its three sides).
-+        float enter = 0.0f, leave = 1.0f;
-+        bool misses = false;
-+        for (int r = 0; r < 3 && !misses; ++r) {
-+            if (std::fabs(along[r]) < 1e-6f) {
-+                misses = origin[r] < low[r] || origin[r] > high[r];
-+                continue;
-+            }
-+            float t0 = (low[r] - origin[r]) / along[r], t1 = (high[r] - origin[r]) / along[r];
-+            if (t0 > t1) {
-+                std::swap(t0, t1);
-+            }
-+            enter = std::max(enter, t0);
-+            leave = std::min(leave, t1);
-+            misses = enter > leave;
-+        }
-+        if (!misses && enter > 0.0f && enter < nearest) {
-+            nearest = enter;  // (a box the player's head is in, entered at 0, does not count)
-+        }
++    float whole = 0, part = 0;
++    for (int i = 0; i < 3; ++i) {
++        whole += (to[i] - from[i]) * (to[i] - from[i]);
++        part += (point[i] - from[i]) * (point[i] - from[i]);
 +    }
-+    return nearest;
++    return whole > 0 ? std::clamp(std::sqrt(part / whole), 0.0f, 1.0f) : 1.0f;
 +}
 +
 +// Every two seconds while the camera is held: the shapes within 12 units of the player, for the log.
@@ -2507,7 +2466,7 @@ index 0000000..98755ab
 +}
 +
 +// Once a frame, with the main camera.
-+void TurnCamera(uint32_t camera) {
++void TurnCamera(CpuContext* ctx, uint32_t camera) {
 +    Orbit& o = g_orbit;
 +    const auto now = std::chrono::steady_clock::now();
 +    const float dt = std::min(0.1f, std::chrono::duration<float>(now - o.last).count());
@@ -2558,7 +2517,7 @@ index 0000000..98755ab
 +        wanted[i] = target[i] - forward[i] * o.distance;
 +    }
 +    // In front of the first wall between the player and the camera; back out slowly once it is gone.
-+    const float wall = FirstWall(target, wanted);
++    const float wall = FirstWall(ctx, target, wanted);
 +    NoteShapes(feet, wall);
 +    const float room = std::max(kClosest, wall * o.distance - kWallGap);
 +    o.shown = room < o.shown ? room : std::min(room, o.shown + kBackOut * dt);
@@ -2579,7 +2538,7 @@ index 0000000..98755ab
 +    if (Enabled()) {
 +        GameMods::SetRightStickTaken(true);
 +        if (IsMainCamera(ctx->gpr[3])) {
-+            TurnCamera(ctx->gpr[3]);
++            TurnCamera(ctx, ctx->gpr[3]);
 +        }
 +    }
 +    GuestFunctions::BaseTranslation(0x80052778u)(ctx);
