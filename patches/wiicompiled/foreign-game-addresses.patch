@@ -2170,10 +2170,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..cd13f05
+index 0000000..b48ae6a
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,583 @@
+@@ -0,0 +1,602 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2464,14 +2464,25 @@ index 0000000..cd13f05
 +}
 +
 +// The right stick takes the camera where the game's camera is now: the same point, angle and
-+// distance, so the picture does not jump.
++// distance, so the picture does not jump. When the game's camera looks a little off the player
++// (after the camera was put back, it can stay that way until the next area), the point is just
++// above the player instead, seen from where the game's camera is: the picture moves a little once.
 +bool Take(Orbit& o, uint32_t camera, const float feet[3], const Sight& sight) {
-+    if (sight.miss > kFollowing) {
-+        return false;  // the game's camera is not looking at the player
-+    }
 +    const float pitch = ReadFloat(camera + kPitch), yaw = ReadFloat(camera + kYaw);
-+    const float* target = sight.target;
-+    const float along = sight.along;
++    float target[3] = {sight.target[0], sight.target[1], sight.target[2]};
++    float along = sight.along;
++    if (sight.miss > kFollowing) {
++        const float head[3] = {feet[0], feet[1] + kLookHeight, feet[2]};
++        float eyeToHead = 0;
++        for (int i = 0; i < 3; ++i) {
++            target[i] = head[i];
++            const float d = head[i] - ReadFloat(camera + kEye + 4 * i);
++            eyeToHead += d * d;
++        }
++        along = std::max(kClosest, std::sqrt(eyeToHead));
++        RT_LOG(RT_TAG_VI) << "[free-camera] taken with the game's camera " << sight.miss
++                          << " off the player" << std::endl;
++    }
 +    o.taken = true;
 +    o.camera = camera;
 +    o.yaw = yaw;
@@ -2614,6 +2625,14 @@ index 0000000..cd13f05
 +    // A scene's camera, looking away from the player: the game's, for as long as it lasts.
 +    const Sight sight = GameSight(camera, feet);
 +    if (sight.miss > kScene) {
++        // For the log: the stick moved, and the camera was left to a scene (at most every 2 seconds).
++        static std::chrono::steady_clock::time_point s_noted;
++        const Input in = ReadInput();
++        if ((in.turn != 0 || in.tilt != 0) && now - s_noted > std::chrono::seconds(2)) {
++            s_noted = now;
++            RT_LOG(RT_TAG_VI) << "[free-camera] left to a scene: the game's camera " << sight.miss
++                              << " off the player, " << sight.along << " away" << std::endl;
++        }
 +        return;
 +    }
 +    // A talk: the game's own camera while it lasts, then the player's again, where it was.

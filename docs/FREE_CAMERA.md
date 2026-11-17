@@ -21,7 +21,11 @@ What was learned building it:
 - The water's reflection has a camera of its own and keeps the game's angle.
 - Once the right stick moves, the camera keeps its own angle, tilt and distance around a point just
   above the player, so places where the game's camera holds a set angle do not turn it back. R3 or
-  a change of area gives the camera back to the game.
+  a change of area gives the camera back to the game. After R3 the game's camera can stay looking a
+  little off the player until the next area; the stick used to wait for it to look at the player
+  again, and the camera could not be turned. It now takes the camera anyway, around the point just
+  above the player, and notes in the log when that happens (and when a moved stick is left to a
+  scene).
 - Walls: the camera asks the game's own question, 0x80040DF4 (the one the sun uses to know whether
   something hides it), whether anything stands between the player and the camera, and stops in front
   of it. The engine's collision manager (0x804D71DC: the count at +0x04, the entries at +0x08, 0xA4
@@ -133,6 +137,10 @@ Lo que se aprendió al hacerlo:
 - En cuanto se mueve el stick derecho, la cámara guarda su propio giro, inclinación y distancia
   alrededor de un punto un poco arriba del personaje, así que los lugares donde la cámara del juego
   tiene un ángulo fijo ya no la regresan. R3 o un cambio de zona le devuelven la cámara al juego.
+  Después de R3 la cámara del juego puede quedarse mirando un poco al lado del personaje hasta la
+  siguiente zona; el stick esperaba a que lo volviera a mirar, y la cámara ya no se podía girar.
+  Ahora la toma de todos modos, alrededor del punto un poco arriba del personaje, y lo anota en el
+  registro (y también cuando un stick movido se deja a una escena).
 - Paredes: la cámara hace la misma pregunta que el juego, 0x80040DF4 (la que usa el sol para saber si
   algo lo tapa): si hay algo entre el personaje y la cámara, y se detiene delante. El administrador
   de colisiones del motor (0x804D71DC: la cuenta en +0x04, las entradas en +0x08, 0xA4 bytes cada
