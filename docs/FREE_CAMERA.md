@@ -27,6 +27,13 @@ What was learned building it:
   of it. The engine's collision manager (0x804D71DC: the count at +0x04, the entries at +0x08, 0xA4
   bytes each) holds boxes for walls and fences, cylinders for people and animals, and outdoors a
   mesh of triangles for each group of buildings; the question leaves out the people and animals.
+- Talks: with its setting "The game's camera in talks" (`free_camera_talk` in `[mods]`, on unless
+  it says false), talking with someone shows the game's own camera, as in the original game, and the
+  player's camera comes back where it was when the talk ends. The game's camera system keeps what
+  it is doing at 0x805B0710, a state of the table at 0x804A8818 (each entry: the state, what starts
+  it, what runs it every frame): 2 follows the player in the field, 3 goes into a talk, 4 holds it,
+  5 comes back out. Found by comparing memory (F8) before, during and after a talk. A first try
+  watched for the camera of the talk window's face, which only some talks have.
 
 A first try let the camera fly on its own while the player stood still; the orbit camera replaced
 it. The study from before follows.
@@ -115,6 +122,14 @@ Lo que se aprendió al hacerlo:
   de colisiones del motor (0x804D71DC: la cuenta en +0x04, las entradas en +0x08, 0xA4 bytes cada
   una) guarda cajas para paredes y cercas, cilindros para personas y animales, y al aire libre una
   malla de triángulos por cada grupo de edificios; la pregunta deja fuera a personas y animales.
+- Pláticas: con su ajuste "Al hablar, la cámara del juego" (`free_camera_talk` en `[mods]`,
+  encendido salvo que diga false), al hablar con alguien se ve la cámara del propio juego, como en
+  el original, y al terminar la plática la cámara del jugador vuelve a donde estaba. El sistema de
+  cámara del juego guarda lo que está haciendo en 0x805B0710, un estado de la tabla en 0x804A8818
+  (cada entrada: el estado, lo que lo empieza y lo que lo corre cada cuadro): 2 sigue al personaje
+  en el campo, 3 entra a una plática, 4 la mantiene y 5 sale de ella. Se encontró comparando la
+  memoria (F8) antes, durante y después de una plática. Un primer intento buscaba la cámara de la
+  cara de la ventana de texto, que solo tienen algunas pláticas.
 
 Un primer intento soltaba la cámara para volar sola mientras el personaje se quedaba quieto; la
 cámara orbital lo reemplazó. Sigue el estudio de antes.

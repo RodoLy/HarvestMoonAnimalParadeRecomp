@@ -788,6 +788,9 @@ const char* const kMods[] = {"romance_any_gender",     "no_place_sign",        "
                               "cheat_infinite_stamina", "cheat_infinite_money", "cheat_infinite_lumber",
                               "cheat_infinite_stone", "cheat_infinite_feed", "cheat_stop_time"};
 const char* const kModSettings[] = {"faster_actions_percent", "faster_walking_percent"};
+// Settings that are a yes or no, in a line of their own in [mods] (true or false); the page knows
+// what each is while its line is missing.
+const char* const kModYesNo[] = {"free_camera_talk"};
 
 // A whole number of at most three digits: what a percentage line may hold.
 bool IsPercent(const std::string& text) {
@@ -818,6 +821,10 @@ std::wstring StateJson(const wchar_t* status) {
     for (size_t i = 0; i < std::size(kModSettings); ++i) {
         const std::string value = config.Get("mods", kModSettings[i]).value_or("");
         json << (i ? L"," : L"") << L"\"" << Wide(kModSettings[i]) << L"\":" << (IsPercent(value) ? Wide(value) : L"null");
+    }
+    for (const char* key : kModYesNo) {
+        const std::string value = config.Get("mods", key).value_or("");
+        json << L",\"" << Wide(key) << L"\":" << (value == "true" ? L"true" : value == "false" ? L"false" : L"null");
     }
     json << L"}}";
     return json.str();
@@ -899,12 +906,18 @@ void OnPageMessage(const std::wstring& json) {
         }
         PostToPage(StateJson(CurrentStatus()));
     } else if (cmd == L"setModSetting") {
-        // A mod's percentage, from 100 to 300.
+        // A mod's percentage, from 100 to 300, or a yes or no.
         const std::string name = Utf8(message[L"name"]);
         const std::string value = Utf8(message[L"value"]);
         if (std::find_if(std::begin(kModSettings), std::end(kModSettings), [&](const char* key) { return name == key; }) !=
                 std::end(kModSettings) &&
             IsPercent(value) && std::stoi(value) >= 100 && std::stoi(value) <= 300) {
+            ConfigFile config = ConfigFile::Load();
+            config.Set("mods", name, value);
+            config.Save();
+        } else if (std::find_if(std::begin(kModYesNo), std::end(kModYesNo), [&](const char* key) { return name == key; }) !=
+                       std::end(kModYesNo) &&
+                   (value == "true" || value == "false")) {
             ConfigFile config = ConfigFile::Load();
             config.Set("mods", name, value);
             config.Save();
