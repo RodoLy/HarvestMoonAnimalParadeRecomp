@@ -75,7 +75,7 @@ index 0317ace..d5fb061 100644
    const auto windowSize = aurora::window::get_window_size();
    if (width != nullptr) {
 diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
-index f367955..35ce419 100644
+index f367955..43a0bf3 100644
 --- a/lib/gx/command_processor.cpp
 +++ b/lib/gx/command_processor.cpp
 @@ -17,6 +17,8 @@
@@ -87,7 +87,7 @@ index f367955..35ce419 100644
  #include <span>
  #include <vector>
  
-@@ -454,6 +456,175 @@ static void handle_draw_overrun(GXVtxFmt fmt, size_t totalVtxBytes, ByteReader&
+@@ -454,6 +456,122 @@ static void handle_draw_overrun(GXVtxFmt fmt, size_t totalVtxBytes, ByteReader&
  
  // Vertices a primitive actually uses: incomplete trailing primitives are never drawn, so they
  // cannot join a later merged draw either.
@@ -120,22 +120,12 @@ index f367955..35ce419 100644
 +// Wide picture draws the game's 4:3 frame in the middle of a wider one (see wide_picture_factor).
 +// That suits what a game draws flat on the screen - a clock, a text box - but not a draw that covers
 +// the whole frame: a fade to black, or the scene drawn back from a copy, has to reach the sides too.
-+// This tells the two apart by where the vertices of an orthographic draw land in the frame.
-+struct OrthoDrawExtent {
-+  // False when the vertices could not be read the way the game laid them out.
-+  bool known = false;
-+  // In the frame, from -1 (its left edge, its bottom) to 1 (its right edge, its top).
-+  float left = 0.f;
-+  float right = 0.f;
-+  float bottom = 0.f;
-+  float top = 0.f;
-+};
-+
-+static OrthoDrawExtent measure_ortho_draw(const u8* vertices, u16 vtxCount, u32 vtxStride, GXVtxFmt fmt) noexcept {
++// This tells the two apart by where the vertices of an orthographic draw land across the frame.
++static bool ortho_draw_fills_width(const u8* vertices, u16 vtxCount, u32 vtxStride, GXVtxFmt fmt) noexcept {
 +  const auto& state = g_gxState;
 +  const GXAttrType positionSource = state.vtxDesc[GX_VA_POS];
 +  if (positionSource == GX_NONE || vtxCount == 0 || vtxStride == 0) {
-+    return {};
++    return false;
 +  }
 +  // The matrix indices come first in a vertex, one byte each, and the position right after them.
 +  u32 positionOffset = 0;
@@ -149,13 +139,8 @@ index f367955..35ce419 100644
 +  const bool matrixPerVertex = state.vtxDesc[GX_VA_PNMTXIDX] == GX_DIRECT;
 +  const auto& array = state.arrays[GX_VA_POS];
 +
-+  OrthoDrawExtent extent{
-+      .known = true,
-+      .left = std::numeric_limits<float>::infinity(),
-+      .right = -std::numeric_limits<float>::infinity(),
-+      .bottom = std::numeric_limits<float>::infinity(),
-+      .top = -std::numeric_limits<float>::infinity(),
-+  };
++  float leftmost = std::numeric_limits<float>::infinity();
++  float rightmost = -std::numeric_limits<float>::infinity();
 +  for (u16 i = 0; i < vtxCount; ++i) {
 +    const u8* vertex = vertices + static_cast<size_t>(i) * vtxStride;
 +    const u8* source = vertex + positionOffset;
@@ -164,7 +149,7 @@ index f367955..35ce419 100644
 +      const u32 index = positionSource == GX_INDEX8 ? source[0] : static_cast<u32>((source[0] << 8) | source[1]);
 +      const size_t start = static_cast<size_t>(index) * array.stride;
 +      if (array.data == nullptr || start + components * componentSize > array.size) {
-+        return {};
++        return false;
 +      }
 +      source = static_cast<const u8*>(array.data) + start;
 +      littleEndian = array.le;
@@ -175,11 +160,10 @@ index f367955..35ce419 100644
 +          read_position_component(source + c * componentSize, positionFormat.type, positionFormat.frac, littleEndian);
 +    }
 +    const u32 matrix = std::min<u32>(matrixPerVertex ? (vertex[0] & 0x3fu) / 3u : state.currentPnMtx, MaxPnMtx - 1);
-+    const auto& rows = state.pnMtx[matrix].pos;
-+    const float viewX = rows.m0[0] * position[0] + rows.m0[1] * position[1] + rows.m0[2] * position[2] + rows.m0[3];
-+    const float viewY = rows.m1[0] * position[0] + rows.m1[1] * position[1] + rows.m1[2] * position[2] + rows.m1[3];
++    const auto& row = state.pnMtx[matrix].pos.m0;
++    const float viewX = row[0] * position[0] + row[1] * position[1] + row[2] * position[2] + row[3];
++    // -1 is the left edge of the frame and 1 the right one.
 +    const float frameX = state.proj.m0[0] * viewX + state.proj.m0[3];
-+    const float frameY = state.proj.m1[1] * viewY + state.proj.m1[3];
 +    // A draw that covers the frame lies right on its edges. A position far outside them (or not a
 +    // number at all) means this vertex was not read the way the game laid it out, and a wrong
 +    // guess here would stretch a letter of text out to the side; so the draw keeps the safe answer.
@@ -192,78 +176,41 @@ index f367955..35ce419 100644
 +                 vtxCount, frameX, static_cast<int>(positionSource), static_cast<int>(positionFormat.type),
 +                 static_cast<int>(positionFormat.cnt), matrix);
 +      }
-+      return {};
++      return false;
 +    }
-+    extent.left = std::min(extent.left, frameX);
-+    extent.right = std::max(extent.right, frameX);
-+    // Up and down only place the draw against the copies; a strange one just leaves it unplaced.
-+    if (std::isfinite(frameY)) {
-+      extent.bottom = std::min(extent.bottom, frameY);
-+      extent.top = std::max(extent.top, frameY);
-+    }
++    leftmost = std::min(leftmost, frameX);
++    rightmost = std::max(rightmost, frameX);
 +  }
-+  return extent;
-+}
-+
-+static bool ortho_draw_fills_width(const OrthoDrawExtent& extent, u16 vtxCount) noexcept {
-+  const bool fills = extent.known && extent.left <= -WidePictureFullWidth && extent.right >= WidePictureFullWidth;
++  const bool fills = leftmost <= -WidePictureFullWidth && rightmost >= WidePictureFullWidth;
 +  if (fills) {
 +    static int s_reported = 0;
 +    if (s_reported < 30) {
 +      ++s_reported;
-+      Log.info("wide picture: flat draw of {} vertices covers the frame (x {} to {})", vtxCount, extent.left,
-+               extent.right);
++      Log.info("wide picture: flat draw of {} vertices covers the frame (x {} to {}, source={}, type={})", vtxCount,
++               leftmost, rightmost, static_cast<int>(positionSource), static_cast<int>(positionFormat.type));
 +    }
 +  }
 +  return fills;
-+}
-+
-+// Whether a flat draw lies clear of every place the frame before copied a part of itself from. Such
-+// a draw is not one the game reads back, even before the frame's last copy (see wide_picture_factor).
-+static bool ortho_draw_clear_of_copies(const OrthoDrawExtent& extent) noexcept {
-+  const auto& area = g_gxState.texCopyAreaLastFrame;
-+  if (!extent.known || area.empty || !(extent.bottom <= extent.top)) {
-+    return false;
-+  }
-+  // From the frame's -1..1 to the logical EFB pixels the copies are given in.
-+  const auto& viewport = g_gxState.logicalViewport;
-+  const float left = viewport.left + (extent.left + 1.f) * 0.5f * viewport.width;
-+  const float right = viewport.left + (extent.right + 1.f) * 0.5f * viewport.width;
-+  const float top = viewport.top + (1.f - extent.top) * 0.5f * viewport.height;
-+  const float bottom = viewport.top + (1.f - extent.bottom) * 0.5f * viewport.height;
-+  // A pixel of slack, for an edge that lands right on a copy's.
-+  constexpr float Slack = 1.f;
-+  return !area.overlaps(left - Slack, top - Slack, right + Slack, bottom + Slack);
 +}
 +
 +// Every path that hands vertices to the renderer calls this before its draw is recorded, so the
 +// uniform block of a flat draw always matches the draw itself. A path that skipped it would leave
 +// the answer of the draw before: a text drawn right after a fade would then come out stretched.
 +static void classify_ortho_draw(const u8* vertices, u16 vtxCount, u32 vtxStride, GXVtxFmt fmt) noexcept {
-+  bool fillsWidth = false;
-+  bool clearOfCopies = false;
-+  if (g_gxState.projType == GX_ORTHOGRAPHIC && wide_frame_factor() > 1.f) {
-+    const auto extent = measure_ortho_draw(vertices, vtxCount, vtxStride, fmt);
-+    fillsWidth = ortho_draw_fills_width(extent, vtxCount);
-+    clearOfCopies = wide_copies_pending() && ortho_draw_clear_of_copies(extent);
-+  } else if (g_gxState.projType != GX_ORTHOGRAPHIC) {
-+    // Only a flat draw is placed by its own answer; the rest keep the one they had.
-+    fillsWidth = g_gxState.orthoDrawFillsWidth;
-+  } else {
++  if (g_gxState.projType != GX_ORTHOGRAPHIC || wide_picture_factor() <= 1.f) {
 +    return;
 +  }
-+  if (fillsWidth != g_gxState.orthoDrawFillsWidth || clearOfCopies != g_gxState.orthoDrawClearOfCopies) {
++  const bool fillsWidth = ortho_draw_fills_width(vertices, vtxCount, vtxStride, fmt);
++  if (fillsWidth != g_gxState.orthoDrawFillsWidth) {
 +    g_gxState.orthoDrawFillsWidth = fillsWidth;
-+    g_gxState.orthoDrawClearOfCopies = clearOfCopies;
 +    g_gxState.dirty |= DirtyUniform;
-+    refresh_wide_scissor();
 +  }
 +}
 +
  static u16 usable_vertex_count(GXPrimitive prim, u16 vtxCount) noexcept {
    switch (prim) {
    case GX_QUADS:
-@@ -695,6 +866,11 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
+@@ -695,6 +813,11 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
      return;
    }
  
@@ -275,7 +222,7 @@ index f367955..35ce419 100644
    const bool cleanState = g_gxState.dirty == 0 && fmt == sDrawCache.lastDrawFmt && sDrawCache.lineMode == 0 &&
                            prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
    auto* lastDraw = cleanState ? gfx::get_last_draw_command<DrawData>() : nullptr;
-@@ -702,7 +878,6 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
+@@ -702,7 +825,6 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader&
                          u32(lastDraw->vtxCount) + vtxCount <= 0xffff;
  
    // Push raw vertex data to buffer. Merged draws must remain contiguous with the previous range.
@@ -283,7 +230,7 @@ index f367955..35ce419 100644
    gfx::Range vertRange = gfx::push_verts(vertexData.data(), vertexData.size(), canMerge ? 0 : 4);
  
    // Try to merge with previous draw call
-@@ -985,6 +1160,8 @@ void handle_aurora(ByteReader& reader) noexcept {
+@@ -985,6 +1107,8 @@ void handle_aurora(ByteReader& reader) noexcept {
      const auto vertexData = reader.take(totalVtxBytes);
      const gfx::Range vertRange = gfx::push_verts(vertexData.data(), vertexData.size(), 4);
      if (indexCount != 0) {
@@ -293,7 +240,7 @@ index f367955..35ce419 100644
      }
    } else if (subCmd == GX_AURORA_DEBUG_GROUP_PUSH) {
 diff --git a/lib/gx/gx.cpp b/lib/gx/gx.cpp
-index e373bf0..c86cb24 100644
+index e373bf0..6038c0a 100644
 --- a/lib/gx/gx.cpp
 +++ b/lib/gx/gx.cpp
 @@ -42,6 +42,8 @@ wgpu::BindGroupLayout sTextureBindGroupLayout;
@@ -305,7 +252,7 @@ index e373bf0..c86cb24 100644
  
  template <typename T>
  T round_away_from_zero(float value) noexcept {
-@@ -260,6 +262,49 @@ void update() noexcept {
+@@ -260,6 +262,40 @@ void update() noexcept {
      window::set_force_aspect_16_9(policy == AURORA_VIEWPORT_16_9);
      window::set_present_surface_fill(policy == AURORA_VIEWPORT_STRETCH);
    }
@@ -319,11 +266,15 @@ index e373bf0..c86cb24 100644
 +  sPendingWideAspect.store(gameAspect > 0.f ? gameAspect : 0.f, std::memory_order_release);
 +}
 +
-+bool wide_copies_pending() noexcept { return g_gxState.texCopiesThisFrame < g_gxState.texCopiesLastFrame; }
-+
-+float wide_frame_factor() noexcept {
++float wide_picture_factor() noexcept {
 +  const float gameAspect = g_gxState.wideGameAspect;
 +  if (!(gameAspect > 0.f) || gfx::is_offscreen()) {
++    return 1.f;
++  }
++  // Until the frame has made as many texture copies as the frames before, what is drawn is most likely
++  // something the game will read back as a texture - the shadow under a character is drawn into a
++  // corner of the frame and copied from there - and has to land where the game expects it.
++  if (g_gxState.texCopiesThisFrame < g_gxState.texCopiesLastFrame) {
 +    return 1.f;
 +  }
 +  const auto [fbWidth, fbHeight] = vi::configured_fb_size();
@@ -339,23 +290,10 @@ index e373bf0..c86cb24 100644
 +  const float factor = (static_cast<float>(targetWidth) / static_cast<float>(targetHeight)) / shownAspect;
 +  // A frame that is barely wider is left alone rather than nudged by a pixel.
 +  return factor > 1.01f ? factor : 1.f;
-+}
-+
-+float wide_picture_factor() noexcept {
-+  // Until the frame has made as many copies of a part of itself as the one before, what is drawn is
-+  // most likely something the game will read back as a texture - the shadow under a character is
-+  // drawn into a corner of the frame and copied from there - and has to land where the game expects
-+  // it. A flat draw that lies clear of every place the frame before copied from is the picture
-+  // itself all the same (a frame with one shadow less than the one before still draws its text box
-+  // in the middle).
-+  if (wide_copies_pending() && !g_gxState.orthoDrawClearOfCopies) {
-+    return 1.f;
-+  }
-+  return wide_frame_factor();
  }
  
  Vec2<uint32_t> logical_fb_size() noexcept {
-@@ -303,10 +348,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
+@@ -303,10 +339,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
    const float scaleX = static_cast<float>(targetWidth) / static_cast<float>(logicalFbWidth);
    const float scaleY = static_cast<float>(targetHeight) / static_cast<float>(logicalFbHeight);
  
@@ -376,7 +314,7 @@ index e373bf0..c86cb24 100644
  
    const auto mappedLeft = std::clamp(static_cast<int32_t>(std::floor(left)), 0, static_cast<int32_t>(targetWidth));
    const auto mappedTop = std::clamp(static_cast<int32_t>(std::floor(top)), 0, static_cast<int32_t>(targetHeight));
-@@ -433,7 +486,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
+@@ -433,7 +477,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
    }
    g_gxState.logicalViewport = viewport;
    set_render_viewport(mapped_render_viewport());
@@ -386,60 +324,11 @@ index e373bf0..c86cb24 100644
      set_render_scissor(mapped_render_scissor());
    }
  }
-@@ -460,6 +514,18 @@ void set_render_scissor(const gfx::ClipRect& scissor) noexcept {
-   gfx::set_scissor(scissor);
- }
- 
-+void refresh_wide_scissor() noexcept {
-+  if (!(g_gxState.wideGameAspect > 0.f)) {
-+    return;
-+  }
-+  const auto scissor = mapped_render_scissor();
-+  const auto& current = g_gxState.renderScissor;
-+  if (scissor.x != current.x || scissor.y != current.y || scissor.width != current.width ||
-+      scissor.height != current.height) {
-+    set_render_scissor(scissor);
-+  }
-+}
-+
- const gfx::TextureBind& get_texture(GXTexMapID id) noexcept { return g_gxState.textures[static_cast<size_t>(id)]; }
- 
- wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, const gfx::RenderTargetLayout& layout,
 diff --git a/lib/gx/gx.hpp b/lib/gx/gx.hpp
-index 02be26a..5046a66 100644
+index 02be26a..9235b0f 100644
 --- a/lib/gx/gx.hpp
 +++ b/lib/gx/gx.hpp
-@@ -305,6 +305,29 @@ inline bool operator==(const AttrArray& lhs, const AttrArray& rhs) {
- }
- inline bool operator!=(const AttrArray& lhs, const AttrArray& rhs) { return !(lhs == rhs); }
- 
-+// A box around the places a frame copied parts of itself from (wide picture, see GXState).
-+struct WideCopyArea {
-+  float left = 0.f;
-+  float top = 0.f;
-+  float right = 0.f;
-+  float bottom = 0.f;
-+  bool empty = true;
-+
-+  void add(float l, float t, float r, float b) noexcept {
-+    if (empty) {
-+      left = l, top = t, right = r, bottom = b, empty = false;
-+      return;
-+    }
-+    left = l < left ? l : left;
-+    top = t < top ? t : top;
-+    right = r > right ? r : right;
-+    bottom = b > bottom ? b : bottom;
-+  }
-+  bool overlaps(float l, float t, float r, float b) const noexcept {
-+    return !empty && l < right && r > left && t < bottom && b > top;
-+  }
-+};
-+
- struct GXState {
-   struct CopyTextureKey {
-     const void* dest = nullptr;
-@@ -406,6 +429,25 @@ struct GXState {
+@@ -406,6 +406,19 @@ struct GXState {
  
    // View state
    AuroraViewportPolicy viewportPolicy = AURORA_VIEWPORT_FIT;
@@ -447,25 +336,19 @@ index 02be26a..5046a66 100644
 +  float wideGameAspect = 0.f;
 +  // Whether the orthographic draw being submitted covers the whole width of the frame.
 +  bool orthoDrawFillsWidth = false;
-+  // Whether the orthographic draw being submitted lies clear of every place the frame before
-+  // copied a part of the frame from (see wide_picture_factor).
-+  bool orthoDrawClearOfCopies = false;
-+  // EFB copies into textures of a part of the frame (narrower than the frame) since the last copy to
-+  // the display, and how many the frame before had. A game draws what it reads back from a part of
-+  // the frame (the shadow under a character) before its last such copy of the frame, and the
-+  // picture shown on screen - its text, its clock - after. A copy of the whole frame does not count:
-+  // the game can make one only now and then (this one does every other frame), and it reads back
-+  // the picture as shown anyway.
++  // EFB copies into textures since the last copy to the display, and how many to expect: the fewer
++  // of the two frames before. A game draws what it reads back as a texture (a shadow, a blurred copy
++  // of the scene) before its last texture copy of the frame, and the picture shown on screen - its
++  // text, its clock - after. A game can add a copy only every other frame (this one captures the
++  // whole picture then), so a frame with one copy less than the one before still ends with the
++  // picture shown on screen.
 +  u32 texCopiesThisFrame = 0;
 +  u32 texCopiesLastFrame = 0;
-+  // Where those copies read from, in logical EFB pixels: all of them together, this frame and the
-+  // frame before (empty when there were none).
-+  WideCopyArea texCopyAreaThisFrame;
-+  WideCopyArea texCopyAreaLastFrame;
++  u32 texCopiesFrameBefore = 0;
    gfx::Viewport logicalViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
    gfx::Viewport renderViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
    gfx::ClipRect logicalScissor{0, 0, 640, 480};
-@@ -455,6 +497,19 @@ void initialize() noexcept;
+@@ -455,6 +468,13 @@ void initialize() noexcept;
  void shutdown() noexcept;
  void update() noexcept;
  void set_viewport_policy(AuroraViewportPolicy policy) noexcept;
@@ -474,57 +357,36 @@ index 02be26a..5046a66 100644
 +// picture is off, when the frame is not wider, and while the game draws into a small part of the
 +// frame: that is a shadow or a reflection it will read back as a texture, not a part of the picture.
 +float wide_picture_factor() noexcept;
-+// The same, leaving out whether the draw is one the game will read back: how many times wider the
-+// frame is, as long as the viewport spans it.
-+float wide_frame_factor() noexcept;
-+// Whether the frame is still before its last copy of a part of itself (going by the frame before),
-+// when what is drawn may be something the game reads back as a texture.
-+bool wide_copies_pending() noexcept;
 +// The share of the frame's width a viewport, a scissor or a draw must span to count as the whole frame.
 +inline constexpr float WidePictureFullWidth = 0.97f;
  void clear_static_texture_cache() noexcept;
  void clear_copy_texture_cache() noexcept;
  void evict_copy_texture(const void* dest) noexcept;
-@@ -470,6 +525,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept;
- void set_render_viewport(const gfx::Viewport& viewport) noexcept;
- void set_logical_scissor(const gfx::ClipRect& scissor) noexcept;
- void set_render_scissor(const gfx::ClipRect& scissor) noexcept;
-+// With wide picture, places the game's scissor again after wide_picture_factor changed its answer.
-+void refresh_wide_scissor() noexcept;
- void copy_tex(const void* dest, GXBool clear, u32 copyControl) noexcept;
- void copy_disp(GXBool clear, u32 copyControl) noexcept;
- const gfx::TextureBind& get_texture(GXTexMapID id) noexcept;
 diff --git a/lib/gx/regs.cpp b/lib/gx/regs.cpp
-index e709ab6..a3c02e9 100644
+index e709ab6..b1b9414 100644
 --- a/lib/gx/regs.cpp
 +++ b/lib/gx/regs.cpp
-@@ -286,11 +286,29 @@ void bp_clear_depth(u8, u32 value) noexcept { g_gxState.clearDepth = reg_get(val
- // EFB copy trigger (0x52)
- void bp_efb_copy(u8, u32 value) noexcept {
+@@ -3,6 +3,7 @@
+ #include "gx_fmt.hpp"
+ #include "texture.hpp"
+ 
++#include <algorithm>
+ #include <bit>
+ #include <cmath>
+ 
+@@ -288,9 +289,15 @@ void bp_efb_copy(u8, u32 value) noexcept {
    const bool clear = reg_get(value, 1, 11) != 0;
-+  // Wide picture: a copy is placed by the frame's own state, not by the flat draw before it.
-+  g_gxState.orthoDrawClearOfCopies = false;
    if (reg_get(value, 1, 14) != 0) {
      copy_disp(clear, value);
-+    g_gxState.texCopiesLastFrame = g_gxState.texCopiesThisFrame;
++    g_gxState.texCopiesLastFrame = std::min(g_gxState.texCopiesThisFrame, g_gxState.texCopiesFrameBefore);
++    g_gxState.texCopiesFrameBefore = g_gxState.texCopiesThisFrame;
 +    g_gxState.texCopiesThisFrame = 0;
-+    g_gxState.texCopyAreaLastFrame = g_gxState.texCopyAreaThisFrame;
-+    g_gxState.texCopyAreaThisFrame = {};
    } else {
      copy_tex(g_gxState.texCopyDest, clear, value);
-+    // Only a copy of a part of the frame tells where the picture shown on screen begins (see
-+    // GXState::texCopiesThisFrame).
-+    const auto& src = g_gxState.texCopySrc;
-+    if (static_cast<float>(src.width) < static_cast<float>(logical_fb_size().x) * WidePictureFullWidth) {
-+      ++g_gxState.texCopiesThisFrame;
-+      g_gxState.texCopyAreaThisFrame.add(static_cast<float>(src.x), static_cast<float>(src.y),
-+                                         static_cast<float>(src.x + src.width), static_cast<float>(src.y + src.height));
-+    }
++    ++g_gxState.texCopiesThisFrame;
    }
-+  // Wide picture treats a flat draw differently once the frame's texture copies are done, and a
-+  // scissor the game set before then moves to the middle with it.
++  // Wide picture treats a flat draw differently once the frame's texture copies are done.
 +  g_gxState.dirty |= DirtyUniform;
-+  refresh_wide_scissor();
  }
  
  // TLUT load trigger (0x65)
