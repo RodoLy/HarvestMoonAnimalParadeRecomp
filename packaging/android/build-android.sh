@@ -15,7 +15,9 @@
 # Hace falta el paquete de Linux, ya usado una vez para preparar el juego, y el complemento de
 # Android descomprimido en la misma carpeta. Mismos pasos que build-android.ps1 en Windows.
 #
-# Usage / Uso: ./build-android.sh [--rebuild] [--no-install]
+# Usage / Uso: ./build-android.sh [--rebuild] [--no-install] [--disc FOLDER]
+#   --disc   a disc folder already unpacked (with sys/main.dol and files/), instead of the one the
+#            computer version was prepared from / una carpeta del disco ya desempacada
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -29,10 +31,12 @@ apk=$root/AnimalParade.apk
 
 rebuild=0
 install=1
+disc_folder=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --rebuild) rebuild=1; shift ;;
         --no-install) install=0; shift ;;
+        --disc) disc_folder=${2:?--disc needs a folder}; shift 2 ;;
         -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "build-android.sh: unknown option / opción desconocida: $1" >&2; exit 2 ;;
     esac
@@ -60,7 +64,9 @@ find_disc_root() {
     return 1
 }
 disc_root=""
-if [[ -f "$user_data/disc.txt" ]]; then
+if [[ -n "$disc_folder" ]]; then
+    disc_root=$(find_disc_root "$disc_folder") || fail "No unpacked disc in $disc_folder (it needs sys/main.dol and files/). / No hay un disco desempacado ahí."
+elif [[ -f "$user_data/disc.txt" ]]; then
     disc=$(head -n 1 "$user_data/disc.txt" | tr -d '\r')
     if [[ -f "$disc" ]]; then disc_root=$(find_disc_root "$root/Disc/DATA") || disc_root=""
     elif [[ -d "$disc" ]]; then disc_root=$(find_disc_root "$disc") || disc_root=""; fi

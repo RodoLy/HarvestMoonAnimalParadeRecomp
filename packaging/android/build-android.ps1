@@ -27,6 +27,11 @@ depuración USB activada, instala la app y le copia los archivos de tu disco.
 Translate and compile again even if nothing changed.
 Traducir y compilar otra vez aunque nada haya cambiado.
 
+.PARAMETER Disc
+A disc folder already unpacked (the one with sys\main.dol and files\, or its parent), to use
+instead of the one the computer version was prepared from.
+Una carpeta del disco ya desempacada, en lugar de la que usó la versión de computadora.
+
 .PARAMETER NoInstall
 Only make AnimalParade.apk; do not install it on a connected device.
 Solo hacer AnimalParade.apk; no instalarlo en un dispositivo conectado.
@@ -34,6 +39,7 @@ Solo hacer AnimalParade.apk; no instalarlo en un dispositivo conectado.
 [CmdletBinding()]
 param(
     [switch]$Rebuild,
+    [string]$Disc,
     [switch]$NoInstall
 )
 
@@ -84,8 +90,12 @@ if ((Test-Path -LiteralPath $addonVersion) -and (Test-Path -LiteralPath $package
 
 # The disc the computer version was prepared from (play.ps1 remembers it in UserData\disc.txt).
 $discRoot = $null
+if ($Disc) {
+    $discRoot = Find-DiscRoot $Disc
+    if (-not $discRoot) { throw "No unpacked disc in $Disc (it needs sys\main.dol and files\). / No hay un disco desempacado en $Disc." }
+}
 $remembered = Join-Path $userData 'disc.txt'
-if (Test-Path -LiteralPath $remembered -PathType Leaf) {
+if (-not $discRoot -and (Test-Path -LiteralPath $remembered -PathType Leaf)) {
     $disc = (Get-Content -LiteralPath $remembered -Raw).Trim()
     if (Test-Path -LiteralPath $disc -PathType Leaf) {
         $discRoot = Find-DiscRoot (Join-Path $root 'Disc\DATA')
