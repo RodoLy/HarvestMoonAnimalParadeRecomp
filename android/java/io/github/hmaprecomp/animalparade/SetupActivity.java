@@ -74,7 +74,12 @@ public class SetupActivity extends Activity {
         mRetry = new Button(this);
         mRetry.setText(say("Try again", "Reintentar"));
         mRetry.setVisibility(Button.GONE);
-        mRetry.setOnClickListener(view -> prepare());
+        mRetry.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View view) {
+                prepare();
+            }
+        });
         layout.addView(mText);
         layout.addView(mRetry);
         ScrollView scroll = new ScrollView(this);
@@ -87,32 +92,39 @@ public class SetupActivity extends Activity {
         mRetry.setVisibility(Button.GONE);
         mText.setGravity(Gravity.CENTER);
         mText.setText(say("Getting the game ready…", "Preparando el juego…"));
-        new Thread(() -> {
-            final File root = dataRoot(this);
-            String problem = null;
-            if (root == null) {
-                problem = say("The shared storage is not available right now.",
-                              "El almacenamiento compartido no está disponible ahora.");
-            } else {
-                try {
-                    unpackGameFiles(root);
-                    writeFirstSettings(root);
-                } catch (IOException e) {
-                    problem = say("The game's files could not be unpacked: ", "No se pudieron desempacar los archivos del juego: ")
-                            + e.getMessage();
-                }
-            }
-            final String error = problem;
-            runOnUiThread(() -> {
-                if (error != null) {
-                    showProblem(error);
-                } else if (!discFile(root).isFile()) {
-                    showDiscHelp(root);
+        final SetupActivity activity = this;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final File root = dataRoot(activity);
+                String problem = null;
+                if (root == null) {
+                    problem = say("The shared storage is not available right now.",
+                                  "El almacenamiento compartido no está disponible ahora.");
                 } else {
-                    startActivity(new Intent(this, GameActivity.class));
-                    finish();
+                    try {
+                        unpackGameFiles(root);
+                        writeFirstSettings(root);
+                    } catch (IOException e) {
+                        problem = say("The game's files could not be unpacked: ", "No se pudieron desempacar los archivos del juego: ")
+                                + e.getMessage();
+                    }
                 }
-            });
+                final String error = problem;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (error != null) {
+                            showProblem(error);
+                        } else if (!discFile(root).isFile()) {
+                            showDiscHelp(root);
+                        } else {
+                            startActivity(new Intent(activity, GameActivity.class));
+                            finish();
+                        }
+                    }
+                });
+            }
         }).start();
     }
 
