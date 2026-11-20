@@ -1,10 +1,10 @@
 name: Release
 
-# Makes a release (as a draft, to look over before publishing) from the packages that "Windows ...
-# package" runs kept as artifacts. Its notes are docs/releases/<tag>.md.
+# Makes a release (as a draft, to look over before publishing) from the packages that the
+# package runs (Windows, Linux, macOS, Android add-on) kept as artifacts. Its notes are docs/releases/<tag>.md.
 #
 # Crea un release (como borrador, para revisarlo antes de publicarlo) con los paquetes que las
-# corridas de "Windows ... package" guardaron como artefactos. Sus notas son docs/releases/<tag>.md.
+# corridas de los paquetes (Windows, Linux, macOS, complemento de Android) guardaron como artefactos. Sus notas son docs/releases/<tag>.md.
 #
 # Actions tab > Release > Run workflow, with the tag (e.g. v0.1.0) and the numbers of the package
 # runs separated by spaces.
@@ -36,12 +36,14 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Download the packages of those runs
-        # Each artifact's download is the package zip itself (it is uploaded unzipped).
+        # Each artifact's download is the package itself, .zip or .tar.gz (it is uploaded unzipped).
+        # android-common is only the hand-over between the Android jobs, so it is left out.
         run: |
           mkdir -p package
           for run in $RUN_IDS; do
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" \
-              --jq '.artifacts[] | "\(.id) \(.name)"' | while read -r id name; do
+              --jq '.artifacts[] | select(.name != "android-common") | "\(.id) \(.name)"' |
+              while read -r id name; do
               gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "package/$name"
             done
           done
@@ -51,5 +53,6 @@ jobs:
         run: |
           notes="docs/releases/$TAG.md"
           test -f "$notes" || { echo "No notes at $notes"; exit 1; }
-          gh release create "$TAG" package/*.zip --repo "$GITHUB_REPOSITORY" --draft \
+          shopt -s nullglob
+          gh release create "$TAG" package/*.zip package/*.tar.gz --repo "$GITHUB_REPOSITORY" --draft \
             --target "$GITHUB_SHA" --title "Harvest Moon: Animal Parade $TAG" --notes-file "$notes"
