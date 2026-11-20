@@ -1,5 +1,5 @@
 diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
-index f0d4fd4..5638862 100644
+index f0d4fd4..091fda9 100644
 --- a/runtime/CMakeLists.txt
 +++ b/runtime/CMakeLists.txt
 @@ -26,7 +26,7 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
@@ -11,7 +11,7 @@ index f0d4fd4..5638862 100644
      set(MKW_PLATFORM_WINDOWS TRUE)
  elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm64|ARM64)$")
      set(MKW_PLATFORM_MACOS TRUE)
-@@ -35,11 +35,16 @@ elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm
+@@ -35,11 +35,23 @@ elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm
      else()
          set(MKW_PLATFORM_MACOS_ARM64 TRUE)
      endif()
@@ -20,6 +20,13 @@ index f0d4fd4..5638862 100644
 +    # game is a shared library (libmain.so) that SDL's Java activity loads.
 +    set(MKW_PLATFORM_LINUX TRUE)
 +    set(MKW_PLATFORM_ANDROID TRUE)
++    # nod, built for Android (the add-on's Android/nod), lets the app unpack the player's disc
++    # image itself (src/platform/android_disc.cpp).
++    set(MKW_ANDROID_NOD_DIR "" CACHE PATH "nod built for Android: include/nod.h and lib/libnod.a")
++    if(MKW_ANDROID_NOD_DIR)
++        add_compile_definitions(MKW_HAVE_NOD)
++        include_directories("${MKW_ANDROID_NOD_DIR}/include")
++    endif()
  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|aarch64|arm64|ARM64)$")
      set(MKW_PLATFORM_LINUX TRUE)
  else()
@@ -29,7 +36,7 @@ index f0d4fd4..5638862 100644
  endif()
  
  if(MKW_PLATFORM_WINDOWS)
-@@ -145,6 +150,12 @@ if(NOT MKW_NATIVE_PREBUILT_DIR)
+@@ -145,6 +157,12 @@ if(NOT MKW_NATIVE_PREBUILT_DIR)
      target_compile_definitions(mkw_cryptopp PUBLIC ${MKW_CRYPTOPP_INTERFACE_DEFINITIONS})
      target_compile_options(mkw_cryptopp PRIVATE -w)
      set_target_properties(mkw_cryptopp PROPERTIES UNITY_BUILD OFF)
@@ -42,7 +49,7 @@ index f0d4fd4..5638862 100644
  endif()
  
  # TLS for non-Windows guest network HLE (runtime/src/hle/net/network_ssl.cpp) - the Windows path
-@@ -433,6 +444,19 @@ else()
+@@ -433,6 +451,19 @@ else()
          endif()
          set_target_properties(mkw_macos_native_compile PROPERTIES UNITY_BUILD OFF)
      endif()
@@ -83,10 +90,10 @@ index 1a31b82..98b6d72 100644
  # of fiber_manager.cpp. Exercise the Linux libco handoff directly so future
  # refactors cannot silently remove its headers, implementation, or link edge.
 diff --git a/runtime/cmake/PublicProducts.cmake b/runtime/cmake/PublicProducts.cmake
-index 809f22e..e4ed375 100644
+index 809f22e..d4bc8ae 100644
 --- a/runtime/cmake/PublicProducts.cmake
 +++ b/runtime/cmake/PublicProducts.cmake
-@@ -305,7 +305,17 @@ function(mkw_add_product_icon target)
+@@ -305,7 +305,20 @@ function(mkw_add_product_icon target)
      endif()
  endfunction()
  
@@ -99,6 +106,9 @@ index 809f22e..e4ed375 100644
 +    target_link_libraries(WiiCompiled PRIVATE android log)
 +    # 16 KB pages, which newer Android devices use; the library loads on 4 KB ones too.
 +    target_link_options(WiiCompiled PRIVATE "LINKER:-z,max-page-size=16384")
++    if(MKW_ANDROID_NOD_DIR)
++        target_link_libraries(WiiCompiled PRIVATE "${MKW_ANDROID_NOD_DIR}/lib/libnod.a" z)
++    endif()
 +else()
 +    add_executable(WiiCompiled "${MKW_BASE_PRODUCT_SOURCE}")
 +endif()
@@ -8300,6 +8310,257 @@ index ad031c1..18bf15f 100644
      uint32_t soundManager = 0;
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
+diff --git a/runtime/src/platform/android_disc.cpp b/runtime/src/platform/android_disc.cpp
+new file mode 100644
+index 0000000..478973a
+--- /dev/null
++++ b/runtime/src/platform/android_disc.cpp
+@@ -0,0 +1,245 @@
++// Android: unpacks the player's disc image inside the app, so the app needs nothing from a
++// computer. The setup screen (android/java/.../SetupActivity.java) lets the player choose the
++// image with Android's file picker, opens it, and hands the open file to nativeExtractDisc on a
++// thread of its own while it shows nativeExtractProgress.
++//
++// The image is read with nod (the same library aurora and nodtool use; .iso, .rvz, .wbfs, .wia,
++// .ciso), and the game's partition is written out the way nodtool does it on a computer:
++//
++//   Disc/DATA/sys/   boot.bin, bi2.bin, apploader.img, fst.bin, main.dol
++//   Disc/DATA/files/ every file of the disc
++//
++// It is written to Disc/DATA.part first and renamed when complete, so a stopped unpacking is
++// never taken for a disc.
++//
++// Android: desempaca la imagen del disco dentro de la app, con nod, como lo hace nodtool en la
++// computadora. Se escribe en Disc/DATA.part y se renombra al terminar.
++
++#if defined(__ANDROID__) && defined(MKW_HAVE_NOD)
++
++#include <jni.h>
++#include <nod.h>
++#include <unistd.h>
++
++#include <algorithm>
++#include <atomic>
++#include <cerrno>
++#include <cstdio>
++#include <cstring>
++#include <filesystem>
++#include <string>
++#include <system_error>
++#include <vector>
++
++namespace {
++
++namespace fs = std::filesystem;
++
++// The disc this game is: Harvest Moon: Animal Parade, USA.
++constexpr char kGameId[] = "RBIEE9";
++
++// Progress for the setup screen, in bytes of the game's files.
++std::atomic<uint64_t> g_done{0};
++std::atomic<uint64_t> g_total{0};
++
++// nod reads the image through the file descriptor the app opened.
++int64_t ReadAt(void* user, uint64_t offset, void* out, size_t length) {
++    const int fd = static_cast<int>(reinterpret_cast<intptr_t>(user));
++    size_t done = 0;
++    while (done < length) {
++        const ssize_t read = pread(fd, static_cast<uint8_t*>(out) + done, length - done,
++                                   static_cast<off_t>(offset + done));
++        if (read < 0 && errno == EINTR) {
++            continue;
++        }
++        if (read < 0) {
++            return -1;
++        }
++        if (read == 0) {
++            break;
++        }
++        done += static_cast<size_t>(read);
++    }
++    return static_cast<int64_t>(done);
++}
++
++int64_t StreamLength(void* user) {
++    const int fd = static_cast<int>(reinterpret_cast<intptr_t>(user));
++    const off_t end = lseek(fd, 0, SEEK_END);
++    return end < 0 ? -1 : static_cast<int64_t>(end);
++}
++
++void CloseStream(void* user) {
++    close(static_cast<int>(reinterpret_cast<intptr_t>(user)));
++}
++
++std::string NodError(const char* what) {
++    const char* message = nod_error_message();
++    return std::string(what) + (message ? std::string(": ") + message : std::string());
++}
++
++bool WriteBlob(const NodBlob& blob, const fs::path& path, std::string& error) {
++    if (!blob.data) {
++        return true;
++    }
++    FILE* file = std::fopen(path.c_str(), "wb");
++    bool written = file && std::fwrite(blob.data, 1, blob.size, file) == blob.size;
++    if (file && std::fclose(file) != 0) {
++        written = false;
++    }
++    if (!written) {
++        error = "cannot write " + path.string() + " (is the storage full?)";
++    }
++    return written;
++}
++
++// The walk over the disc's file system table: directories are entered and left by index.
++struct Walk {
++    NodHandle* partition = nullptr;
++    fs::path files;
++    // The directories the walk is in, with the index where each ends.
++    std::vector<std::pair<fs::path, uint32_t>> directories;
++    std::vector<uint8_t> buffer = std::vector<uint8_t>(1 << 20);
++    std::string error;
++    bool counting = true;   // the first walk only adds up the sizes
++};
++
++uint32_t VisitNode(uint32_t index, NodNodeKind kind, const char* name, uint32_t size, void* user) {
++    Walk& walk = *static_cast<Walk*>(user);
++    while (!walk.directories.empty() && index >= walk.directories.back().second) {
++        walk.directories.pop_back();
++    }
++    if (index == 0) {
++        // The root: its size is the number of nodes.
++        walk.directories.emplace_back(walk.files, size);
++        return 1;
++    }
++    const fs::path parent = walk.directories.empty() ? walk.files : walk.directories.back().first;
++    const fs::path path = parent / name;
++    if (kind == NOD_NODE_KIND_DIRECTORY) {
++        if (!walk.counting) {
++            std::error_code ignored;
++            fs::create_directories(path, ignored);
++        }
++        walk.directories.emplace_back(path, size);
++        return index + 1;
++    }
++    if (walk.counting) {
++        g_total += size;
++        return index + 1;
++    }
++    NodHandle* file = nullptr;
++    if (nod_partition_open_file(walk.partition, index, &file) != NOD_RESULT_OK) {
++        walk.error = NodError(("cannot open " + path.string() + " on the disc").c_str());
++        return NOD_FST_STOP;
++    }
++    FILE* out = std::fopen(path.c_str(), "wb");
++    if (!out) {
++        nod_free(file);
++        walk.error = "cannot write " + path.string() + ": " + std::strerror(errno);
++        return NOD_FST_STOP;
++    }
++    uint64_t left = size;
++    while (left > 0) {
++        const int64_t read = nod_read(file, walk.buffer.data(), walk.buffer.size());
++        if (read <= 0 || std::fwrite(walk.buffer.data(), 1, static_cast<size_t>(read), out) != static_cast<size_t>(read)) {
++            walk.error = read < 0 ? NodError(("cannot read " + path.string()).c_str())
++                                  : "cannot write " + path.string() + " (is the storage full?)";
++            break;
++        }
++        left -= std::min<uint64_t>(left, static_cast<uint64_t>(read));
++        g_done += static_cast<uint64_t>(read);
++    }
++    nod_free(file);
++    if (std::fclose(out) != 0 && walk.error.empty()) {
++        walk.error = "cannot write " + path.string() + " (is the storage full?)";
++    }
++    return walk.error.empty() ? index + 1 : NOD_FST_STOP;
++}
++
++// Returns an empty string when the disc is unpacked, otherwise what went wrong.
++std::string ExtractDisc(int fd, const fs::path& discFolder) {
++    g_done = 0;
++    g_total = 0;
++    NodDiscStream stream{reinterpret_cast<void*>(static_cast<intptr_t>(fd)), ReadAt, StreamLength, CloseStream};
++    NodDiscOptions options{};
++    options.preloader_threads = 2;
++    NodHandle* disc = nullptr;
++    if (nod_disc_open_stream(&stream, &options, &disc) != NOD_RESULT_OK) {
++        return NodError("This file is not a disc image nod can read");
++    }
++    NodDiscHeader header{};
++    std::string error;
++    NodHandle* partition = nullptr;
++    if (nod_disc_header(disc, &header) != NOD_RESULT_OK) {
++        error = NodError("cannot read the disc header");
++    } else if (std::memcmp(header.game_id, kGameId, 6) != 0) {
++        error = "This disc is " + std::string(header.game_id, 6) +
++                "; the game needs RBIEE9 (Harvest Moon: Animal Parade, USA).";
++    } else if (nod_disc_open_partition_kind(disc, 0, nullptr, &partition) != NOD_RESULT_OK) {
++        error = NodError("cannot open the game's partition");
++    }
++    if (!error.empty()) {
++        nod_free(disc);
++        return error;
++    }
++
++    const fs::path part = discFolder / "DATA.part";
++    const fs::path done = discFolder / "DATA";
++    std::error_code ec;
++    fs::remove_all(part, ec);
++    fs::create_directories(part / "sys", ec);
++    fs::create_directories(part / "files", ec);
++
++    NodPartitionMeta meta{};
++    if (nod_partition_meta(partition, &meta) != NOD_RESULT_OK) {
++        error = NodError("cannot read the game's partition");
++    } else if (!WriteBlob(meta.raw_boot, part / "sys/boot.bin", error) ||
++               !WriteBlob(meta.raw_bi2, part / "sys/bi2.bin", error) ||
++               !WriteBlob(meta.raw_apploader, part / "sys/apploader.img", error) ||
++               !WriteBlob(meta.raw_fst, part / "sys/fst.bin", error) ||
++               !WriteBlob(meta.raw_dol, part / "sys/main.dol", error)) {
++        // error is set
++    } else {
++        Walk walk;
++        walk.partition = partition;
++        walk.files = part / "files";
++        nod_partition_iterate_fst(partition, VisitNode, &walk);
++        walk.counting = false;
++        walk.directories.clear();
++        nod_partition_iterate_fst(partition, VisitNode, &walk);
++        error = walk.error;
++    }
++    nod_free(partition);
++    nod_free(disc);
++    if (error.empty()) {
++        fs::remove_all(done, ec);
++        fs::rename(part, done, ec);
++        if (ec) {
++            error = "cannot rename " + part.string() + ": " + ec.message();
++        }
++    }
++    return error;
++}
++
++} // namespace
++
++extern "C" {
++
++JNIEXPORT jstring JNICALL Java_io_github_hmaprecomp_animalparade_SetupActivity_nativeExtractDisc(
++    JNIEnv* env, jclass, jint fd, jstring discFolder) {
++    const char* folder = env->GetStringUTFChars(discFolder, nullptr);
++    const std::string error = ExtractDisc(fd, fs::path(folder));
++    env->ReleaseStringUTFChars(discFolder, folder);
++    return error.empty() ? nullptr : env->NewStringUTF(error.c_str());
++}
++
++// Per thousand of the game's files written so far.
++JNIEXPORT jint JNICALL Java_io_github_hmaprecomp_animalparade_SetupActivity_nativeExtractProgress(JNIEnv*, jclass) {
++    const uint64_t total = g_total.load();
++    return total == 0 ? 0 : static_cast<jint>(g_done.load() * 1000 / total);
++}
++
++} // extern "C"
++
++#endif // __ANDROID__ && MKW_HAVE_NOD
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
 index 6c2083a..26f91c9 100644
 --- a/runtime/src/settings_overlay.cpp
