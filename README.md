@@ -36,7 +36,7 @@ second, English. Everything below except fast loading is a choice in the launche
 | **Fast loading** | Always on: the change of area (the fade to black, the loading and the place sign) runs up to eight times faster, as fast as the PC allows, and so do the other black screens. While the screen is black the 3D world behind it is not drawn, so even a slow PC gets through it quickly. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
 | **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera all the way around the player and tilts it, R3 puts it back. [See below](#free-camera). |
 | **Romance for everyone** | A mod: any of the twenty marriage candidates, the Harvest Goddess and the Harvest King included, can be courted and married whatever the player's sex. [See below](#romance-for-everyone). |
-| **Quality of life** | Mods for faster walking and faster actions (×1.25 to ×3) and for no area sign when loading. See [docs/MODS.md](docs/MODS.md). |
+| **Quality of life** | Mods for no area sign when loading ([see below](#shorter-loading-screens)) and for faster walking and faster actions (×1.25 to ×3). See [docs/MODS.md](docs/MODS.md). |
 | **Cheats** | Infinite stamina, money, lumber, stone and feed, and stop time, in the launcher and in F10 (see the questions below). |
 | **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
 | **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
@@ -47,6 +47,18 @@ second, English. Everything below except fast loading is a choice in the launche
 | ![Original picture](docs/images/original-picture.jpg) | ![Wide picture](docs/images/wide-picture.jpg) |
 
 ![Town Hall](docs/images/town.jpg)
+
+## Shorter loading screens
+
+On the Wii every change of area takes a while: the screen fades to black, the next area loads,
+and then a sign with a picture of the place and its name fades in, stays and fades out before you
+can move again. In this port the fade and the loading run up to eight times faster, always. And
+the **No area sign when loading** mod (launcher > Mods, off by default) takes the sign away: the
+new area appears as soon as it has loaded.
+
+| The sign the mod takes away |
+|---|
+| ![The area sign: a picture of Memoria Farm and its name](docs/images/area-sign.jpg) |
 
 ## Free camera
 

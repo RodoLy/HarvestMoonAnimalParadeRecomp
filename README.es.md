@@ -36,7 +36,7 @@ menú **F10** dentro del juego.
 | **Carga rápida** | Siempre activa: el cambio de zona (el fundido a negro, la carga y el letrero del lugar) va hasta ocho veces más rápido, lo que permita la PC, igual que las demás pantallas negras. Mientras la pantalla está en negro no se dibuja el mundo 3D de detrás, así que hasta una PC lenta pasa rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
 | **Cámara libre** | Un mod, apagado de inicio (launcher > Mods): al aire libre el stick derecho gira la cámara alrededor del personaje por completo y la inclina, R3 la regresa. [Ver abajo](#cámara-libre). |
 | **Amor para todos** | Un mod: cualquiera de los veinte candidatos, con la Diosa y el Rey de la Cosecha, se puede enamorar y casar sin importar el sexo del jugador. [Ver abajo](#amor-para-todos). |
-| **Calidad de vida** | Mods para caminar más rápido y actuar más rápido (×1.25 a ×3) y para quitar el letrero de la zona al cargar. Ver [docs/MODS.md](docs/MODS.md). |
+| **Calidad de vida** | Mods para quitar el letrero de la zona al cargar ([ver abajo](#pantallas-de-carga-más-cortas)) y para caminar y actuar más rápido (×1.25 a ×3). Ver [docs/MODS.md](docs/MODS.md). |
 | **Trucos** | Estamina, dinero, madera, piedra y alimento infinitos, y detener el tiempo, en el launcher y en F10 (ver las preguntas abajo). |
 | **Cinco idiomas** | Inglés, español, francés, alemán e italiano desde el mismo disco de EE. UU. (ver abajo). |
 | **Direct3D 12 o Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* elige Direct3D 12. |
@@ -47,6 +47,18 @@ menú **F10** dentro del juego.
 | ![Imagen original](docs/images/original-picture.jpg) | ![Imagen ancha](docs/images/wide-picture.jpg) |
 
 ![El ayuntamiento](docs/images/town.jpg)
+
+## Pantallas de carga más cortas
+
+En la Wii cada cambio de zona tarda: la pantalla se va a negro, carga la zona siguiente, y luego
+aparece un letrero con un dibujo del lugar y su nombre, que se queda un rato y se desvanece antes
+de que puedas moverte. En este port el fundido y la carga van hasta ocho veces más rápido, siempre.
+Y el mod **Sin letrero de las zonas al cargar** (launcher > Mods, apagado de inicio) quita el
+letrero: la zona nueva aparece en cuanto termina de cargar.
+
+| El letrero que quita el mod |
+|---|
+| ![El letrero de la zona: un dibujo de Memoria Farm y su nombre](docs/images/area-sign.jpg) |
 
 ## Cámara libre
 
