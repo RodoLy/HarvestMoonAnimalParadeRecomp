@@ -53,10 +53,11 @@ const T = {
     reserved: 'F10 abre el menú del juego; elige otra tecla.',
     // The Controls tab's parts.
     colGame: 'Botón del Wii', colKeys: 'Teclado', colPad: 'Control',
-    sections: { general: 'General', remote: 'Wii Remote', nunchuk: 'Nunchuk', dpad: 'Cruceta del Wii Remote', extras: 'Extras', camera: 'Cámara libre (mod)', real: 'Wii Remote real (Bluetooth)' },
+    sections: { general: 'General', remote: 'Wii Remote', nunchuk: 'Nunchuk', dpad: 'Cruceta del Wii Remote', extras: 'Extras', camera: 'Cámara libre (mod)', real: 'Wii Remote de Nintendo (Bluetooth)' },
+    realNote: 'Los controles de Xbox, PlayStation, Switch y otros, también los inalámbricos, no necesitan esto',
     padNone: 'Ninguno conectado', padSeen: 'Conectado',
     keyboardOn: 'Activado', keyboardOff: 'Desactivado', mouseValue: 'Puntero', realOn: 'Activado', realOff: 'Desactivado',
-    useKeyboard: 'Jugar con el teclado', realRemote: 'Wii Remote real', leftStick: 'Stick izquierdo',
+    useKeyboard: 'Jugar con el teclado', realRemote: 'Wii Remote de Nintendo', leftStick: 'Stick izquierdo',
     controllerNow: (name) => 'Control conectado: ' + name + '. El juego lo usa como Wii Remote y Nunchuk.',
     hintOk: 'OK', hintBack: 'Atrás', hintTabs: 'Pestañas',
   },
@@ -97,10 +98,11 @@ const T = {
     reserved: 'F10 opens the game\'s menu; choose another key.',
     // The Controls tab's parts.
     colGame: 'Wii button', colKeys: 'Keyboard', colPad: 'Controller',
-    sections: { general: 'General', remote: 'Wii Remote', nunchuk: 'Nunchuk', dpad: 'Wii Remote D-pad', extras: 'Extras', camera: 'Free camera (mod)', real: 'Real Wii Remote (Bluetooth)' },
+    sections: { general: 'General', remote: 'Wii Remote', nunchuk: 'Nunchuk', dpad: 'Wii Remote D-pad', extras: 'Extras', camera: 'Free camera (mod)', real: 'Nintendo Wii Remote (Bluetooth)' },
+    realNote: 'Xbox, PlayStation, Switch and other controllers, wireless ones too, do not need this',
     padNone: 'None connected', padSeen: 'Connected',
     keyboardOn: 'On', keyboardOff: 'Off', mouseValue: 'Pointer', realOn: 'On', realOff: 'Off',
-    useKeyboard: 'Play with the keyboard', realRemote: 'Real Wii Remote', leftStick: 'Left stick',
+    useKeyboard: 'Play with the keyboard', realRemote: 'Nintendo Wii Remote', leftStick: 'Left stick',
     controllerNow: (name) => 'Controller connected: ' + name + '. The game uses it as the Wii Remote and Nunchuk.',
     hintOk: 'OK', hintBack: 'Back', hintTabs: 'Tabs',
   },
@@ -134,9 +136,9 @@ const OPTS = [
     hint: { es: 'Muestra los cuadros por segundo en una esquina.', en: 'Shows the frames per second in a corner.' } },
   // Real Wii Remotes ([controller] in Config.toml, as F10 > Controllers keeps them). They show in the
   // Controls tab, under "Real Wii Remote", not in Options.
-  { key: 'wiiRemotes', controls: true, es: 'Usar Wii Remotes reales', en: 'Use real Wii Remotes', flag: true, yesNo: true, settings: [false, true],
-    hint: { es: 'Juega con Wii Remotes de verdad por Bluetooth en lugar del Wii Remote del teclado o del control. Para emparejar uno, con el juego abierto presiona el botón rojo SYNC (o 1 y 2 a la vez) del Wii Remote. Se aplica la próxima vez que abras el juego.',
-      en: 'Play with real Wii Remotes over Bluetooth instead of the keyboard\'s or the controller\'s Wii Remote. To pair one, with the game open press the red SYNC button (or 1 and 2 together) on the Wii Remote. It applies the next time the game starts.' } },
+  { key: 'wiiRemotes', controls: true, es: 'Usar Wii Remotes de Nintendo', en: 'Use Nintendo Wii Remotes', flag: true, yesNo: true, settings: [false, true],
+    hint: { es: 'Juega con Wii Remotes de Nintendo de verdad, por Bluetooth (los controles de Xbox, PlayStation y otros no lo necesitan). Para emparejar uno, con el juego abierto presiona su botón rojo SYNC (o 1 y 2). Se aplica al abrir el juego.',
+      en: 'Play with real Nintendo Wii Remotes over Bluetooth (Xbox, PlayStation and other controllers do not need this). To pair one, with the game open press its red SYNC button (or 1 and 2). It applies when the game starts.' } },
   { key: 'wiiAutoPair', controls: true, es: 'Buscarlos automáticamente', en: 'Look for them automatically', flag: true, yesNo: true, settings: [false, true],
     hint: { es: 'Mientras no haya un Wii Remote conectado, el juego sigue buscando uno que esté en modo de emparejamiento. Buscar puede cortar un momento el sonido de unos audífonos Bluetooth.',
       en: 'While no Wii Remote is connected, the game keeps looking for one in pairing mode. Looking can briefly cut the sound of Bluetooth headphones.' } },
@@ -425,7 +427,7 @@ function rows() {
         keyText: keyLabel(key), padText: a.keyOnly ? null : pad === 'disabled' || pad == null ? w.none : padLabel(pad),
         activate: () => startCapture(a) });
     }
-    list.push({ section: w.sections.real });
+    list.push({ section: w.sections.real, note: w.realNote });
     for (const o of OPTS.filter((o) => o.controls)) list.push(optionRow(o, ''));
     return list;
   }
@@ -562,7 +564,8 @@ function controlsRow(r, i, chosen) {
   if (r.section) {
     const columns = r.columns ? '<span style="width:' + CELL + 'px;text-align:center">' + w.colKeys + '</span><span style="width:' + CELL + 'px;text-align:center">' + w.colPad + '</span>' : '';
     return '<div style="flex:none;height:30px;margin-top:' + (i ? 8 : 0) + 'px;display:flex;align-items:flex-end;gap:16px;padding:0 20px 3px 14px;border-bottom:3px solid #e2c65a;font-size:19px;letter-spacing:.08em;color:#7a5418">' +
-      '<span style="flex:1">' + esc(r.section) + '</span>' + columns + '</div>';
+      '<span style="flex:1">' + esc(r.section) + '</span>' +
+      (r.note ? '<span style="font:700 15px Dosis,sans-serif;letter-spacing:.02em;color:#a07a3a">' + esc(r.note) + '</span>' : '') + columns + '</div>';
   }
   const label = '<span style="position:relative;flex:1;min-width:0;margin-left:22px;font-size:25px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (chosen ? '#d2401a' : '#4a2c12') + '">' + esc(r.label) + '</span>';
   let right;

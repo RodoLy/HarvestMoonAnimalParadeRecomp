@@ -43,13 +43,14 @@ take effect the next time the game starts.
 **Controls tab.** On top, a bar says what is connected: a controller (its name, once it has been
 touched; the program also counts the ones the system sees and tells the page when that changes),
 the keyboard, the mouse and real Wii Remotes. Below, in sections (General, Wii Remote, Wii Remote
-D-pad, Nunchuk, Extras, Free camera while that mod is on, Real Wii Remote), each button has a key
+D-pad, Nunchuk, Extras, Free camera while that mod is on, Nintendo Wii Remote), each button has a key
 and a controller button in two columns named in the section's heading: choose a row, press Enter
 (or the controller's A), then press the key or the controller button. Keys go to
 `UserData\keyboard_bindings.dat`, the file the game's input library keeps (its layout is described
 in `host/launcher_core.cpp`); controller buttons go to `[controller]` in `Config.toml`, and
 fast-forward's to `[speed]`. The game reads both at start, and F10 > Controls changes the same ones.
-The real Wii Remotes' settings (use them, look for them automatically, where the sensor bar is) are
+The settings for real Nintendo Wii Remotes over Bluetooth (use them, look for them automatically,
+where the sensor bar is; other controllers, wireless ones too, need none of them) are
 `wii_remotes`, `wii_auto_pair` and `wii_sensor_bar` in `[controller]`, the lines the game's F10
 menu writes; pairing itself happens with the game open (the red SYNC button, or 1 and 2).
 
@@ -96,13 +97,14 @@ están activados. Se aplican la próxima vez que se abre el juego.
 **Pestaña Controles.** Arriba, una barra dice qué está conectado: un control (su nombre, en cuanto
 se toca; el programa también cuenta los que ve el sistema y le avisa a la página cuando cambia), el
 teclado, el mouse y los Wii Remotes reales. Abajo, en secciones (General, Wii Remote, Cruceta,
-Nunchuk, Extras, Cámara libre mientras ese mod está activado, Wii Remote real), cada botón tiene
+Nunchuk, Extras, Cámara libre mientras ese mod está activado, Wii Remote de Nintendo), cada botón tiene
 una tecla y un botón del control en dos columnas con su nombre en el encabezado de la sección:
 eliges una fila, Enter (o la A del control), y presionas la tecla o el botón del control. Las
 teclas van a `UserData\keyboard_bindings.dat`, el archivo que guarda la biblioteca de entrada del
 juego (su formato está descrito en `host/launcher_core.cpp`); los botones del control van a
 `[controller]` en `Config.toml`, y los del avance rápido a `[speed]`. El juego los lee al iniciar, y
-F10 > Controles cambia los mismos. Los ajustes de los Wii Remotes reales (usarlos, buscarlos solos,
+F10 > Controles cambia los mismos. Los ajustes de los Wii Remotes de Nintendo por Bluetooth (los
+demás controles, también los inalámbricos, no necesitan ninguno; usarlos, buscarlos solos,
 dónde está la barra de sensores) son `wii_remotes`, `wii_auto_pair` y `wii_sensor_bar` en
 `[controller]`, las mismas líneas que escribe el menú F10; emparejar se hace con el juego abierto (el
 botón rojo SYNC, o 1 y 2).
