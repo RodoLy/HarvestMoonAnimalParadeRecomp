@@ -154,10 +154,11 @@ dispositivos.
 ### El launcher
 
 El launcher prepara y abre el juego y tiene sus ajustes principales: el idioma, la imagen, la
-interpolación de cuadros, la resolución, la pantalla completa y la API gráfica. En
-**Controles**, a cada botón del Wii Remote y del Nunchuk, y al avance rápido, se le puede dar
-cualquier tecla o botón del control. Está en inglés o en español, y se usa con el mouse, el
-teclado o las flechas.
+interpolación de cuadros, la resolución, la pantalla completa y la API gráfica. **Controles**
+dice arriba si hay un control conectado (y cuál), y a cada botón del Wii Remote y del Nunchuk, y al
+avance rápido, le da cualquier tecla o botón del control, en dos columnas; ahí mismo se configuran
+los Wii Remotes reales. Está en inglés o en español, y se usa con el mouse, el teclado o un control
+(cruceta, A, B, LB y RB).
 
 | Juego | Opciones | Controles |
 |---|---|---|

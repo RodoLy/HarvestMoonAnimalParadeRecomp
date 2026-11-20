@@ -153,9 +153,11 @@ yet.
 ### The launcher
 
 The launcher prepares and starts the game and holds its main settings: the language, the
-picture, frame interpolation, resolution, fullscreen and the graphics API. In **Controls**
-every Wii Remote and Nunchuk button, and fast-forward, can be given any key or controller
-button. It speaks English or Spanish, and is driven with the mouse, the keyboard or the arrows.
+picture, frame interpolation, resolution, fullscreen and the graphics API. **Controls** shows on
+top whether a controller is connected (and which), and gives every Wii Remote and Nunchuk button,
+and fast-forward, any key or controller button, in two columns; real Wii Remotes are set up there
+too. It speaks English or Spanish, and is driven with the mouse, the keyboard or a controller
+(D-pad, A, B, LB and RB).
 
 | Game | Options | Controls |
 |---|---|---|
