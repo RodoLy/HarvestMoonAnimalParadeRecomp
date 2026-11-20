@@ -16,6 +16,8 @@
 # página de códigos ANSI y rompe su texto en español.
 packaging/windows/*.ps1 text eol=crlf
 packaging/windows/*.cmd text eol=crlf
+packaging/android/*.ps1 text eol=crlf
+packaging/android/*.cmd text eol=crlf
 
 # Game files are never committed (see .gitignore); if one is ever added by
 # mistake, it must not be treated as text.

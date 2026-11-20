@@ -1,0 +1,353 @@
+name: Android add-on
+
+# Builds the Android add-on: what a player unpacks into the Windows (x64) or Linux (x86-64) package
+# to make the Android app of the game on their computer, from their own disc (packaging/android).
+# It brings the Android NDK (only the parts used), WiiCompiled's runtime and aurora with every
+# dependency's source, the app's shell (android/: the Java code, the manifest, the icon) and
+# ApkPack, which puts the compiled game in the shell and signs it. No game data is involved here.
+#
+# Arma el complemento de Android: lo que un jugador descomprime en el paquete de Windows o de Linux
+# para hacer la app de Android del juego en su computadora, desde su propio disco. Aquí no hay datos
+# del juego.
+#
+# The first job compiles the runtime and aurora for Android once (no game: the runtime alone) and
+# makes and checks the app's shell; each add-on job then compiles them again with the add-on's own
+# NDK and dependencies, the way the player's computer will. It only runs when asked for: Actions
+# tab > Android add-on > Run workflow. The runners are free for a public repository.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WIICOMPILED_URL: https://github.com/patchzyy/wiicompiled.git
+  WIICOMPILED_COMMIT: 27ff3b03fd5c88e783a8b6f4d821b38e3b091297
+  # The NDK (r27c), the build tools and the platform the app is made with, as the SDK manager
+  # installs and checks them.
+  NDK_VERSION: 27.2.12479018
+  BUILD_TOOLS_VERSION: 34.0.0
+  ANDROID_PLATFORM: android-34
+
+jobs:
+  common:
+    name: Runtime for Android, and the app's shell
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      WIICOMPILED: ${{ github.workspace }}/../wc
+      LAYER: ${{ github.workspace }}/../layer
+      DEPS: ${{ github.workspace }}/../deps
+      COMMON: ${{ github.workspace }}/../common
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Download WiiCompiled at the commit the project is pinned to
+        run: |
+          git init "$WIICOMPILED"
+          git -C "$WIICOMPILED" remote add origin "$WIICOMPILED_URL"
+          git -C "$WIICOMPILED" fetch --depth 1 origin "$WIICOMPILED_COMMIT"
+          git -C "$WIICOMPILED" checkout --detach FETCH_HEAD
+          git -C "$WIICOMPILED" submodule update --init --recursive
+
+      - name: Apply this project's patches to WiiCompiled
+        run: |
+          for patch in skip-calls-outside-ram foreign-game-addresses foreign-game-translator; do
+            git -C "$WIICOMPILED" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
+          done
+          for patch in aurora-storage-buffer aurora-overrun-layout aurora-interpolation-30fps aurora-wide-picture; do
+            git -C "$WIICOMPILED/aurora-main" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
+          done
+
+      - name: Place WiiCompiled's natives at this game's addresses
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python tools/export_wiicompiled_layer.py --wiicompiled "$WIICOMPILED" --out "$LAYER"
+          project="$WIICOMPILED/projects/animal-parade"
+          mkdir -p "$project/native"
+          cp wiicompiled/RBIEE9.yml "$project/recomp.yml"
+          cp wiicompiled/RBIEE9-MAP.txt "$project/MAP.txt"
+          cp "$LAYER/native/natives.cpp" "$project/native/"
+          cp "$LAYER"/guest_abi/*.inc "$WIICOMPILED/runtime/include/guest_abi/"
+
+      - name: Install the NDK, the build tools and the platform
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;$NDK_VERSION" "build-tools;$BUILD_TOOLS_VERSION" "platforms;$ANDROID_PLATFORM" > /dev/null
+          echo "NDK=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_TOOLS=$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_JAR=$ANDROID_HOME/platforms/$ANDROID_PLATFORM/android.jar" >> "$GITHUB_ENV"
+
+      # Downloads every dependency's source into $DEPS (FETCHCONTENT_BASE_DIR), which the add-on
+      # carries, and checks that the runtime configures for Android.
+      - name: Configure the runtime for Android, without a game
+        run: |
+          mapfile -t extra < <(grep -v '^[[:space:]]*$' packaging/android/configure-flags.txt)
+          cmake -S "$WIICOMPILED/runtime" -B "$RUNNER_TEMP/android-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_BASE_DIR="$DEPS" \
+            -DMKW_BUILD_PRODUCTS=OFF "${extra[@]}"
+          ls "$DEPS"
+
+      - name: Make the app's shell (Java code, manifest, icon)
+        run: |
+          shell="$RUNNER_TEMP/shell"
+          mkdir -p "$shell/classes" "$shell/dex"
+          sdl_java="$DEPS/sdl-src/android-project/app/src/main/java"
+          test -f "$sdl_java/org/libsdl/app/SDLActivity.java"
+          find "$sdl_java" "$WIICOMPILED/aurora-main/platforms/android/java" android/java -name '*.java' > "$shell/sources.txt"
+          javac -source 1.8 -target 1.8 -Xlint:-options -encoding UTF-8 -bootclasspath "$ANDROID_JAR" \
+            -d "$shell/classes" "@$shell/sources.txt"
+          "$BUILD_TOOLS/d8" --release --min-api 30 --lib "$ANDROID_JAR" --output "$shell/dex" \
+            $(find "$shell/classes" -name '*.class')
+          # VERSION 1.2.3 is versionCode 10203.
+          version=$(tr -d '[:space:]' < VERSION)
+          IFS=. read -r major minor patch <<< "$version"
+          code=$(( major * 10000 + minor * 100 + patch ))
+          sed -e "s/@VERSION_CODE@/$code/" -e "s/@VERSION_NAME@/$version/" android/AndroidManifest.xml > "$shell/AndroidManifest.xml"
+          "$BUILD_TOOLS/aapt2" compile --dir android/res -o "$shell/res.zip"
+          "$BUILD_TOOLS/aapt2" link -o "$shell/AnimalParade-shell.apk" -I "$ANDROID_JAR" \
+            --manifest "$shell/AndroidManifest.xml" "$shell/res.zip"
+          (cd "$shell/dex" && zip -q "$shell/AnimalParade-shell.apk" classes.dex)
+          unzip -l "$shell/AnimalParade-shell.apk"
+          echo "SHELL_APK=$shell/AnimalParade-shell.apk" >> "$GITHUB_ENV"
+
+      # The shell with a stand-in game: ApkPack's app must pass Android's own checks.
+      - name: Check ApkPack with Android's tools
+        run: |
+          check="$RUNNER_TEMP/apk-check"
+          mkdir -p "$check/game/wii_bootstrap"
+          printf 'int SDL_main(int argc, char **argv) { return 0; }\n' > "$check/main.c"
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang" -shared -fPIC \
+            -Wl,-z,max-page-size=16384 -o "$check/libmain.so" "$check/main.c"
+          echo test > "$check/game/dsp_coef.bin"
+          echo test > "$check/game/wii_bootstrap/file.txt"
+          dotnet run --project tools/ApkPack -c Release -- --shell "$SHELL_APK" --lib "arm64-v8a=$check/libmain.so" \
+            --assets "$check/game" --key "$check/key.pfx" --out "$check/check.apk"
+          "$BUILD_TOOLS/apksigner" verify --verbose --min-sdk-version 30 "$check/check.apk"
+          "$BUILD_TOOLS/zipalign" -c -v 4 "$check/check.apk" | tail -n 3
+          "$BUILD_TOOLS/aapt2" dump badging "$check/check.apk" | head -n 12
+          # A second build with the same key must sign the same way (so it installs over the first).
+          dotnet run --project tools/ApkPack -c Release -- --shell "$SHELL_APK" --lib "arm64-v8a=$check/libmain.so" \
+            --key "$check/key.pfx" --out "$check/check2.apk"
+          test "$("$BUILD_TOOLS/apksigner" verify --print-certs "$check/check.apk" | grep SHA-256)" = \
+               "$("$BUILD_TOOLS/apksigner" verify --print-certs "$check/check2.apk" | grep SHA-256)"
+
+      - name: Assemble the add-on's common part
+        run: |
+          android="$COMMON/Android"
+          workspace="$android/BuildWorkspace"
+          mkdir -p "$workspace/projects" "$workspace/Dependencies"
+          cp -a "$WIICOMPILED/runtime" "$workspace/runtime"
+          rm -rf "$workspace/runtime/build"
+          cp -a "$WIICOMPILED/aurora-main" "$workspace/aurora-main"
+          rm -rf "$workspace/aurora-main/.git"
+          cp -a "$WIICOMPILED/projects/animal-parade" "$workspace/projects/animal-parade"
+          # Only the downloaded sources (<name>-src), as FetchContent finds them offline.
+          for source in "$DEPS"/*-src; do
+            cp -a "$source" "$workspace/Dependencies/"
+            rm -rf "$workspace/Dependencies/$(basename "$source")/.git"
+          done
+          cp "$SHELL_APK" "$android/"
+          cp packaging/android/configure-flags.txt "$android/"
+          echo "v$(tr -d '[:space:]' < VERSION)" > "$android/version.txt"
+          cp packaging/android/build-android.ps1 packaging/android/build-android.cmd \
+             packaging/android/build-android.sh packaging/android/README-Android.txt "$COMMON/"
+          chmod +x "$COMMON/build-android.sh"
+          mkdir -p "$android/licenses"
+          cp LICENSE "$android/licenses/harvest-moon-animal-parade-recomp.txt"
+          cp "$WIICOMPILED/LICENSE" "$android/licenses/wiicompiled.txt"
+          cp "$WIICOMPILED/THIRD-PARTY-NOTICES.md" "$android/licenses/wiicompiled-third-party.md"
+          cp "$DEPS/sdl-src/LICENSE.txt" "$android/licenses/sdl.txt"
+          du -sh "$COMMON" "$workspace/Dependencies"/*
+          tar -C "$COMMON" -cf "$RUNNER_TEMP/android-common.tar" .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-common
+          path: ${{ runner.temp }}/android-common.tar
+          retention-days: 1
+
+  addon:
+    name: Add-on for ${{ matrix.host }}
+    needs: common
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            host: windows-x64
+            ndk_host: windows-x86_64
+            dotnet_rid: win-x64
+          - runner: ubuntu-24.04
+            host: linux-x86_64
+            ndk_host: linux-x86_64
+            dotnet_rid: linux-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Keep the line endings, and allow long paths
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # CMake is on both runners; Ninja comes from PyPI on both.
+      - name: Install Ninja
+        run: python -m pip install --disable-pip-version-check ninja==1.11.1.4
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: android-common
+          path: ${{ runner.temp }}
+
+      # Where a player would unpack it: a short folder.
+      # Paths in the C:/x form on Windows, which both Git's bash and the native tools read.
+      - name: Unpack the common part
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            addon=C:/HMAP
+            sdk=$(cygpath -m "$ANDROID_HOME")
+            temp=$(cygpath -u "$RUNNER_TEMP")
+          else
+            addon="$HOME/HMAP"
+            sdk=$ANDROID_HOME
+            temp=$RUNNER_TEMP
+          fi
+          mkdir -p "$addon"
+          (cd "$temp" && tar -C "$addon" -xf android-common.tar)
+          echo "ADDON=$addon" >> "$GITHUB_ENV"
+          echo "SDK=$sdk" >> "$GITHUB_ENV"
+          echo "NDK=$sdk/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install the NDK and the platform tools for this computer
+        if: runner.os != 'Windows'
+        run: yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" platform-tools > /dev/null
+
+      - name: Install the NDK and the platform tools for this computer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          'y','y','y','y','y' | & "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" --install "ndk;$env:NDK_VERSION" platform-tools | Out-Null
+          if (-not (Test-Path "$env:ANDROID_HOME\ndk\$env:NDK_VERSION\build\cmake\android.toolchain.cmake")) { throw 'The NDK was not installed.' }
+
+      - name: Keep only the NDK's parts that are used
+        run: bash packaging/android/prune-ndk.sh "$NDK" "$ADDON/Android/ndk" ${{ matrix.ndk_host }}
+
+      - name: Add adb
+        run: |
+          mkdir -p "$ADDON/Android/platform-tools"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            cp "$SDK/platform-tools/"{adb.exe,AdbWinApi.dll,AdbWinUsbApi.dll,NOTICE.txt} "$ADDON/Android/platform-tools/"
+          else
+            cp "$SDK/platform-tools/"{adb,NOTICE.txt} "$ADDON/Android/platform-tools/"
+          fi
+
+      - name: Publish ApkPack as one program
+        run: |
+          dotnet publish tools/ApkPack/ApkPack.csproj -c Release -r ${{ matrix.dotnet_rid }} --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=None -o "$ADDON/Android/ApkPack"
+          ls -la "$ADDON/Android/ApkPack"
+
+      - name: Check build-android.ps1's syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$env:ADDON\build-android.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
+
+      # The add-on's own NDK and dependencies, offline, as on the player's computer: the runtime
+      # and aurora compile for Android. The game itself is the only part left for the player.
+      - name: Compile the runtime and aurora with the add-on, offline
+        run: |
+          workspace="$ADDON/Android/BuildWorkspace"
+          mapfile -t extra < <(grep -v '^[[:space:]]*$' "$ADDON/Android/configure-flags.txt" | tr -d '\r')
+          cmake -S "$workspace/runtime" -B "$workspace/build-check" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ADDON/Android/ndk/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFETCHCONTENT_BASE_DIR="$workspace/Dependencies" -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+            -DMKW_BUILD_PRODUCTS=OFF "${extra[@]}"
+          cmake --build "$workspace/build-check" --parallel --target mkw_android_native_compile \
+            aurora_core aurora_gx aurora_pad aurora_si aurora_vi aurora_mtx \
+            mkw_platform mkw_pugixml mkw_cryptopp mkw_libco mbedtls mbedx509 mbedcrypto
+          echo "CHECK_BUILD=$workspace/build-check" >> "$GITHUB_ENV"
+
+      # Links everything compiled above into one library and lists what is still missing: the
+      # game's own functions are expected (the player's computer translates them); anything from
+      # Android's C library would be a real problem. Informative only.
+      - name: List what the runtime still needs from the game
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        run: |
+          bin="$ADDON/Android/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          mapfile -t objects < <(find "$CHECK_BUILD/CMakeFiles/mkw_android_native_compile.dir" -name '*.o')
+          mapfile -t archives < <(find "$CHECK_BUILD" -name '*.a')
+          "$bin/aarch64-linux-android30-clang++" -shared -o "$RUNNER_TEMP/check.so" -static-libstdc++ \
+            "${objects[@]}" -Wl,--start-group "${archives[@]}" -Wl,--end-group \
+            -landroid -llog -ldl -lm -Wl,--no-undefined -Wl,--error-limit=0 2> "$RUNNER_TEMP/link.txt" || true
+          grep -o "undefined symbol: .*" "$RUNNER_TEMP/link.txt" | sort | uniq -c | sort -rn | head -n 200
+
+      - name: Remove the check build
+        run: rm -rf "$CHECK_BUILD"
+
+      - name: Pack the add-on
+        run: |
+          name=HarvestMoonAnimalParade-android-addon-${{ matrix.host }}
+          cd "$ADDON"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            archive="$RUNNER_TEMP/$name.zip"
+            7z a -tzip -mx=7 "$archive" . > /dev/null
+          else
+            archive="$RUNNER_TEMP/$name.tar.gz"
+            tar -czf "$archive" .
+          fi
+          ls -la "$archive"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.ARCHIVE }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
