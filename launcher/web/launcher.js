@@ -60,6 +60,12 @@ const T = {
     useKeyboard: 'Jugar con el teclado', realRemote: 'Wii Remote de Nintendo', leftStick: 'Stick izquierdo',
     controllerNow: (name) => 'Control conectado: ' + name + '. El juego lo usa como Wii Remote y Nunchuk.',
     hintOk: 'OK', hintBack: 'Atrás', hintTabs: 'Pestañas',
+    setupPad: 'Configurar el control, botón por botón', setupPadStart: 'Empezar',
+    setupPadHint: 'Tu control ya funciona con los botones de abajo. Para cambiarlos, esto te pide uno por uno los botones del Wii Remote y del Nunchuk: presiona en tu control el que quieras para cada uno. Esc termina. También puedes cambiar uno solo: haz clic en su casilla de la columna Control, o elige su fila y presiona Enter (o A).',
+    setupStep: (name, n, total) => 'Presiona en tu control el botón para ' + name + ' (' + n + ' de ' + total + '). Esc termina; si no presionas nada en 10 segundos, pasa al siguiente.',
+    setupDone: 'Listo: el control quedó configurado.',
+    captureKeys: (name) => 'Presiona una tecla para ' + name + '. Supr la deja sin tecla; Esc cancela.',
+    capturePad: (name) => 'Presiona en tu control el botón para ' + name + '. Esc cancela.',
   },
   en: {
     subtitle: 'native PC port', tabs: ['Game', 'Options', 'Mods', 'Cheats', 'Controls'],
@@ -105,6 +111,12 @@ const T = {
     useKeyboard: 'Play with the keyboard', realRemote: 'Nintendo Wii Remote', leftStick: 'Left stick',
     controllerNow: (name) => 'Controller connected: ' + name + '. The game uses it as the Wii Remote and Nunchuk.',
     hintOk: 'OK', hintBack: 'Back', hintTabs: 'Tabs',
+    setupPad: 'Set up the controller, button by button', setupPadStart: 'Start',
+    setupPadHint: 'Your controller already works with the buttons below. To change them, this asks one by one for the Wii Remote\'s and the Nunchuk\'s buttons: press on your controller the one you want for each. Esc stops. You can also change a single one: click its box in the Controller column, or choose its row and press Enter (or A).',
+    setupStep: (name, n, total) => 'Press on your controller the button for ' + name + ' (' + n + ' of ' + total + '). Esc stops; with nothing pressed for 10 seconds, it goes to the next one.',
+    setupDone: 'Done: the controller is set up.',
+    captureKeys: (name) => 'Press a key for ' + name + '. Delete leaves it without a key; Esc cancels.',
+    capturePad: (name) => 'Press on your controller the button for ' + name + '. Esc cancels.',
   },
 };
 
@@ -410,6 +422,9 @@ function rows() {
     const list = [{ section: w.sections.general },
       { label: w.useKeyboard, value: c.keyboard ? w.yes : w.no, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
         change: toggleKeyboard, activate: toggleKeyboard },
+      // Only while a controller is connected: it already plays with the default buttons, and this
+      // changes them one after the other.
+      ...(controllerNames().length ? [{ label: w.setupPad, value: w.setupPadStart, tone: 'key', hint: w.setupPadHint, activate: startPadSetup }] : []),
       { label: w.reset, value: 'Enter', tone: 'key', hint: w.resetHint, activate: () => { send({ cmd: 'resetControls' }); state.toast = w.resetDone; } }];
     let section = '';
     for (const a of ACTIONS) {
@@ -423,7 +438,7 @@ function rows() {
       if (a.keyOnly) hint += ' ' + w.bindKeyOnly;
       if (a.home) hint += ' ' + w.homeNote;
       if (a.camera) hint += ' ' + w.cameraNote;
-      list.push({ label: a[state.lang], hint, binding: true, waiting,
+      list.push({ label: a[state.lang], hint, binding: true, waiting, action: a,
         keyText: keyLabel(key), padText: a.keyOnly ? null : pad === 'disabled' || pad == null ? w.none : padLabel(pad),
         activate: () => startCapture(a) });
     }
@@ -570,11 +585,12 @@ function controlsRow(r, i, chosen) {
   const label = '<span style="position:relative;flex:1;min-width:0;margin-left:22px;font-size:25px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (chosen ? '#d2401a' : '#4a2c12') + '">' + esc(r.label) + '</span>';
   let right;
   if (r.binding) {
-    const cell = (text, muted) => '<span style="position:relative;width:' + CELL + 'px;display:grid;place-items:center">' + (r.waiting
+    const only = state.capture && state.capture.only;
+    const cell = (text, muted, kind) => '<span' + (muted ? '' : ' data-cell="' + kind + '"') + ' style="position:relative;width:' + CELL + 'px;display:grid;place-items:center">' + (r.waiting && (!only || only === kind)
       ? '<span style="font:800 18px \'Baloo 2\',sans-serif;color:#d2401a">' + w.pressNow + '</span>'
       : muted ? '<span style="font-size:18px;letter-spacing:.04em;color:#a08a4a">' + esc(text) + '</span>'
       : '<span style="min-width:140px;max-width:' + (CELL - 10) + 'px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:1px 12px;border-radius:9px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 18px/1.4 \'Baloo 2\',sans-serif;color:#5e3712">' + esc(text) + '</span>') + '</span>';
-    right = '<div style="position:relative;flex:none;display:flex;gap:16px;margin-right:20px">' + cell(r.keyText) + cell(r.padText == null ? w.leftStick : r.padText, r.padText == null) + '</div>';
+    right = '<div style="position:relative;flex:none;display:flex;gap:16px;margin-right:20px">' + cell(r.keyText, false, 'keys') + cell(r.padText == null ? w.leftStick : r.padText, r.padText == null, 'pad') + '</div>';
   } else {
     const value = r.tone === 'key'
       ? '<span style="min-width:58px;box-sizing:border-box;text-align:center;padding:2px 12px;border-radius:8px;background:#5e3712;color:#fff3d0;font:700 19px/1.3 Dosis,sans-serif;letter-spacing:.05em">' + esc(r.value) + '</span>'
@@ -739,7 +755,11 @@ function render() {
 
   // The message box: what just happened, or what the chosen row does.
   let message = state.toast;
-  if (state.capture) message = (state.capture.action.keyOnly ? w.captureKeyOnly : w.capture)(actionName(state.capture.action));
+  if (state.capture) {
+    const c = state.capture, name = actionName(c.action);
+    message = c.setup ? w.setupStep(name, c.setup.at + 1, c.setup.list.length)
+      : c.only === 'pad' ? w.capturePad(name) : c.only === 'keys' || c.action.keyOnly ? w.captureKeys(name) : w.capture(name);
+  }
   if (!message && !list.length) message = (tab === TAB.cheats ? w.noCheats : w.noMods);
   if (!message && list[sel]) message = list[sel].hint || '';
   $('message').textContent = message;
@@ -770,6 +790,8 @@ $('stage').addEventListener('click', (e) => {
   if (rowEl) {
     const i = Number(rowEl.dataset.row), r = rows()[i];
     state.sel = i;
+    const cellEl = e.target.closest('[data-cell]');
+    if (cellEl && r && r.action) { startCapture(r.action, cellEl.dataset.cell); return; }
     if (stepEl && r && r.change) r.change(Number(stepEl.dataset.step));
     else if (r && r.activate) r.activate();
     render();
@@ -935,15 +957,21 @@ function pressedNow(reach) {
   return held;
 }
 
-function startCapture(action) {
-  state.capture = { action, until: Date.now() + 10000, held: pressedNow(0.3) };
+// "only" is 'keys' or 'pad' when one column's box was clicked (or in the walk-through); "setup"
+// is the walk-through's place: { list, at }.
+function startCapture(action, only, setup) {
+  state.capture = { action, only, setup, until: Date.now() + 10000, held: pressedNow(0.3) };
   state.toast = '';
+  // The row being asked for is chosen and brought into view.
+  const row = rows().findIndex((r) => r.action === action);
+  if (row >= 0) state.sel = row;
   render();
+  if (row >= 0) showChosenRow();
   const watch = () => {
     const capture = state.capture;
     if (!capture || capture.action !== action) return;
-    if (Date.now() > capture.until) return endCapture();
-    if (!action.keyOnly) {
+    if (Date.now() > capture.until) return capture.setup ? nextSetupStep(capture.setup) : endCapture();
+    if (!action.keyOnly && capture.only !== 'keys') {
       // A button that was not already held when the wait began; a stick has to go most of the way.
       for (const name of pressedNow(0.6)) if (!capture.held.has(name)) return bindPad(action, name);
       const resting = pressedNow(0.3);
@@ -956,9 +984,22 @@ function startCapture(action) {
 
 function endCapture() { state.capture = null; render(); }
 
+// The controller walk-through: every Wii Remote and Nunchuk button a controller can have (not the
+// Nunchuk stick, which is the left stick), one after the other, controller buttons only.
+function startPadSetup() {
+  const list = ACTIONS.filter((a) => !a.keyOnly && !a.camera && a.id !== 'fastForward');
+  startCapture(list[0], 'pad', { list, at: 0 });
+}
+function nextSetupStep(setup) {
+  const at = setup.at + 1;
+  if (at >= setup.list.length) { state.capture = null; state.toast = t().setupDone; render(); return; }
+  startCapture(setup.list[at], 'pad', { list: setup.list, at });
+}
+
 function captureKey(code) {
   const action = state.capture.action, w = t();
   if (code === 'Escape') return endCapture();
+  if (state.capture.only === 'pad') return;
   if (code === 'F10') { state.toast = w.reserved; state.capture = null; return render(); }
   const number = code === 'Delete' ? -1 : KEY_NUMBER[code];
   if (number == null) return;
@@ -980,7 +1021,9 @@ function bindPad(action, name) {
   else if (action.id === 'fastForward') state.controls.fastForwardButton = name;
   else state.controls.pad[action.id] = name;
   send({ cmd: 'setPad', action: action.id, value: name });
-  endCapture();
+  const setup = state.capture && state.capture.setup;
+  if (setup) nextSetupStep(setup);
+  else endCapture();
 }
 
 // The page is drawn at 1280 x 752 and scaled to fill the window.

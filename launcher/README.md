@@ -54,6 +54,12 @@ where the sensor bar is; other controllers, wireless ones too, need none of them
 `wii_remotes`, `wii_auto_pair` and `wii_sensor_bar` in `[controller]`, the lines the game's F10
 menu writes; pairing itself happens with the game open (the red SYNC button, or 1 and 2).
 
+**Setting up a controller.** A connected controller already plays with the default buttons. While
+one is connected, General shows *Set up the controller, button by button*, which asks for each Wii
+Remote and Nunchuk button in turn (only the controller's buttons; ten seconds without a press goes
+to the next, Esc stops). A single box can also be changed: a click on it in the Keyboard or the
+Controller column waits only for a key or only for a controller button.
+
 **With a controller.** The whole page works with one: the D-pad or the left stick choose and
 change, A is OK, B goes back to the Game tab, LB and RB change the tab. Once the controller is used,
 the hints at the bottom show its buttons instead of the keys.
@@ -108,6 +114,12 @@ demás controles, también los inalámbricos, no necesitan ninguno; usarlos, bus
 dónde está la barra de sensores) son `wii_remotes`, `wii_auto_pair` y `wii_sensor_bar` en
 `[controller]`, las mismas líneas que escribe el menú F10; emparejar se hace con el juego abierto (el
 botón rojo SYNC, o 1 y 2).
+
+**Configurar un control.** Un control conectado ya juega con los botones de inicio. Mientras haya
+uno conectado, General muestra *Configurar el control, botón por botón*, que pide cada botón del Wii
+Remote y del Nunchuk en orden (solo botones del control; diez segundos sin presionar pasa al
+siguiente, Esc termina). También se cambia una sola casilla: un clic en ella, en la columna Teclado
+o Control, espera solo una tecla o solo un botón del control.
 
 **Con un control.** Toda la página se maneja con uno: la cruceta o el stick izquierdo eligen y
 cambian, A es OK, B regresa a la pestaña Juego, LB y RB cambian de pestaña. En cuanto se usa el
