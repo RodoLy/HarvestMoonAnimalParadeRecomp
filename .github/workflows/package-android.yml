@@ -315,7 +315,7 @@ jobs:
             -DMKW_BUILD_PRODUCTS=OFF "${extra[@]}"
           cmake --build "$workspace/build-check" --parallel --target mkw_android_native_compile \
             aurora_core aurora_gx aurora_pad aurora_si aurora_vi aurora_mtx \
-            mkw_platform mkw_pugixml mkw_cryptopp mkw_libco mbedtls mbedx509 mbedcrypto
+            mkw_platform mkw_pugixml mkw_cryptopp mkw_libco mbedtls mbedx509 mbedcrypto -- -k 0
           echo "CHECK_BUILD=$workspace/build-check" >> "$GITHUB_ENV"
 
       # Links everything compiled above into one library and lists what is still missing: the

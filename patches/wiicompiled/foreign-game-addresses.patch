@@ -1,5 +1,5 @@
 diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
-index f0d4fd4..1b793b7 100644
+index f0d4fd4..5638862 100644
 --- a/runtime/CMakeLists.txt
 +++ b/runtime/CMakeLists.txt
 @@ -26,7 +26,7 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
@@ -29,7 +29,20 @@ index f0d4fd4..1b793b7 100644
  endif()
  
  if(MKW_PLATFORM_WINDOWS)
-@@ -433,6 +438,19 @@ else()
+@@ -145,6 +150,12 @@ if(NOT MKW_NATIVE_PREBUILT_DIR)
+     target_compile_definitions(mkw_cryptopp PUBLIC ${MKW_CRYPTOPP_INTERFACE_DEFINITIONS})
+     target_compile_options(mkw_cryptopp PRIVATE -w)
+     set_target_properties(mkw_cryptopp PROPERTIES UNITY_BUILD OFF)
++    if(MKW_PLATFORM_ANDROID)
++        # On Android, Crypto++ asks the NDK's cpufeatures library what the processor has.
++        set(MKW_ANDROID_CPU_FEATURES "${ANDROID_NDK}/sources/android/cpufeatures")
++        target_sources(mkw_cryptopp PRIVATE "${MKW_ANDROID_CPU_FEATURES}/cpu-features.c")
++        target_include_directories(mkw_cryptopp PRIVATE "${MKW_ANDROID_CPU_FEATURES}")
++    endif()
+ endif()
+ 
+ # TLS for non-Windows guest network HLE (runtime/src/hle/net/network_ssl.cpp) - the Windows path
+@@ -433,6 +444,19 @@ else()
          endif()
          set_target_properties(mkw_macos_native_compile PROPERTIES UNITY_BUILD OFF)
      endif()

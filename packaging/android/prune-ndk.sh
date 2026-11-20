@@ -17,6 +17,9 @@ api=30
 rm -rf "$out"
 mkdir -p "$out/toolchains/llvm/prebuilt"
 cp -a "$ndk/source.properties" "$ndk/build" "$ndk/meta" "$out/"
+# Crypto++ uses the NDK's cpufeatures library (a header and one C file).
+mkdir -p "$out/sources/android"
+cp -a "$ndk/sources/android/cpufeatures" "$out/sources/android/"
 [[ -f "$ndk/NOTICE" ]] && cp -a "$ndk/NOTICE" "$out/"
 cp -a "$ndk/toolchains/llvm/prebuilt/$host" "$out/toolchains/llvm/prebuilt/"
 prebuilt=$out/toolchains/llvm/prebuilt/$host
