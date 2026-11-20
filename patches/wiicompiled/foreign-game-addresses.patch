@@ -3346,10 +3346,10 @@ index 0000000..80d1ae0
 +FOREIGN_GAME_WRAPPER(RBIEE9, 800CFB30, AnimalParadePlayerUpdate);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..5bab219
+index 0000000..96f6ce0
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1344 @@
+@@ -0,0 +1,1380 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -3390,9 +3390,11 @@ index 0000000..5bab219
 +//   The Harvest King's births (GOD_L000016 and GOD_L000030) have the player expecting the baby:
 +//   feeling ill, lying down, and in bed after the birth. For a man the mod plays copies of them
 +//   (sample_118.opb and sample_119.opb) where the player cheers (0x8D) instead of holding his
-+//   belly (0x93), with sparkles over him instead of drops of sweat, and the King's lines there (in the male love pack, which only a man married to
-+//   the King sees) tell that he asked the Harvest Goddess for a baby for the two of them and that
-+//   the player only closes his eyes (romance_lines.cpp).
++//   belly (0x93), with sparkles over him instead of drops of sweat, and standing next to the King
++//   with the baby instead of lying in bed as if he had given birth; the King's lines there (in the
++//   male love pack, which only a man married to the King sees) tell that he asked the Harvest
++//   Goddess for a baby for the two of them and that the player only closes his eyes
++//   (romance_lines.cpp).
 +//
 +// The wedding (each candidate's L000007) keeps the original scene but for its last shot: there
 +// the groom carries the bride in his arms (motion 0x225 for both, placed on the same spot), and two
@@ -4480,7 +4482,16 @@ index 0000000..5bab219
 +// player's motion 0x93 (holding the belly) becomes 0x8D (the player's cheer), wherever the scene
 +// loads (0x08F) or plays (0x08B: who, motion, 1, the motion after it) it, and the drops of sweat
 +// over the player (0x28D: a number, who, effect 0x6D) become effect 0x74, the yellow sparkles of
-+// glad surprise. Empty if the scene has no 0x93 for the player.
++// glad surprise. And after the fade the player is not in bed as if he had given birth: where the
++// scene puts him into the bed (0x087 at x 16.5, y 0, z 2.2, turned 0 by 0x091, and motion 0x128,
++// lying down), he stands between the King and the bed, facing the King (turned 90, as at the start
++// of the scene), and cheers. The camera there looks along -z from x 15.3, z 3.6, with the King on
++// the left and the bed on the right, so he stands in the middle of the picture. Empty if the scene
++// is not as expected.
++constexpr float kStandX = 15.0f;
++constexpr float kStandZ = 1.9f;
++constexpr float kStandTurn = 90.0f;
++
 +std::string KingBirthForMen(std::string data) {
 +    if (data.size() < 0x1C || data.compare(0, 4, "OPAL") != 0) {
 +        return {};
@@ -4491,7 +4502,7 @@ index 0000000..5bab219
 +    if (table + 4 * size_t(count) > data.size()) {
 +        return {};
 +    }
-+    int changed = 0;
++    int changed = 0, placed = 0, turned = 0, stood = 0;
 +    for (uint32_t i = 0; i < count; ++i) {
 +        const size_t at = code + ReadBigEndian32(data, table + 4 * size_t(i));
 +        if (at + 12 > data.size()) {
@@ -4503,7 +4514,32 @@ index 0000000..5bab219
 +            PutBigEndian32(data, at + 12, 0x74);
 +            continue;
 +        }
-+        if ((command != 0x08F && command != 0x08B) || ReadBigEndian32(data, at + 4) != kPlayer) {
++        if (ReadBigEndian32(data, at + 4) != kPlayer) {
++            continue;
++        }
++        // Into the bed: who, then x, y and z, each a float (0x02000000 and its bits).
++        if (command == 0x087 && at + 32 <= data.size() && ReadBigEndian32(data, at + 8) == 0x02000000u &&
++            ReadBigEndian32(data, at + 24) == 0x02000000u) {
++            PutBigEndian32(data, at + 12, Bits(kStandX));
++            PutBigEndian32(data, at + 28, Bits(kStandZ));
++            ++placed;
++            continue;
++        }
++        // Its turn right after (0x091: who and three angles), 0 there.
++        if (command == 0x091 && placed == 1 && turned == 0 && at + 32 <= data.size() &&
++            ReadBigEndian32(data, at + 20) == 0 && ReadBigEndian32(data, at + 16) == 0x02000000u) {
++            PutBigEndian32(data, at + 20, Bits(kStandTurn));
++            ++turned;
++            continue;
++        }
++        // Lying down: the cheer instead, then standing (motion 0).
++        if (command == 0x08B && at + 20 <= data.size() && ReadBigEndian32(data, at + 8) == 0x128) {
++            PutBigEndian32(data, at + 8, 0x8D);
++            PutBigEndian32(data, at + 16, 0x00);
++            ++stood;
++            continue;
++        }
++        if (command != 0x08F && command != 0x08B) {
 +            continue;
 +        }
 +        for (const size_t word : {at + 8, at + 16}) {
@@ -4514,7 +4550,7 @@ index 0000000..5bab219
 +            }
 +        }
 +    }
-+    return changed != 0 ? data : std::string();
++    return changed != 0 && placed == 1 && turned == 1 && stood == 1 ? data : std::string();
 +}
 +
 +void PrepareAdoption() {
