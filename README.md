@@ -26,6 +26,7 @@ second, English. Everything below except fast loading is a choice in the launche
 | **Wide picture** | *F10 > Graphics > Picture > Wide* fills a widescreen window: the 3D cameras see more at the sides, and the menus and text keep their shape in the middle. |
 | **Frame interpolation** | The game runs at 30 FPS; *F10 > Graphics > Frame interpolation* shows 60, 120 or 180 FPS by inserting frames in between. The game's own speed does not change. |
 | **Fast loading** | Always on: the change of area (the fade to black, the loading and the place sign) runs up to eight times faster, as fast as the PC allows, and so do the other black screens. While the screen is black the 3D world behind it is not drawn, so even a slow PC gets through it quickly. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
+| **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera around the player and tilts it, R3 puts it back. See [docs/MODS.md](docs/MODS.md). |
 | **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
 | **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
 | **No Wii Remote needed** | An emulated Wii Remote with Nunchuk driven by a gamepad or the keyboard; the mouse is the pointer. A real Wii Remote can be paired instead. |

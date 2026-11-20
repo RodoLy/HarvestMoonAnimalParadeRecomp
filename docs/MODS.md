@@ -198,6 +198,18 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
 **Being tested.** Tried at 200% on a Windows ARM PC: walking, and the hoe, the watering can and the
 sickle take half the time.
 
+### Free camera (`free_camera`)
+
+Off by default, in the launcher's Mods tab under Quality of life. Outdoors, the right stick (or J L,
+I K on the keyboard) turns the camera around the player and tilts it, and R3 (U) puts it back; its
+keys and buttons can be changed in the launcher's Controls tab. The camera stops in front of walls
+but looks over fences and past lamp posts, and in talks the game's own camera shows, as in the
+original game (`free_camera_talk`). Everything it does runs only while the mod is on. How it works:
+[FREE_CAMERA.md](FREE_CAMERA.md).
+
+**Known.** By the edge of the sea the camera comes in close: the sea has an invisible wall the
+camera counts as one.
+
 ### Cheats (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
 In the launcher's own Cheats tab (next to Mods) and in the game's F10 menu, under Cheats, where
@@ -426,6 +438,18 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
 
 **En pruebas.** Probado a 200% en una PC Windows ARM: caminar, y la azada, la regadera y la hoz tardan
 la mitad.
+
+### Cámara libre (`free_camera`)
+
+Apagado de inicio, en la pestaña Mods del launcher, en Calidad de vida. Al aire libre, el stick
+derecho (o J L, I K con el teclado) gira la cámara alrededor del personaje y la inclina, y R3 (U) la
+regresa; sus teclas y botones se pueden cambiar en la pestaña Controles del launcher. La cámara se
+detiene delante de las paredes pero mira por encima de las cercas y a un lado de los postes de luz, y
+al hablar se ve la cámara del propio juego, como en el original (`free_camera_talk`). Todo lo que
+hace corre solo mientras el mod está activado. Cómo funciona: [FREE_CAMERA.md](FREE_CAMERA.md).
+
+**Conocido.** A la orilla del mar la cámara se acerca: el mar tiene una pared invisible que la
+cámara cuenta como pared.
 
 ### Trucos (`cheat_infinite_stamina`, `cheat_infinite_money`, `cheat_infinite_lumber`, `cheat_infinite_stone`, `cheat_infinite_feed`, `cheat_stop_time`)
 
