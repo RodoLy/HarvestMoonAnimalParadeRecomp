@@ -1,3 +1,11 @@
 // The program's icon: the cow from the launcher's animals, on the launcher's colours. The same
 // icon is the game's (packaging/windows/AnimalParade.ico, see the package workflows).
 1 ICON "../../packaging/windows/AnimalParade.ico"
+
+// The version resource (what Windows shows in the file's Properties > Details, and what antivirus
+// programs read; a program without one looks more suspicious to their heuristics). build.ps1
+// writes launcher_version.rc with this release's version before it compiles this file.
+//
+// El recurso de versión (lo que Windows muestra en Propiedades > Detalles y lo que leen los
+// antivirus). build.ps1 escribe launcher_version.rc con la versión antes de compilar.
+#include "launcher_version.rc"
