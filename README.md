@@ -12,6 +12,13 @@ It follows the same path as the *Magical Melody* recompilation
 Parade (USA)`, ID `RBIEE9`, revision 1 (`sys/main.dol` SHA-1
 `6ca574d26858941bfd1404b0293ef84bd821ddd0`).
 
+> [!WARNING]
+> **Experimental.** This port is still in an early stage. Graphical glitches can happen, above
+> all with the free camera and the wide picture, and some scenes have not been tried yet. If
+> something looks wrong or the game stops, please
+> [open an issue](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/issues) with a
+> screenshot and the newest folder in `UserData/Logs`.
+
 ![The farm with the wide picture](docs/images/wide-picture.jpg)
 
 ## What this port adds
@@ -23,20 +30,55 @@ second, English. Everything below except fast loading is a choice in the launche
 | | |
 |---|---|
 | **Native on Windows x64 and Windows on ARM** | Two packages: x86-64, and ARM64 for Snapdragon X laptops, so the game runs natively instead of through x86-64 emulation. |
-| **Linux, macOS and Android** | Packages for Linux (x86-64 and ARM64, which includes a Nintendo Switch with switchroot Linux) and Macs with Apple Silicon, and an add-on that makes an Android app (a phone, a tablet, or a Switch with switchroot Android) with an on-screen Classic Controller. Early work: see below. |
+| **Linux, macOS and Android** | Packages for Linux (x86-64 and ARM64, which includes a Nintendo Switch with switchroot Linux) and Macs with Apple Silicon, and an Android app (a phone, a tablet, or a Switch with switchroot Android) with an on-screen Classic Controller. Early work: see below. |
 | **Wide picture** | *F10 > Graphics > Picture > Wide* fills a widescreen window: the 3D cameras see more at the sides, and the menus and text keep their shape in the middle. |
 | **Frame interpolation** | The game runs at 30 FPS; *F10 > Graphics > Frame interpolation* shows 60, 120 or 180 FPS by inserting frames in between. The game's own speed does not change. |
 | **Fast loading** | Always on: the change of area (the fade to black, the loading and the place sign) runs up to eight times faster, as fast as the PC allows, and so do the other black screens. While the screen is black the 3D world behind it is not drawn, so even a slow PC gets through it quickly. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
-| **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera around the player and tilts it, R3 puts it back. See [docs/MODS.md](docs/MODS.md). |
+| **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera all the way around the player and tilts it, R3 puts it back. [See below](#free-camera). |
+| **Romance for everyone** | A mod: any of the twenty marriage candidates, the Harvest Goddess and the Harvest King included, can be courted and married whatever the player's sex. [See below](#romance-for-everyone). |
+| **Quality of life** | Mods for faster walking and faster actions (×1.25 to ×3) and for no area sign when loading. See [docs/MODS.md](docs/MODS.md). |
+| **Cheats** | Infinite stamina, money, lumber, stone and feed, and stop time, in the launcher and in F10 (see the questions below). |
 | **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
 | **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
-| **No Wii Remote needed** | An emulated Wii Remote with Nunchuk driven by a gamepad or the keyboard; the mouse is the pointer. A real Wii Remote can be paired instead. |
+| **No Wii Remote needed** | An emulated Wii Remote with Nunchuk driven by any connected controller (Xbox, PlayStation and others) or the keyboard; the mouse is the pointer. A real Wii Remote can be paired instead. |
 
 | Original (4:3) | Wide |
 |---|---|
 | ![Original picture](docs/images/original-picture.jpg) | ![Wide picture](docs/images/wide-picture.jpg) |
 
 ![Town Hall](docs/images/town.jpg)
+
+## Free camera
+
+On the Wii the camera outdoors follows the player from one fixed angle. With the **Free camera**
+mod (off by default: turn it on in the launcher's **Mods** tab) the right stick, or **J L I K** on
+the keyboard, turns it all the way around the player and tilts it from near the ground to high
+above, and **R3** (or **U**) puts it back where the game had it. It stops in front of walls, looks
+over fences, and in talks the game's own camera shows. Its keys and buttons are chosen in the
+launcher's Controls tab. How it works: [docs/FREE_CAMERA.md](docs/FREE_CAMERA.md).
+
+| The game's camera | Free camera |
+|---|---|
+| ![The game's own camera on the farm](docs/images/free-camera-off.jpg) | ![The free camera low over the cliffs](docs/images/free-camera-cliffs.jpg) |
+| ![The free camera turned to the sea](docs/images/free-camera-sea.jpg) | ![The free camera turned to the barn and the windmill](docs/images/free-camera-barn.jpg) |
+
+It is the newest part of the port: expect a glitch now and then (the camera comes in close by
+the sea, where the game has an invisible wall).
+
+## Romance for everyone
+
+With the **Romance for everyone** mod (launcher > Mods) any of the twenty marriage candidates,
+the Harvest Goddess, the Witch Princess, the Harvest King and the Wizard among them, can be
+courted and married whether the player is a man or a woman. Their heart events, the confession
+and the proposal play as in the game; the lines that spoke of a husband or a wife fit the couple,
+the wedding photo stands two brides or two grooms side by side, and the children come by
+adoption: a baby from the Harvest Goddess. Details: [docs/MODS.md](docs/MODS.md).
+
+| | |
+|---|---|
+| ![Two brides at the altar](docs/images/romance-altar.jpg) | ![The wedding photo with two brides and the whole town](docs/images/romance-wedding-photo.jpg) |
+| ![Marrying the Harvest Goddess](docs/images/romance-harvest-goddess.jpg) | ![Married to the Harvest King, a baby to adopt](docs/images/romance-adoption.jpg) |
+| ![The Harvest King with the baby: "I hope our child grows as strong and free as a bird."](docs/images/romance-adoption-king.jpg) | |
 
 ### Languages, and why the US disc has them
 
@@ -75,14 +117,25 @@ driver; macOS needs Apple's command line tools (`xcode-select --install`). The s
 
 ## Play on Android
 
-The Android app is made on your computer as well, from your disc: prepare the game with the
-Windows x64 or Linux x86-64 package, unpack the Android add-on
-(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` or `-linux-x86_64.tar.gz`) into the same
-folder and run `build-android`. It makes `AnimalParade.apk` and, with the device connected over USB
-debugging, installs it and copies the disc to it. Android 11 or newer, 64-bit, with Vulkan; a
-Nintendo Switch with switchroot Android counts. Without a controller the screen shows a Wii
-Classic Controller. See [packaging/android/README-Android.txt](packaging/android/README-Android.txt)
-and [android/README.md](android/README.md). The Android version has not been tried on many devices
+1. From [Releases](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/releases), download
+   the APK (`HarvestMoonAnimalParade-v0.2.0.apk`) and install it. Android 11 or newer, 64-bit,
+   with Vulkan; a Nintendo Switch with switchroot Android counts.
+2. Open it and choose your disc image (.iso, .rvz, .wbfs, .wia or .ciso). The app unpacks it once,
+   which takes a few minutes and about 5 GB, and starts the game. The APK carries the game's code
+   translated to ARM64 and none of the disc's files: those come from your disc.
+
+Without a controller the screen shows a Wii Classic Controller: the sticks at the sides, the
+D-pad, A B X Y, L and R, and − HOME +. A finger anywhere else is the Wii Remote pointer, and ≡
+opens the F10 menu. With a controller connected the drawing hides after ten seconds without a
+touch, and `touch_controls = false` under `[input]` in `UserData/Config.toml` turns it off.
+
+![The on-screen Classic Controller](docs/images/android-touch-controls.jpg)
+
+To make the APK yourself instead, with the Android add-on
+(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` or `-linux-x86_64.tar.gz`) next to the
+Windows x64 or Linux x86-64 package, see
+[packaging/android/README-Android.txt](packaging/android/README-Android.txt) and
+[android/README.md](android/README.md). The Android version has not been tried on many devices
 yet.
 
 ### The launcher
@@ -95,6 +148,11 @@ button. It speaks English or Spanish, and is driven with the mouse, the keyboard
 | Game | Options | Controls |
 |---|---|---|
 | ![The launcher's Game tab](docs/images/launcher-game.png) | ![The launcher's Options tab](docs/images/launcher-options.png) | ![The launcher's Controls tab](docs/images/launcher-controls.png) |
+
+In **Mods** each mod is a switch, all off until you turn them on, so out of the box the game is
+the original; the speed mods have a bar from ×1.25 to ×3.
+
+![The launcher's Mods tab](docs/images/launcher-mods.png)
 
 ## Frequently asked questions
 

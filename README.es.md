@@ -12,6 +12,13 @@ hay emulador. Sigue el mismo camino que la recompilación de *Magical Melody*
 Animal Parade (USA)`, ID `RBIEE9`, revisión 1 (`sys/main.dol` SHA-1
 `6ca574d26858941bfd1404b0293ef84bd821ddd0`).
 
+> [!WARNING]
+> **Experimental.** El port todavía está en una etapa temprana. Pueden aparecer fallos gráficos,
+> sobre todo con la cámara libre y la imagen ancha, y hay escenas que aún no se han probado. Si
+> algo se ve mal o el juego se detiene,
+> [abre un issue](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/issues) con una captura
+> y la carpeta más nueva de `UserData/Logs`.
+
 ![La granja con la imagen ancha](docs/images/wide-picture.jpg)
 
 ## Qué añade este port
@@ -23,20 +30,56 @@ menú **F10** dentro del juego.
 | | |
 |---|---|
 | **Nativo en Windows x64 y Windows en ARM** | Dos paquetes: x86-64, y ARM64 para laptops Snapdragon X, para que el juego corra nativo y no con la emulación de x86-64. |
-| **Linux, macOS y Android** | Paquetes para Linux (x86-64 y ARM64, que incluye una Nintendo Switch con switchroot Linux) y Macs con Apple Silicon, y un complemento que hace una app de Android (un teléfono, una tableta o una Switch con switchroot Android) con un control Classic en pantalla. Trabajo en progreso: ver abajo. |
+| **Linux, macOS y Android** | Paquetes para Linux (x86-64 y ARM64, que incluye una Nintendo Switch con switchroot Linux) y Macs con Apple Silicon, y una app de Android (un teléfono, una tableta o una Switch con switchroot Android) con un control Classic en pantalla. Trabajo en progreso: ver abajo. |
 | **Imagen ancha** | *F10 > Graphics > Picture > Wide* llena una ventana panorámica: las cámaras 3D ven más a los lados, y los menús y textos conservan su forma en el centro. |
 | **Interpolación de cuadros** | El juego corre a 30 FPS; *F10 > Graphics > Frame interpolation* muestra 60, 120 o 180 FPS metiendo cuadros intermedios. La velocidad del juego no cambia. |
 | **Carga rápida** | Siempre activa: el cambio de zona (el fundido a negro, la carga y el letrero del lugar) va hasta ocho veces más rápido, lo que permita la PC, igual que las demás pantallas negras. Mientras la pantalla está en negro no se dibuja el mundo 3D de detrás, así que hasta una PC lenta pasa rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
-| **Cámara libre** | Un mod, apagado de inicio (launcher > Mods): al aire libre el stick derecho gira la cámara alrededor del personaje y la inclina, R3 la regresa. Ver [docs/MODS.md](docs/MODS.md). |
+| **Cámara libre** | Un mod, apagado de inicio (launcher > Mods): al aire libre el stick derecho gira la cámara alrededor del personaje por completo y la inclina, R3 la regresa. [Ver abajo](#cámara-libre). |
+| **Amor para todos** | Un mod: cualquiera de los veinte candidatos, con la Diosa y el Rey de la Cosecha, se puede enamorar y casar sin importar el sexo del jugador. [Ver abajo](#amor-para-todos). |
+| **Calidad de vida** | Mods para caminar más rápido y actuar más rápido (×1.25 a ×3) y para quitar el letrero de la zona al cargar. Ver [docs/MODS.md](docs/MODS.md). |
+| **Trucos** | Estamina, dinero, madera, piedra y alimento infinitos, y detener el tiempo, en el launcher y en F10 (ver las preguntas abajo). |
 | **Cinco idiomas** | Inglés, español, francés, alemán e italiano desde el mismo disco de EE. UU. (ver abajo). |
 | **Direct3D 12 o Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* elige Direct3D 12. |
-| **Sin Wii Remote** | Un Wii Remote con Nunchuk emulado que se maneja con mando o teclado; el mouse es el puntero. También se puede emparejar un Wii Remote real. |
+| **Sin Wii Remote** | Un Wii Remote con Nunchuk emulado que se maneja con cualquier control conectado (Xbox, PlayStation y otros) o el teclado; el mouse es el puntero. También se puede emparejar un Wii Remote real. |
 
 | Original (4:3) | Ancha |
 |---|---|
 | ![Imagen original](docs/images/original-picture.jpg) | ![Imagen ancha](docs/images/wide-picture.jpg) |
 
 ![El ayuntamiento](docs/images/town.jpg)
+
+## Cámara libre
+
+En la Wii, al aire libre la cámara sigue al personaje desde un solo ángulo fijo. Con el mod
+**Cámara libre** (apagado de inicio: se activa en la pestaña **Mods** del launcher) el stick
+derecho, o **J L I K** en el teclado, la gira por completo alrededor del personaje y la inclina
+desde casi el suelo hasta muy arriba, y **R3** (o **U**) la regresa a donde la tenía el juego. Se
+detiene frente a las paredes, mira por encima de las cercas, y en las pláticas se ve la cámara del
+propio juego. Sus teclas y botones se eligen en la pestaña Controles del launcher. Cómo funciona:
+[docs/FREE_CAMERA.md](docs/FREE_CAMERA.md).
+
+| La cámara del juego | Cámara libre |
+|---|---|
+| ![La cámara del juego en la granja](docs/images/free-camera-off.jpg) | ![La cámara libre baja, frente a los acantilados](docs/images/free-camera-cliffs.jpg) |
+| ![La cámara libre girada hacia el mar](docs/images/free-camera-sea.jpg) | ![La cámara libre girada hacia el granero y el molino](docs/images/free-camera-barn.jpg) |
+
+Es la parte más nueva del port: de vez en cuando puede haber algún fallo (junto al mar la cámara
+se acerca, porque ahí el juego tiene una pared invisible).
+
+## Amor para todos
+
+Con el mod **Amor para todos** (launcher > Mods) cualquiera de los veinte candidatos para casarse,
+entre ellos la Diosa de la Cosecha, la Princesa Bruja, el Rey de la Cosecha y el Mago, se puede
+enamorar y casar con el jugador, sea hombre o mujer. Sus eventos de corazones, la confesión y la
+propuesta se ven como en el juego; los diálogos que hablaban de esposo o esposa se ajustan a la
+pareja, la foto de la boda pone a dos novias o dos novios lado a lado, y los hijos llegan por
+adopción: un bebé de la Diosa de la Cosecha. Detalles: [docs/MODS.md](docs/MODS.md).
+
+| | |
+|---|---|
+| ![Dos novias en el altar](docs/images/romance-altar.jpg) | ![La foto de la boda con dos novias y todo el pueblo](docs/images/romance-wedding-photo.jpg) |
+| ![Casándose con la Diosa de la Cosecha](docs/images/romance-harvest-goddess.jpg) | ![Casado con el Rey de la Cosecha, un bebé para adoptar](docs/images/romance-adoption.jpg) |
+| ![El Rey de la Cosecha con el bebé](docs/images/romance-adoption-king.jpg) | |
 
 ### Los idiomas, y por qué el disco de EE. UU. los tiene
 
@@ -75,13 +118,24 @@ navegador y funciona como en Windows. Linux necesita los encabezados de la bibli
 
 ## Jugar en Android
 
-La app de Android también se hace en tu computadora, desde tu disco: prepara el juego con el
-paquete de Windows x64 o de Linux x86-64, descomprime el complemento de Android
-(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` o `-linux-x86_64.tar.gz`) en la misma
-carpeta y corre `build-android`. Hace `AnimalParade.apk` y, con el dispositivo conectado con la
-depuración USB, lo instala y le copia el disco. Android 11 o más nuevo, de 64 bits, con Vulkan; una
-Nintendo Switch con switchroot Android cuenta. Sin control, la pantalla muestra un control Classic
-de Wii. Ver [packaging/android/README-Android.txt](packaging/android/README-Android.txt) y
+1. En [Releases](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/releases), descarga el
+   APK (`HarvestMoonAnimalParade-v0.2.0.apk`) e instálalo. Android 11 o más nuevo, de 64 bits, con
+   Vulkan; una Nintendo Switch con switchroot Android cuenta.
+2. Ábrelo y elige la imagen de tu disco (.iso, .rvz, .wbfs, .wia o .ciso). La app la desempaca una
+   sola vez, lo que tarda unos minutos y ocupa unos 5 GB, y arranca el juego. El APK trae el código
+   del juego traducido a ARM64 y ninguno de los archivos del disco: esos salen de tu disco.
+
+Sin control, la pantalla muestra un control Classic de Wii: los sticks a los lados, la cruceta,
+A B X Y, L y R, y − HOME +. Un dedo en cualquier otro lugar es el puntero del Wii Remote, y ≡ abre
+el menú F10. Con un control conectado, el dibujo se oculta tras diez segundos sin tocar la
+pantalla, y `touch_controls = false` en `[input]` de `UserData/Config.toml` lo apaga.
+
+![El control Classic en pantalla](docs/images/android-touch-controls.jpg)
+
+Para hacer el APK tú mismo, con el complemento de Android
+(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` o `-linux-x86_64.tar.gz`) junto al paquete
+de Windows x64 o de Linux x86-64, ver
+[packaging/android/README-Android.txt](packaging/android/README-Android.txt) y
 [android/README.md](android/README.md). La versión de Android todavía no se ha probado en muchos
 dispositivos.
 
@@ -96,6 +150,11 @@ teclado o las flechas.
 | Juego | Opciones | Controles |
 |---|---|---|
 | ![La pestaña Juego del launcher](docs/images/launcher-game.png) | ![La pestaña Opciones del launcher](docs/images/launcher-options.png) | ![La pestaña Controles del launcher](docs/images/launcher-controls.png) |
+
+En **Mods** cada mod es un interruptor, todos apagados hasta que los actives, así que recién
+instalado el juego es el original; los mods de velocidad tienen una barra de ×1.25 a ×3.
+
+![La pestaña Mods del launcher](docs/images/launcher-mods.png)
 
 ## Preguntas frecuentes
 
