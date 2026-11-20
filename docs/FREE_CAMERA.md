@@ -51,16 +51,25 @@ What was learned building it:
   0.7 to one side or the other, or both. If one of those lines finds nothing, the thing is low or
   thin and the camera looks over it or past it; a house stops them all. Among many houses the nearest
   wall changed from frame to frame and the camera trembled; it now keeps the nearest wall of the last
-  0.4 seconds and moves to its new distance smoothly.
-- The light from the sky: every frame the game draws the clouds, seen from under the ground looking
-  up, into a texture, and the ground and the buildings add it to their colour, read through texture
-  matrix 30 (0x80055660) by which way each surface faces in the picture. The game made that matrix
-  only for its own camera; from a turned or lowered camera the ground facing up read the bright part
-  and washed out nearly white (found with a frame trace, the brightness came with the view, and the
-  matrix changed with the camera). While the mod holds the camera, that matrix is the one the game
-  made for its own camera, turned by the difference between the two cameras, so every surface reads
-  the light it read before. A first try (leaving out the lights' specular highlights) did nothing:
-  the game has none.
+  0.4 seconds and moves to its new distance smoothly. The boxes (walls and fences) are left out of
+  the question, each one out of use (+0x54 = 0) while it runs: the farm's knee-high fence by the
+  beach has a box as tall as a wall, and the camera kept coming in there. A try that also let thin
+  walls by (for the invisible wall at the edge of the sea) let the camera into town buildings, whose
+  walls are thin too, and was taken out: by the sea the camera still comes in.
+- The sun's glare: the sun (0x80248B68) ends with 0x80249048, which lays a glare over the picture by
+  how much the camera looks into the sun. While the mod holds the camera it is skipped, so the glare
+  stays as it was.
+- The light from the sky: every frame the sky (0x800F8718) works out the light it lays on the ground
+  and the buildings (a texture of the clouds, read through texture matrix 30 by which way each
+  surface faces) from the camera at *0x80501E78: its view at +0x3C0, and how strong the light is
+  from how much that camera looks toward the sun (0x800531BC). The game's cameras never look toward
+  the sun from near the ground, or straight down; a turned one does, and the ground washed out
+  nearly white. While the mod holds the camera, the sky's camera gets the turn of the game's camera
+  as it was when the right stick took it (from where the mod's camera stands) while 0x800F8718 runs,
+  and its own view back right after. A first try rewrote texture matrix 30 for every model; it
+  helped looking toward the sun but, together with this, washed the ground out looking straight
+  down, and was taken out. A try before that (leaving out the lights' specular highlights) did
+  nothing: the game has none.
 - Talks: with its setting "The game's camera in talks" (`free_camera_talk` in `[mods]`, on unless
   it says false), talking with someone shows the game's own camera, as in the original game, and the
   player's camera comes back where it was when the talk ends. The game's camera system keeps what
@@ -182,16 +191,25 @@ Lo que se aprendió al hacerlo:
   encuentra nada, la cosa es baja o delgada y la cámara mira por encima o a un lado; una casa las
   detiene todas. Entre muchas casas la pared más cercana cambiaba de un cuadro a otro y la cámara
   temblaba; ahora guarda la pared más cercana de los últimos 0.4 segundos y llega a su nueva
-  distancia suave.
-- La luz del cielo: cada cuadro el juego dibuja las nubes, vistas desde debajo del suelo mirando
-  hacia arriba, en una textura, y el suelo y los edificios la suman a su color, leída con la matriz de
-  textura 30 (0x80055660) según hacia dónde mira cada superficie en la imagen. El juego hizo esa
-  matriz solo para su propia cámara; con una cámara girada o baja, el suelo que mira hacia arriba
-  leía la parte clara y se veía casi blanco (se encontró con una traza de un cuadro: el brillo venía
-  con la vista y la matriz cambiaba con la cámara). Mientras el mod tiene la cámara, esa matriz es la
-  que el juego hizo para su propia cámara, girada por la diferencia entre las dos cámaras, así que cada
-  superficie lee la luz que leía antes. Un primer intento (quitar los brillos especulares de las
-  luces) no hizo nada: el juego no tiene.
+  distancia suave. Las cajas (paredes y cercas) quedan fuera de la pregunta, cada una fuera de uso
+  (+0x54 = 0) mientras corre: la cerca de la granja junto a la playa, que llega a la rodilla, tiene
+  una caja tan alta como una pared, y ahí la cámara se acercaba. Un intento que además dejaba pasar
+  paredes delgadas (por la pared invisible a la orilla del mar) metía la cámara en los edificios del
+  pueblo, cuyas paredes también son delgadas, y se quitó: junto al mar la cámara todavía se acerca.
+- El resplandor del sol: el sol (0x80248B68) termina con 0x80249048, que pone un resplandor sobre la
+  imagen según cuánto mira la cámara hacia el sol. Mientras el mod tiene la cámara se salta, así que
+  el resplandor se queda como estaba.
+- La luz del cielo: cada cuadro el cielo (0x800F8718) calcula la luz que pone sobre el suelo y los
+  edificios (una textura de las nubes, leída con la matriz de textura 30 según hacia dónde mira cada
+  superficie) con la cámara en *0x80501E78: su vista en +0x3C0, y qué tan fuerte es la luz según
+  cuánto mira esa cámara hacia el sol (0x800531BC). Las cámaras del juego nunca miran hacia el sol
+  desde cerca del suelo, ni directo hacia abajo; una girada sí, y el suelo se veía casi blanco.
+  Mientras el mod tiene la cámara, la cámara del cielo recibe el giro de la cámara del juego como
+  estaba cuando el stick derecho la tomó (desde donde está la cámara del mod) mientras corre
+  0x800F8718, y recupera su propia vista justo después. Un primer intento reescribía la matriz de
+  textura 30 para cada modelo; ayudaba mirando hacia el sol, pero junto con esto lavaba el suelo
+  mirando directo hacia abajo, y se quitó. Un intento anterior (quitar los brillos especulares de
+  las luces) no hizo nada: el juego no tiene.
 - Pláticas: con su ajuste "Al hablar, la cámara del juego" (`free_camera_talk` en `[mods]`,
   encendido salvo que diga false), al hablar con alguien se ve la cámara del propio juego, como en
   el original, y al terminar la plática la cámara del jugador vuelve a donde estaba. El sistema de

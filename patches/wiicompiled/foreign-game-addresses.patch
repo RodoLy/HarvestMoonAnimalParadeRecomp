@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..ee9d74f
+index 0000000..34af5c1
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,50 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -280,12 +280,6 @@ index 0000000..ee9d74f
 +void SetRightStickTaken(bool taken);
 +
 +bool RightStickTaken();
-+
-+// A mod that changes a texture matrix the game loads (the free camera): called with the matrix
-+// (2x4 or 3x4, rows of four) and the address the game loaded it from, before it reaches the GPU.
-+using TextureMatrixFilter = void (*)(uint32_t caller, uint32_t id, float* matrix, bool threeRows);
-+void SetTextureMatrixFilter(TextureMatrixFilter filter);
-+TextureMatrixFilter GetTextureMatrixFilter();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
 +using PrepareFn = void (*)();
@@ -2181,10 +2175,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..9b426b5
+index 0000000..84a5a98
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,662 @@
+@@ -0,0 +1,652 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2233,34 +2227,34 @@ index 0000000..9b426b5
 +// points with 0x80040DF4 (r3 and r4 the two points, r5 what may count; r3 back 1 when something
 +// does, the nearest point it touches at 0x804D71DC + 0x0C) - the sun uses it to know when it is
 +// hidden. This mod asks it the same about the player and the camera, leaving out the people and
-+// animals, and pulls the camera in front of whatever is in between: it never ends up behind a house
-+// or a wall. Something small does not count: in town the fences, their pillars and the lamp posts
-+// are in the same mesh as the houses, so a small thing is told apart by asking again with the line
-+// moved a little - higher (kLowThings), to one side or the other (kThinThings), or both. If one of
-+// those lines finds nothing, the thing is low or thin, and the camera stays where it is, looking
-+// over it or past it; a house stops all of them. Among many houses the nearest wall changes from
-+// one frame to the next (the line grazes an edge, then misses it), so the camera keeps the nearest
-+// wall of the last moment (kWallMemory) and moves to its new distance smoothly instead of at once:
-+// it does not tremble.
++// animals and the boxes, and pulls the camera in front of whatever is in between: it never ends up
++// behind a house. The boxes are left out because they are not what one sees: around the farm, by
++// the beach, a wooden fence a little over knee high has a box as tall as a wall, so the player
++// cannot climb it, and the camera came in close in front of a fence it could see over (while the
++// question runs, each box's +0x54, "in use", is 0; it is put back right after). Something small
++// does not count either: in town the fences, their pillars and the lamp posts are in the same mesh
++// as the houses, so a small thing is told apart by asking again with the line moved a little -
++// higher (kLowThings), to one side or the other (kThinThings), or both. If one of those lines finds
++// nothing, the thing is low or thin, and the camera stays where it is, looking over it or past it;
++// a house stops all of them.
++//
++// Among many houses the nearest wall changes from one frame to the next (the line grazes an edge,
++// then misses it), so the camera keeps the nearest wall of the last moment (kWallMemory) and moves
++// to its new distance smoothly instead of at once: it does not tremble.
 +//
 +// The sun's glare. The sun (0x80248B68 every frame) ends with 0x80249048, which works out how much
 +// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
 +// face the sun, but a turned one can, and then the picture washes out. While this mod holds the
 +// camera, 0x80249048 is skipped, so the glare stays as it was when the right stick took the camera.
 +//
-+// The light from the sky. Every frame the game draws the sky's clouds, as seen from under the
-+// ground looking up (a camera of 10 degrees), into a texture, and the ground and the buildings add
-+// it to their colour (0x80055660: the texture in map 1, read through texture matrix 30, which
-+// 0x80055898 or 0x800558AC loads). That matrix reads the texture by which way each surface faces
-+// in the picture, and the game only ever made it for its own camera, looking down at the player
-+// from one side: turned to the other side, or brought down near the ground, the ground facing up
-+// reads the bright part of the texture and washes out nearly white. So while this mod holds the
-+// camera, that matrix is the one the game made for its own camera, turned by the difference
-+// between the two cameras: every surface reads the light it read with the game's camera (through
-+// GameMods::SetTextureMatrixFilter, at gx_transform.cpp's texture matrices).
-+//
-+// While the camera is held, the console log gets the boxes around the player every two seconds
-+// ("[free-camera]"), to find walls the camera still goes through.
++// The sky (0x800F8718 every frame) works out the light it lays on the ground from the camera: the
++// sky's own turn (at 0x80501FCC) from the camera's view (at +0x3C0 of the camera at
++// *0x80501E78), and how strong the light is from how much that camera looks toward the sun (through
++// 0x800531BC). The game's own cameras never look toward the sun from near the ground; a turned one
++// does, and the grass washes out nearly white. So while this mod holds the camera, the sky works
++// it out from the view of the game's camera as it was when the right stick took it (turned, from
++// where the mod's camera stands), and the camera gets its own view back right after. The ground
++// then reads the sky's light the way the sky laid it out for the game's camera.
 +//
 +// Talks. The game's camera system keeps what it is doing at 0x805B0710, a state of the table at
 +// 0x804A8818 (each entry: the state, what starts it, what runs it every frame): 2 follows the player
@@ -2293,6 +2287,7 @@ index 0000000..9b426b5
 +#include <cstdint>
 +#include <cstring>
 +#include <iostream>
++#include <string>
 +
 +// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
 +// file's translation unit.
@@ -2330,6 +2325,8 @@ index 0000000..9b426b5
 +constexpr float kFollowing = 1.5f;        // how close to the player's head the game's line of sight
 +                                          // passes while it follows the player
 +constexpr float kScene = 4.0f;            // farther than this, the game's camera is a scene's
++constexpr uint32_t kSkyCamera = 0x80501E78u;  // the camera the sky works its light out from (see above)
++constexpr uint32_t kSkyCameraView = 0x3C0;    // and that camera's view: 3 rows of 4 floats
 +constexpr uint32_t kCameraMode = 0x805B0710u;  // the game's camera system: what it is doing
 +constexpr uint32_t kIntoTalk = 3;              // 3 into a talk, 4 in it, 5 out of it
 +constexpr uint32_t kOutOfTalk = 5;
@@ -2466,15 +2463,13 @@ index 0000000..9b426b5
 +// The camera once the right stick has taken it: its own angles and distance around the player,
 +// whatever the game's camera does in that place. Until then (and after R3 or a change of area) it is
 +// the game's camera.
-+// The light from the sky (see above): texture matrix 30 as the game last made it for its own
-+// camera, and that camera's angles then.
-+struct SkyLight {
++// The sky (see above): the view of the camera it works its light out from, the last time the
++// game's own camera was the one in the picture.
++struct SkyView {
 +    bool known = false;
-+    float matrix[8] = {};
-+    float pitch = 0, yaw = 0;
++    float view[3][4] = {};
 +};
-+SkyLight g_skyLight;
-+float g_gamePitch = 0, g_gameYaw = 0;  // the game's camera this frame, before the mod's
++SkyView g_skyView;
 +bool g_shownThisFrame = false;         // the mod's camera is the one in the picture this frame
 +
 +struct Orbit {
@@ -2571,6 +2566,19 @@ index 0000000..9b426b5
 +// the game's own question (0x80040DF4), asked with a few bytes of the game's stack for the two
 +// points. The game's registers are put back afterwards, as they were.
 +float FirstWall(CpuContext* ctx, const float from[3], const float to[3]) {
++    // Without the boxes: each one is out of use (+0x54 = 0) while the question runs.
++    const uint32_t count = Memory::Read32(kCollisionManager + 0x04);
++    const uint32_t shapes = Memory::Read32(kCollisionManager + 0x08);
++    const bool known = shapes != 0 && count <= 0x1000 && Memory::Contains(shapes, count * kShapeSize);
++    uint32_t inUse[0x100];
++    const uint32_t hidden = known ? std::min<uint32_t>(count, 0x100) : 0;
++    for (uint32_t i = 0; i < hidden; ++i) {
++        const uint32_t shape = shapes + i * kShapeSize;
++        inUse[i] = Memory::Read32(shape + 0x54);
++        if (Memory::Read32(shape + 0x38) == 2) {
++            Memory::Write32(shape + 0x54, 0);
++        }
++    }
 +    const CpuContext saved = *ctx;
 +    const uint32_t stack = (saved.gpr[1] - 0x60u) & ~0xFu;
 +    Memory::Write32(stack, saved.gpr[1]);  // the back chain, as a real call would leave it
@@ -2589,6 +2597,9 @@ index 0000000..9b426b5
 +        point[i] = ReadFloat(kCollisionManager + 0x0C + 4 * i);
 +    }
 +    *ctx = saved;
++    for (uint32_t i = 0; i < hidden; ++i) {
++        Memory::Write32(shapes + i * kShapeSize + 0x54, inUse[i]);
++    }
 +    if (!hit) {
 +        return 1.0f;
 +    }
@@ -2628,42 +2639,6 @@ index 0000000..9b426b5
 +        }
 +    }
 +    return false;
-+}
-+
-+// Every two seconds while the camera is held: the shapes within 12 units of the player, for the log.
-+void NoteShapes(const float feet[3], float wall) {
-+    using Clock = std::chrono::steady_clock;
-+    static Clock::time_point s_next;
-+    static int s_reports = 0;
-+    const auto now = Clock::now();
-+    if (now < s_next || s_reports >= 120) {
-+        return;
-+    }
-+    s_next = now + std::chrono::seconds(2);
-+    ++s_reports;
-+    const uint32_t count = Memory::Read32(kCollisionManager + 0x04);
-+    const uint32_t shapes = Memory::Read32(kCollisionManager + 0x08);
-+    RT_LOG(RT_TAG_VI) << "[free-camera] player " << feet[0] << " " << feet[1] << " " << feet[2] << ", shapes "
-+                      << count << ", first wall at " << wall << std::endl;
-+    if (shapes == 0 || count > 0x1000 || !Memory::Contains(shapes, count * kShapeSize)) {
-+        return;
-+    }
-+    for (uint32_t i = 0; i < count; ++i) {
-+        const uint32_t shape = shapes + i * kShapeSize;
-+        const float x = ReadFloat(shape + 0x14), y = ReadFloat(shape + 0x24), z = ReadFloat(shape + 0x34);
-+        const float dx = x - feet[0], dz = z - feet[2];
-+        if (dx * dx + dz * dz > 144.0f) {
-+            continue;
-+        }
-+        RT_LOG(RT_TAG_VI) << "[free-camera]   #" << i << " used " << Memory::Read32(shape) << " type "
-+                          << Memory::Read32(shape + 0x38) << " at " << x << " " << y << " " << z << " scale "
-+                          << ReadFloat(shape + 0x08) << " " << ReadFloat(shape + 0x1C) << " " << ReadFloat(shape + 0x30)
-+                          << " low " << ReadFloat(shape + 0x3C) << " " << ReadFloat(shape + 0x40) << " "
-+                          << ReadFloat(shape + 0x44) << " high " << ReadFloat(shape + 0x48) << " "
-+                          << ReadFloat(shape + 0x4C) << " " << ReadFloat(shape + 0x50) << " owner 0x" << std::hex
-+                          << Memory::Read32(shape + 0x78) << " mask 0x" << Memory::Read32(shape + 0x04) << " on 0x"
-+                          << Memory::Read32(shape + 0x54) << std::dec << std::endl;
-+    }
 +}
 +
 +// Once a frame, with the main camera.
@@ -2735,7 +2710,6 @@ index 0000000..9b426b5
 +    if (wall < 1.0f && SmallThing(ctx, target, wanted)) {
 +        wall = 1.0f;
 +    }
-+    NoteShapes(feet, wall);
 +    float room = std::max(kClosest, wall * o.distance - kWallGap);
 +    // The nearest wall of the last moment still counts, so a line that grazes an edge every other
 +    // frame does not move the camera in and out.
@@ -2759,61 +2733,60 @@ index 0000000..9b426b5
 +    g_shownThisFrame = true;
 +}
 +
-+// The engine's turn from the world to a camera's view: its rows are the camera's right, up and
-+// back, for a camera with this pitch and yaw (see Forward).
-+void ViewTurn(float pitch, float yaw, float out[3][3]) {
-+    float f[3];
-+    Forward(pitch, yaw, f);
-+    float right[3] = {-f[2], 0.0f, f[0]};  // forward x the world's up
-+    const float length = std::sqrt(right[0] * right[0] + right[2] * right[2]);
-+    for (float& v : right) {
-+        v /= length;
-+    }
-+    const float up[3] = {right[1] * f[2] - right[2] * f[1], right[2] * f[0] - right[0] * f[2],
-+                         right[0] * f[1] - right[1] * f[0]};
-+    for (int i = 0; i < 3; ++i) {
-+        out[0][i] = right[i];
-+        out[1][i] = up[i];
-+        out[2][i] = -f[i];
++// The sky's camera's view, as 3 rows of 4 floats.
++void ReadView(uint32_t address, float view[3][4]) {
++    for (int r = 0; r < 3; ++r) {
++        for (int c = 0; c < 4; ++c) {
++            view[r][c] = ReadFloat(address + 16 * r + 4 * c);
++        }
 +    }
 +}
 +
-+// Texture matrix 30, the light from the sky (see above). With the game's camera in the picture it
-+// is kept as the game made it; with the mod's, it becomes the game's last one, turned from the
-+// mod's view to the game's: matrix * game turn * (mod turn) transposed.
-+void SkyLightMatrix(uint32_t caller, uint32_t id, float* matrix, bool threeRows) {
-+    if (!Enabled() || threeRows || id != 30 || (caller != 0x8005589Cu && caller != 0x800558B0u)) {
-+        return;
++void WriteView(uint32_t address, const float view[3][4]) {
++    for (int r = 0; r < 3; ++r) {
++        for (int c = 0; c < 4; ++c) {
++            WriteFloat(address + 16 * r + 4 * c, view[r][c]);
++        }
 +    }
-+    SkyLight& light = g_skyLight;
-+    if (!g_shownThisFrame) {
-+        light.known = true;
-+        std::copy(matrix, matrix + 8, light.matrix);
-+        light.pitch = g_gamePitch;
-+        light.yaw = g_gameYaw;
-+        return;
++}
++
++// Before the sky works out its light (see above): with the game's camera in the picture, its view
++// is kept; with the mod's, the sky camera gets the game camera's turn, from where the mod's camera
++// stands, and `saved` keeps the mod's view to give back. Whether there is anything to give back.
++bool SkyBefore(float saved[3][4], uint32_t& address) {
++    if (!Enabled()) {
++        return false;
 +    }
-+    if (!light.known) {
-+        return;
++    const uint32_t camera = Memory::Read32(kSkyCamera);
++    if (camera == 0 || !Memory::Contains(camera + kSkyCameraView, 48)) {
++        return false;
 +    }
-+    float game[3][3], mod[3][3], turn[3][3];
-+    ViewTurn(light.pitch, light.yaw, game);
-+    ViewTurn(g_orbit.pitch, g_orbit.yaw, mod);
++    address = camera + kSkyCameraView;
++    SkyView& game = g_skyView;
++    if (!g_orbit.taken || !g_shownThisFrame) {
++        ReadView(address, game.view);
++        game.known = true;
++        return false;
++    }
++    if (!game.known) {
++        return false;
++    }
++    ReadView(address, saved);
++    // Where the mod's camera stands: -(turn transposed) * move. The game's turn puts it back.
++    float eye[3];
++    for (int i = 0; i < 3; ++i) {
++        eye[i] = -(saved[0][i] * saved[0][3] + saved[1][i] * saved[1][3] + saved[2][i] * saved[2][3]);
++    }
++    float view[3][4];
 +    for (int r = 0; r < 3; ++r) {
 +        for (int c = 0; c < 3; ++c) {
-+            turn[r][c] = game[r][0] * mod[c][0] + game[r][1] * mod[c][1] + game[r][2] * mod[c][2];
++            view[r][c] = game.view[r][c];
 +        }
++        view[r][3] = -(view[r][0] * eye[0] + view[r][1] * eye[1] + view[r][2] * eye[2]);
 +    }
-+    for (int r = 0; r < 2; ++r) {
-+        for (int c = 0; c < 3; ++c) {
-+            matrix[r * 4 + c] = light.matrix[r * 4 + 0] * turn[0][c] + light.matrix[r * 4 + 1] * turn[1][c] +
-+                                light.matrix[r * 4 + 2] * turn[2][c];
-+        }
-+        matrix[r * 4 + 3] = light.matrix[r * 4 + 3];
-+    }
++    WriteView(address, view);
++    return true;
 +}
-+
-+const bool kSkyLightFilter = (GameMods::SetTextureMatrixFilter(SkyLightMatrix), true);
 +
 +} // namespace
 +} // namespace FreeCamera
@@ -2828,8 +2801,6 @@ index 0000000..9b426b5
 +        GameMods::SetRightStickTaken(true);
 +        const uint32_t camera = ctx->gpr[3];
 +        if (g_orbit.taken ? camera == g_orbit.camera : IsMainCamera(camera)) {
-+            g_gamePitch = ReadFloat(camera + kPitch);
-+            g_gameYaw = ReadFloat(camera + kYaw);
 +            g_shownThisFrame = false;
 +            TurnCamera(ctx, camera);
 +        }
@@ -2847,12 +2818,25 @@ index 0000000..9b426b5
 +    GuestFunctions::BaseTranslation(0x80249048u)(ctx);
 +}
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80249048, AnimalParadeSunGlare);
++
++// 0x800F8718: the sky, every frame. With the mod's camera in the picture, it works its light out
++// from the game's camera (see above).
++extern "C" void AnimalParadeSky(CpuContext* ctx) {
++    float saved[3][4];
++    uint32_t view = 0;
++    const bool turned = FreeCamera::SkyBefore(saved, view);
++    GuestFunctions::BaseTranslation(0x800F8718u)(ctx);
++    if (turned) {
++        FreeCamera::WriteView(view, saved);
++    }
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 800F8718, AnimalParadeSky);
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..db4f536
+index 0000000..fe265c4
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,112 @@
 +// The list of game mods' disc overlays (see game_mods.h).
 +
 +#include "game_mods.h"
@@ -2940,16 +2924,6 @@ index 0000000..db4f536
 +
 +bool RightStickTaken() {
 +    return g_rightStickTaken.load(std::memory_order_relaxed);
-+}
-+
-+std::atomic<TextureMatrixFilter> g_textureMatrixFilter{nullptr};
-+
-+void SetTextureMatrixFilter(TextureMatrixFilter filter) {
-+    g_textureMatrixFilter.store(filter, std::memory_order_relaxed);
-+}
-+
-+TextureMatrixFilter GetTextureMatrixFilter() {
-+    return g_textureMatrixFilter.load(std::memory_order_relaxed);
 +}
 +
 +Registration::Registration(PrepareFn prepare) {
@@ -6405,16 +6379,15 @@ index 0f79533..a848636 100644
          // The CPU-side SDK reads the GXTexObj at call time; the texture data itself is read later.
          std::optional<TexObjBytes> bytes;
 diff --git a/runtime/src/hle/gx/gx_transform.cpp b/runtime/src/hle/gx/gx_transform.cpp
-index 54e15fa..7336a8f 100644
+index 54e15fa..b9d49b0 100644
 --- a/runtime/src/hle/gx/gx_transform.cpp
 +++ b/runtime/src/hle/gx/gx_transform.cpp
-@@ -1,6 +1,13 @@
+@@ -1,6 +1,12 @@
  // gx_transform.cpp - Viewport, Projection, and Matrix Functions
  #include "isa/big_endian.h"
  #include "gx_internal.h"
 +#include "gx_frame_trace.h"
 +#include "hle_stubs.h"
-+#include "game_mods.h"
 +#include "aurora_events.h"
 +
 +#include <cmath>
@@ -6422,7 +6395,7 @@ index 54e15fa..7336a8f 100644
  
  namespace {
      static inline void SwapBeF32ArrayToHost(const uint32_t* srcBe, float* dst, size_t count) {
-@@ -45,6 +52,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
+@@ -45,6 +51,9 @@ extern "C" void GX__SetViewportJitter_80173378(float l, float t, float w, float
  PPC_NATIVE_OVERRIDE_VOID(80173378, GX__SetViewportJitter_80173378, (float l, float t, float w, float h, float nz, float fz, uint32_t f), (l, t, w, h, nz, fz, f));
  
  extern "C" void GX__SetViewport_801733b4(float l, float t, float w, float h, float nz, float fz) {
@@ -6432,7 +6405,7 @@ index 54e15fa..7336a8f 100644
      g_viewportState[0]=l; g_viewportState[1]=t; g_viewportState[2]=w; g_viewportState[3]=h; g_viewportState[4]=nz; g_viewportState[5]=fz;
      GxWorker::Run([=] { GXSetViewport(l, t, w, h, nz, fz); });
  }
-@@ -104,6 +114,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
+@@ -104,6 +113,9 @@ extern "C" void GX__SetScissor_80173430(uint32_t l, uint32_t t, uint32_t w, uint
      // No viewport replay here: aurora recomputes viewport and scissor together
      // on every scissor change (set_logical_scissor -> apply_logical_render_state),
      // so re-issuing the current viewport would be duplicate work.
@@ -6442,7 +6415,7 @@ index 54e15fa..7336a8f 100644
      GxWorker::Run([l, t, w, h] { GXSetScissor(l, t, w, h); });
  }
  PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
-@@ -112,9 +125,99 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
+@@ -112,9 +124,99 @@ PPC_NATIVE_OVERRIDE_VOID(80173430, GX__SetScissor_80173430, (uint32_t l, uint32_
  // Projection
  // ============================================================================
  
@@ -6542,7 +6515,7 @@ index 54e15fa..7336a8f 100644
      GxWorker::Run([mtx = std::to_array(m), pt]() mutable { GXSetProjection(mtx.data(), (GXProjectionType)pt); });
      UpdateProjectionVectorFromMatrix(m, (GXProjectionType)pt);
  }
-@@ -126,6 +229,9 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
+@@ -126,6 +228,9 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
      GXProjectionType pt=(v[0]!=0.f)?GX_ORTHOGRAPHIC:GX_PERSPECTIVE;
      float m[16]={0.f}; m[0]=v[1]; m[5]=v[3]; m[10]=v[5]; m[11]=v[6];
      if(pt==GX_PERSPECTIVE){ m[2]=v[2]; m[6]=v[4]; m[14]=-1.f; } else { m[3]=v[2]; m[7]=v[4]; m[15]=1.f; }
@@ -6552,19 +6525,6 @@ index 54e15fa..7336a8f 100644
      GxWorker::Run([mtx = std::to_array(m), pt]() mutable { GXSetProjection(mtx.data(), pt); });
      UpdateProjectionVectorFromProjV(v);
  }
-@@ -209,6 +315,12 @@ extern "C" void GX__LoadTexMtxImm_80173234(uint32_t ma, uint32_t id, uint32_t t)
-     size_t c=(t==(uint32_t)GX_MTX3x4)?12:8;
-     const uint32_t* raw=(const uint32_t*)GuestToHostPtr(ma,c*4); float l[12]={};
-     SwapBeF32ArrayToHost(raw,l,c);
-+    // A game mod may change it (game_mods.h): the free camera, for the light the game takes from
-+    // the surfaces' facing in the picture.
-+    if (const auto filter = GameMods::GetTextureMatrixFilter()) {
-+        auto* cpu = TryGetCpuContext();
-+        filter(cpu != nullptr ? cpu->lr : 0u, id, l, t == (uint32_t)GX_MTX3x4);
-+    }
-     GxWorker::Run([mtx = std::to_array(l), id, t]() mutable { GXLoadTexMtxImm(mtx.data(), id, (GXTexMtxType)t); });
- }
- PPC_NATIVE_OVERRIDE_VOID(80173234, GX__LoadTexMtxImm_80173234, (uint32_t ma, uint32_t id, uint32_t t), (ma, id, t));
 diff --git a/runtime/src/hle/gx/gx_vertex.cpp b/runtime/src/hle/gx/gx_vertex.cpp
 index 3a8c43b..1df0c2c 100644
 --- a/runtime/src/hle/gx/gx_vertex.cpp
