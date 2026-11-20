@@ -90,7 +90,7 @@ adopción: un bebé de la Diosa de la Cosecha. Detalles: [docs/MODS.md](docs/MOD
 | | |
 |---|---|
 | ![Dos novias en el altar](docs/images/romance-altar.jpg) | ![La foto de la boda con dos novias y todo el pueblo](docs/images/romance-wedding-photo.jpg) |
-| ![Casándose con la Diosa de la Cosecha](docs/images/romance-harvest-goddess.jpg) | ![Casado con el Rey de la Cosecha, un bebé para adoptar](docs/images/romance-adoption.jpg) |
+| ![Casándose con la Diosa de la Cosecha](docs/images/romance-harvest-goddess.jpg) | ![Casado con el Rey de la Cosecha, el bebé que le pidió a la Diosa](docs/images/romance-adoption.jpg) |
 | ![El Rey de la Cosecha con el bebé](docs/images/romance-adoption-king.jpg) | |
 
 ### Los idiomas, y por qué el disco de EE. UU. los tiene
