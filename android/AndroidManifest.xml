@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Android app around the game (android/README.md). versionCode and versionName are filled in
+  from VERSION when the shell is built (.github/workflows/package-android.yml).
+
+  La app de Android alrededor del juego. versionCode y versionName se llenan desde VERSION.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.hmaprecomp.animalparade"
+    android:versionCode="@VERSION_CODE@"
+    android:versionName="@VERSION_NAME@"
+    android:installLocation="auto">
+
+    <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="34" />
+
+    <!-- The picture is drawn with Vulkan 1.1; a device without it cannot run the game. -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.type.pc" android:required="false" />
+
+    <!-- Rumble on a controller that has it. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:label="Animal Parade"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:appCategory="game"
+        android:extractNativeLibs="true"
+        android:hardwareAccelerated="true">
+
+        <!-- Unpacks the game's files and checks for the disc, then starts the game. -->
+        <activity
+            android:name=".SetupActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The game (SDL's activity, with aurora's drawing surface). -->
+        <activity
+            android:name=".GameActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:preferMinimalPostProcessing="true"
+            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />
+    </application>
+</manifest>
