@@ -4,16 +4,19 @@
 //    Game/ in the app's folder, once per version of the app.
 // 2. Writes portable.txt (settings, saves and logs go to UserData/) and, the first time,
 //    UserData/Config.toml with the disc's folder.
-// 3. Checks that the disc is there (Disc/DATA/sys/main.dol). If it is not, it says where to copy
-//    it and waits; otherwise it starts the game (GameActivity).
+// 3. Checks that the disc is there (Disc/DATA/sys/main.dol). If it is not, it asks for the
+//    player's disc image (.iso, .rvz, .wbfs, ...) with Android's file picker and unpacks it there
+//    once (runtime/src/platform/android_disc.cpp, with nod); then it starts the game
+//    (GameActivity).
 //
 // The app's folder is the one Android gives every app on the shared storage:
 //   Android/data/io.github.hmaprecomp.animalparade/files
-// A computer sees it over USB, and the build script copies the disc there with adb.
+// A computer sees it over USB; a disc folder unpacked on a computer (Disc/DATA) can also be copied
+// there instead of choosing the image.
 //
 // Lo primero que muestra la app: desempaca los archivos del juego, escribe la configuración la
 // primera vez, revisa que el disco esté en la carpeta de la app y arranca el juego. Si falta el
-// disco, dice dónde copiarlo.
+// disco, pide la imagen del disco con el selector de archivos de Android y la desempaca una vez.
 
 package io.github.hmaprecomp.animalparade;
 
@@ -22,7 +25,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.ParcelFileDescriptor;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.widget.Button;
@@ -43,8 +50,17 @@ public class SetupActivity extends Activity {
     private static final String ASSET_ROOT = "game";
     private static final String VERSION_FILE = "app-version.txt";
 
+    private static final int PICK_DISC = 1;
+
     private TextView mText;
     private Button mRetry;
+    private Button mChooseDisc;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+
+    // Unpacks the disc image open as `fd` into `discFolder`/DATA (in libmain.so). Returns null when
+    // it worked, otherwise what went wrong. nativeExtractProgress is how far it is, per thousand.
+    private static native String nativeExtractDisc(int fd, String discFolder);
+    private static native int nativeExtractProgress();
 
     // The app's own folder on the shared storage, or null while that storage is not available.
     static File dataRoot(Context context) {
@@ -80,7 +96,20 @@ public class SetupActivity extends Activity {
                 prepare();
             }
         });
+        mChooseDisc = new Button(this);
+        mChooseDisc.setText(say("Choose your disc image", "Elegir la imagen de tu disco"));
+        mChooseDisc.setVisibility(Button.GONE);
+        mChooseDisc.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View view) {
+                Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                pick.addCategory(Intent.CATEGORY_OPENABLE);
+                pick.setType("*/*");
+                startActivityForResult(pick, PICK_DISC);
+            }
+        });
         layout.addView(mText);
+        layout.addView(mChooseDisc);
         layout.addView(mRetry);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(layout);
@@ -90,6 +119,7 @@ public class SetupActivity extends Activity {
 
     private void prepare() {
         mRetry.setVisibility(Button.GONE);
+        mChooseDisc.setVisibility(Button.GONE);
         mText.setGravity(Gravity.CENTER);
         mText.setText(say("Getting the game ready…", "Preparando el juego…"));
         final SetupActivity activity = this;
@@ -139,18 +169,70 @@ public class SetupActivity extends Activity {
     }
 
     private void showDiscHelp(File root) {
-        String folder = new File(root, "Disc/DATA").getAbsolutePath();
         showProblem(say(
-            "The game needs your disc's files.\n\n"
-            + "Copy the DATA folder that the computer version made (Disc/DATA, with sys/ and files/ in it) to:\n\n"
-            + folder + "\n\n"
-            + "build-android on your computer does this for you when the device is connected with USB debugging. "
-            + "Or copy it over USB: the folder is Android/data/" + getPackageName() + "/files on the device.",
-            "El juego necesita los archivos de tu disco.\n\n"
-            + "Copia la carpeta DATA que hizo la versión de computadora (Disc/DATA, con sys/ y files/ dentro) a:\n\n"
-            + folder + "\n\n"
-            + "build-android en tu computadora lo hace por ti cuando el dispositivo está conectado con la depuración USB. "
-            + "O cópiala por USB: la carpeta es Android/data/" + getPackageName() + "/files en el dispositivo."));
+            "The game needs your disc: Harvest Moon: Animal Parade for Wii, the USA release (RBIEE9), "
+            + "as the image Dolphin plays (.iso, .rvz, .wbfs, .wia or .ciso).\n\n"
+            + "Choose it below. The app unpacks it once to its own folder (about 5 GB, a few minutes); "
+            + "the image itself can be deleted afterwards.",
+            "El juego necesita tu disco: Harvest Moon: Animal Parade de Wii, la versión de Estados Unidos "
+            + "(RBIEE9), como la imagen que juegas en Dolphin (.iso, .rvz, .wbfs, .wia o .ciso).\n\n"
+            + "Elígela abajo. La app la desempaca una vez a su propia carpeta (unos 5 GB, unos minutos); "
+            + "después puedes borrar la imagen."));
+        mChooseDisc.setVisibility(Button.VISIBLE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_DISC || resultCode != RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        final File root = dataRoot(this);
+        final Uri uri = data.getData();
+        final int fd;
+        try {
+            ParcelFileDescriptor file = getContentResolver().openFileDescriptor(uri, "r");
+            if (file == null) {
+                throw new IOException("no file");
+            }
+            fd = file.detachFd();
+        } catch (IOException | SecurityException e) {
+            showProblem(say("The disc image could not be opened: ", "No se pudo abrir la imagen del disco: ") + e.getMessage());
+            mChooseDisc.setVisibility(Button.VISIBLE);
+            return;
+        }
+        System.loadLibrary("main");
+        mChooseDisc.setVisibility(Button.GONE);
+        mRetry.setVisibility(Button.GONE);
+        mText.setGravity(Gravity.CENTER);
+        final Runnable progress = new Runnable() {
+            @Override
+            public void run() {
+                int perThousand = nativeExtractProgress();
+                mText.setText(say("Unpacking your disc… ", "Desempacando tu disco… ") + (perThousand / 10) + " %");
+                mHandler.postDelayed(this, 500);
+            }
+        };
+        mHandler.post(progress);
+        final SetupActivity activity = this;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String error = nativeExtractDisc(fd, new File(root, "Disc").getAbsolutePath());
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mHandler.removeCallbacks(progress);
+                        if (error != null) {
+                            showProblem(error);
+                            mChooseDisc.setVisibility(Button.VISIBLE);
+                        } else {
+                            prepare();
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     // assets/game -> Game/, when the app's version differs from the one unpacked there.
