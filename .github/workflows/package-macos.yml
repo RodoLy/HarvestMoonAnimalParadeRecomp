@@ -26,7 +26,7 @@ concurrency:
 jobs:
   package:
     name: macOS arm64
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     env:
       WIICOMPILED_URL: https://github.com/patchzyy/wiicompiled.git
