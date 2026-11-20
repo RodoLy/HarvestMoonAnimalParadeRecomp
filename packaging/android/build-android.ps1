@@ -173,6 +173,7 @@ try {
             '-DANDROID_ABI=arm64-v8a', '-DANDROID_PLATFORM=android-30', '-DANDROID_STL=c++_static',
             '-DCMAKE_BUILD_TYPE=Release',
             "-DFETCHCONTENT_BASE_DIR=$(Join-Path $workspace 'Dependencies')", '-DFETCHCONTENT_FULLY_DISCONNECTED=ON',
+            "-DMKW_ANDROID_NOD_DIR=$(Join-Path $android 'nod')",
             "-DMKW_TRANSLATED_COMPILE_JOBS=$translatedJobs"
         ) + (Get-Content -LiteralPath (Join-Path $android 'configure-flags.txt') | Where-Object { $_.Trim() })
         Invoke-Checked $cmake $configure 'Configuring'

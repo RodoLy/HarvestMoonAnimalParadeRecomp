@@ -132,6 +132,7 @@ if [[ ! -f "$build/CMakeCache.txt" ]]; then
         -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static \
         -DCMAKE_BUILD_TYPE=Release \
         -DFETCHCONTENT_BASE_DIR="$workspace/Dependencies" -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+        -DMKW_ANDROID_NOD_DIR="$android/nod" \
         -DMKW_TRANSLATED_COMPILE_JOBS="$translated_jobs" "${extra[@]}"
 fi
 step 'Compiling for Android (the first time takes a while)' 'Compilando para Android (la primera vez tarda un rato)'
