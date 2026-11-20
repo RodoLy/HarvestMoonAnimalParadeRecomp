@@ -33,13 +33,17 @@ its Wii Remote and Nunchuk, the same as a controller: left stick = Nunchuk stick
 C-stick (the free camera, or the D-pad), D-pad, a b x y = A B 1 2, L R = Nunchuk Z C, - HOME +.
 A finger anywhere else is the pointer and presses A. The three-line button opens the settings.
 
-To try it on a computer, set `touch_controls = true`: the mouse then plays the finger.
+To try it on a computer, set `touch_controls = true`: the mouse then plays the finger (a mouse
+button bound to a control in the keyboard settings still presses that control as well).
 
 ### Not tried yet
 
-The shell and ApkPack pass Android's own checks in CI, and the runtime and aurora compile for
-Android there; the game itself has not been run on a device by the project yet (it needs the
-player's disc). Reports of what happens on real devices are welcome.
+The shell and ApkPack pass Android's own checks in CI (`apksigner verify`, `zipalign -c`), and the
+runtime and aurora compile for Android there with each add-on's own NDK, offline. The on-screen
+controller was tried in the computer version (the mouse as the finger): getting from the title to
+a saved game with its buttons and stick, walking, and its settings button. The game itself has not
+been run on an Android device by the project yet (it needs the player's disc). Reports of what
+happens on real devices are welcome.
 
 ## Español
 
@@ -69,10 +73,14 @@ izquierdo = stick del Nunchuk, stick derecho = el C-stick (la cámara libre o la
 a b x y = A B 1 2, L R = Z C del Nunchuk, - HOME +. Un dedo en cualquier otro lugar es el puntero y
 presiona A. El botón de tres rayas abre la configuración.
 
-Para probarlo en una computadora, pon `touch_controls = true`: el mouse hace de dedo.
+Para probarlo en una computadora, pon `touch_controls = true`: el mouse hace de dedo (un botón del
+mouse asignado a un control en la configuración del teclado también lo sigue presionando).
 
 ### Sin probar todavía
 
-El cascarón y ApkPack pasan las revisiones de Android en CI, y el runtime y aurora compilan para
-Android ahí; el juego en sí todavía no se ha corrido en un dispositivo (necesita el disco del
-jugador). Se agradecen reportes de dispositivos reales.
+El cascarón y ApkPack pasan las revisiones de Android en CI (`apksigner verify`, `zipalign -c`), y
+el runtime y aurora compilan para Android ahí con el NDK de cada complemento, sin internet. El
+control en pantalla se probó en la versión de computadora (el mouse como dedo): llegar del título
+a una partida guardada con sus botones y su stick, caminar y su botón de configuración. El juego en
+sí todavía no se ha corrido en un dispositivo Android (necesita el disco del jugador). Se agradecen
+reportes de dispositivos reales.
