@@ -23,6 +23,7 @@ menú **F10** dentro del juego.
 | | |
 |---|---|
 | **Nativo en Windows x64 y Windows en ARM** | Dos paquetes: x86-64, y ARM64 para laptops Snapdragon X, para que el juego corra nativo y no con la emulación de x86-64. |
+| **Linux, macOS y Android** | Paquetes para Linux (x86-64 y ARM64, que incluye una Nintendo Switch con switchroot Linux) y Macs con Apple Silicon, y un complemento que hace una app de Android (un teléfono, una tableta o una Switch con switchroot Android) con un control Classic en pantalla. Trabajo en progreso: ver abajo. |
 | **Imagen ancha** | *F10 > Graphics > Picture > Wide* llena una ventana panorámica: las cámaras 3D ven más a los lados, y los menús y textos conservan su forma en el centro. |
 | **Interpolación de cuadros** | El juego corre a 30 FPS; *F10 > Graphics > Frame interpolation* muestra 60, 120 o 180 FPS metiendo cuadros intermedios. La velocidad del juego no cambia. |
 | **Carga rápida** | Siempre activa: el cambio de zona (el fundido a negro, la carga y el letrero del lugar) va hasta ocho veces más rápido, lo que permita la PC, igual que las demás pantallas negras. Mientras la pantalla está en negro no se dibuja el mundo 3D de detrás, así que hasta una PC lenta pasa rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
@@ -62,6 +63,27 @@ japonés. El disco de EE. UU. solo trae el logo japonés y el inglés; el europe
 
 Los pasos completos están en [packaging/windows/README.txt](packaging/windows/README.txt). La
 configuración, las partidas y los registros quedan en `UserData\`.
+
+## Jugar en Linux o macOS
+
+Los paquetes son `HarvestMoonAnimalParade-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` (una
+Raspberry Pi 5, una Nintendo Switch con switchroot Linux) y `-macos-arm64.zip` (Apple Silicon).
+Descomprime uno y abre `AnimalParadeLauncher` (en una Mac, `Animal Parade.command`); se abre en el
+navegador y funciona como en Windows. Linux necesita los encabezados de la biblioteca de C
+(`libc6-dev`) y un controlador Vulkan; macOS necesita las herramientas de línea de comandos de Apple
+(`xcode-select --install`). Los pasos están en [packaging/unix/README.txt](packaging/unix/README.txt).
+
+## Jugar en Android
+
+La app de Android también se hace en tu computadora, desde tu disco: prepara el juego con el
+paquete de Windows x64 o de Linux x86-64, descomprime el complemento de Android
+(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` o `-linux-x86_64.tar.gz`) en la misma
+carpeta y corre `build-android`. Hace `AnimalParade.apk` y, con el dispositivo conectado con la
+depuración USB, lo instala y le copia el disco. Android 11 o más nuevo, de 64 bits, con Vulkan; una
+Nintendo Switch con switchroot Android cuenta. Sin control, la pantalla muestra un control Classic
+de Wii. Ver [packaging/android/README-Android.txt](packaging/android/README-Android.txt) y
+[android/README.md](android/README.md). La versión de Android todavía no se ha probado en muchos
+dispositivos.
 
 ### El launcher
 
