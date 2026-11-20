@@ -31,7 +31,7 @@ const T = {
     changeDisc: 'Cambiar el disco', changeDiscHint: 'Elige otra imagen del disco (.rvz, .iso, .wbfs, .wia o .ciso).',
     openLog: 'Abrir el registro', openLogHint: 'Abre el registro más nuevo de UserData\\Logs.', uiLanguage: 'Idioma', uiLanguageHint: 'El idioma del juego y del launcher. El launcher solo está en español e inglés; en los demás idiomas se ve en inglés.', noLog: 'Todavía no hay registros.',
     exit: 'Salir', exitHint: 'Cierra el launcher.', cancel: 'Cancelar', cancelled: 'Se canceló la preparación.',
-    prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
+    prepared: 'El juego está listo.', opening: 'Abriendo el juego…', gameStarted: 'El juego está abierto. Ya puedes cerrar esta pestaña.', noDiscWindow: 'No hay una ventana para elegir archivos (zenity o kdialog). Corre ./play.sh --disc <imagen> una vez.',
     hintMove: 'Elegir', hintChange: 'Cambiar', f10: 'Menú en el juego',
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
     noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', cheatNoSettings: 'Este truco no tiene ajustes.', noCheats: 'No hay trucos.', modKeys: (setting) => !setting ? 'Enter o ◀ ▶ lo activan o desactivan.' : setting.yesNo ? 'Enter lo activa o desactiva; ◀ ▶ cambian su ajuste.' : 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.', yes: 'Sí', no: 'No', noManifest: 'sin manifiesto',
@@ -67,7 +67,7 @@ const T = {
     changeDisc: 'Change the disc', changeDiscHint: 'Choose another disc image (.rvz, .iso, .wbfs, .wia or .ciso).',
     openLog: 'Open the log', openLogHint: 'Opens the newest log in UserData\\Logs.', uiLanguage: 'Language', uiLanguageHint: 'The language of the game and of the launcher. The launcher is only in English and Spanish; with the other languages it shows in English.', noLog: 'There are no logs yet.',
     exit: 'Exit', exitHint: 'Closes the launcher.', cancel: 'Cancel', cancelled: 'The preparation was cancelled.',
-    prepared: 'The game is ready.', opening: 'Opening the game…',
+    prepared: 'The game is ready.', opening: 'Opening the game…', gameStarted: 'The game is open. You can close this tab now.', noDiscWindow: 'There is no window to choose files with (zenity or kdialog). Run ./play.sh --disc <image> once.',
     hintMove: 'Select', hintChange: 'Change', f10: 'Menu in the game',
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
     noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', cheatNoSettings: 'This cheat has no settings.', noCheats: 'There are no cheats.', modKeys: (setting) => !setting ? 'Enter or ◀ ▶ turn it on or off.' : setting.yesNo ? 'Enter turns it on or off; ◀ ▶ change its setting.' : 'Enter turns it on or off; ◀ ▶ change the speed.', yes: 'Yes', no: 'No', noManifest: 'no manifest',
@@ -881,11 +881,18 @@ function receive(message) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Start: with the program (WebView2), or without it (opened in a browser, to look at the design).
+// Start: with the program around it (WebView2 on Windows; on Linux and macOS the browser, with the
+// program serving the page at http://127.0.0.1 - host/launcher_unix.cpp), or without it (the file
+// opened in a browser, to look at the design).
 
 if (window.chrome && window.chrome.webview) {
   send = (m) => window.chrome.webview.postMessage(m);
   window.chrome.webview.addEventListener('message', (e) => receive(e.data));
+} else if (location.protocol === 'http:') {
+  // The program's own address: messages go to "message", and come back from "events" as they happen.
+  send = (m) => { fetch('message', { method: 'POST', body: JSON.stringify(m) }).catch(() => {}); };
+  new EventSource('events').onmessage = (e) => receive(JSON.parse(e.data));
+  document.body.classList.add('inBrowser');
 } else {
   // Without the program: the controls start as the program's defaults, and preparing pretends to
   // take a few seconds.

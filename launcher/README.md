@@ -12,9 +12,12 @@ launcher/
     animals/          the animal drawings (one SVG each)
     animals.js        the drawings as one script; made by tools/make_animals_js.py
     fonts/            Baloo 2 and Dosis (SIL Open Font License, the OFL-*.txt next to them)
-  host/launcher.cpp   the program: a window with Microsoft Edge WebView2 that shows the page
+  host/launcher_core.cpp  what the launcher does on every system: settings, controls, the page's state
+  host/launcher.cpp   Windows: a window with Microsoft Edge WebView2 that shows the page
+  host/launcher_unix.cpp  Linux and macOS: serves the page to the computer's browser
   third_party/        OpenWebView2Loader (ISC) and the WebView2 headers (Microsoft, BSD-style)
   build.ps1           compiles Launcher.exe with the package's compiler and copies the page
+  build.sh            compiles AnimalParadeLauncher (Linux, macOS) and copies the page
   tools/              make_animals_js.py
 ```
 
@@ -25,22 +28,30 @@ and of `host/launcher.cpp`. To prepare the game the program runs `play.ps1 -NoSt
 script `play.cmd` always ran, hidden, and turns its lines into the three steps on the page.
 Settings go to `UserData\Config.toml`; the first time, they start as the original game.
 
+**Linux and macOS.** `AnimalParadeLauncher` shows the same page in the computer's own browser: it
+serves it at `http://127.0.0.1:<port>/<random key>/` (only on this computer, and only to that
+address), takes the page's messages at `message` and sends its own at `events` as they happen. It
+runs `play.sh --no-start` instead of `play.ps1`, asks for the disc with zenity or kdialog (the
+Finder on macOS), and ends when the page says exit, when the game starts, or a minute after the
+page was closed. What it does with the messages is `host/launcher_core.cpp`, the same as on Windows.
+
 **Mods and Cheats tabs.** Both list switches from `[mods]` in `Config.toml` (the list is `MODS` in
-`web/launcher.js` and `kMods` in `host/launcher.cpp`): a mod in the `cheats` group shows on the
+`web/launcher.js` and `kMods` in `host/launcher_core.cpp`): a mod in the `cheats` group shows on the
 Cheats tab, every other one on the Mods tab, each tab with its own count of how many are on. They
 take effect the next time the game starts.
 
 **Controls tab.** Each Wii Remote and Nunchuk button (and fast-forward) has a key and a controller
 button: choose a row, press Enter, then press the key or the controller button. Keys go to
 `UserData\keyboard_bindings.dat`, the file the game's input library keeps (its layout is described
-in `host/launcher.cpp`); controller buttons go to `[controller]` in `Config.toml`, and
+in `host/launcher_core.cpp`); controller buttons go to `[controller]` in `Config.toml`, and
 fast-forward's to `[speed]`. The game reads both at start, and F10 > Controls changes the same ones.
 
 **Try the page in a browser.** Open `web/index.html`: without the program around it the page
 pretends to prepare, so the design can be looked at and clicked through.
 
-**Build.** In CI the package workflows run `build.ps1 -Package <package folder>`. By hand, from a
-package folder: `powershell -File launcher\build.ps1 -Package C:\HMAP`. After changing a drawing,
+**Build.** In CI the package workflows run `build.ps1 -Package <package folder>` (Windows) or
+`build.sh <package folder>` (Linux, macOS). By hand, from a package folder:
+`powershell -File launcher\build.ps1 -Package C:\HMAP`, or `launcher/build.sh ~/HMAP`. After changing a drawing,
 run `python launcher/tools/make_animals_js.py`.
 
 ---
@@ -58,21 +69,30 @@ contesta con el estado del juego; la lista de mensajes está al principio de `we
 script que siempre corrió `play.cmd`, oculto, y convierte sus líneas en los tres pasos de la
 página. Los ajustes van a `UserData\Config.toml`; la primera vez empiezan como el juego original.
 
+**Linux y macOS.** `AnimalParadeLauncher` muestra la misma página en el navegador de la
+computadora: la sirve en `http://127.0.0.1:<puerto>/<clave al azar>/` (solo en esta computadora y
+solo a esa dirección), recibe los mensajes de la página en `message` y le manda los suyos en
+`events` en cuanto pasan. Corre `play.sh --no-start` en lugar de `play.ps1`, pide el disco con
+zenity o kdialog (el Finder en macOS) y termina cuando la página dice salir, cuando abre el juego o
+un minuto después de cerrar la página. Lo que hace con los mensajes está en
+`host/launcher_core.cpp`, igual que en Windows.
+
 **Pestañas Mods y Trucos.** Las dos muestran interruptores de `[mods]` en `Config.toml` (la lista
-es `MODS` en `web/launcher.js` y `kMods` en `host/launcher.cpp`): un mod del grupo `cheats` sale en
+es `MODS` en `web/launcher.js` y `kMods` en `host/launcher_core.cpp`): un mod del grupo `cheats` sale en
 la pestaña Trucos y todos los demás en la pestaña Mods, cada pestaña con su propia cuenta de cuántos
 están activados. Se aplican la próxima vez que se abre el juego.
 
 **Pestaña Controles.** Cada botón del Wii Remote y del Nunchuk (y el avance rápido) tiene una tecla
 y un botón del control: eliges una fila, Enter, y presionas la tecla o el botón del control. Las
 teclas van a `UserData\keyboard_bindings.dat`, el archivo que guarda la biblioteca de entrada del
-juego (su formato está descrito en `host/launcher.cpp`); los botones del control van a
+juego (su formato está descrito en `host/launcher_core.cpp`); los botones del control van a
 `[controller]` en `Config.toml`, y los del avance rápido a `[speed]`. El juego los lee al iniciar, y
 F10 > Controles cambia los mismos.
 
 **Probar la página en un navegador.** Abre `web/index.html`: sin el programa alrededor, la página
 finge que prepara, para poder ver el diseño y probarlo.
 
-**Compilar.** En CI, los workflows de los paquetes corren `build.ps1 -Package <carpeta>`. A mano,
-desde un paquete: `powershell -File launcher\build.ps1 -Package C:\HMAP`. Después de cambiar un
+**Compilar.** En CI, los workflows de los paquetes corren `build.ps1 -Package <carpeta>` (Windows)
+o `build.sh <carpeta>` (Linux, macOS). A mano, desde un paquete:
+`powershell -File launcher\build.ps1 -Package C:\HMAP`, o `launcher/build.sh ~/HMAP`. Después de cambiar un
 dibujo, corre `python launcher/tools/make_animals_js.py`.
