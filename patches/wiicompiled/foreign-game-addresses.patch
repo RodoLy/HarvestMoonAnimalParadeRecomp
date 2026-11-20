@@ -3346,10 +3346,10 @@ index 0000000..80d1ae0
 +FOREIGN_GAME_WRAPPER(RBIEE9, 800CFB30, AnimalParadePlayerUpdate);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..2cb1af8
+index 0000000..3dee0f2
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1382 @@
+@@ -0,0 +1,1403 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -4478,81 +4478,102 @@ index 0000000..2cb1af8
 +    return changed == 2 ? data : std::string();
 +}
 +
-+// A Harvest King's birth scene (loveGod/GOD_L000016.opb or GOD_L000030.opb) for a man: the
-+// player's motion 0x93 (holding the belly) becomes 0x8D (the player's cheer), wherever the scene
-+// loads (0x08F) or plays (0x08B: who, motion, 1, the motion after it) it, and the drops of sweat
-+// over the player (0x28D: a number, who, effect 0x6D) become effect 0x74, the yellow sparkles of
-+// glad surprise. And after the fade the player is not in bed as if he had given birth: where the
-+// scene puts him into the bed (0x087 at x 16.5, y 0, z 2.2, turned 0 by 0x091, and motion 0x128,
-+// lying down), he stands in front of the King and cheers. After the fade the King is at x 13.5,
-+// z 2.6, facing +x (turned 271), holding the baby out towards where the bed is; the player stands
-+// at x 15.3, z 2.4, between the King and the bed, turned 85 to face him (90 faces -x, 0 faces +z).
-+// The spot was chosen by trying it in the game: there the shot of the bed shows the two face to
-+// face, and the King's close-ups show the baby with the player's shoulder at the side instead of
-+// his head in the middle. Empty if the scene is not as expected.
-+constexpr float kStandX = 15.3f;
-+constexpr float kStandZ = 2.4f;
-+constexpr float kStandTurn = 85.0f;
-+
++// A Harvest King's birth scene (loveGod/GOD_L000016.opb or GOD_L000030.opb) for a man. Before the
++// fade the player feels ill; after it the game has him in bed, as the one who gave birth, and the
++// King comes to the bedside with the baby. For a man the copy changes:
++// - the player's motion 0x93 (holding the belly) becomes 0x8D (the player's cheer), wherever the
++//   scene loads (0x08F) or plays (0x08B: who, motion, 1, the motion after it) it, and the drops of
++//   sweat over him (0x28D: a number, who, effect 0x6D) become effect 0x74, the yellow sparkles of
++//   glad surprise;
++// - after the fade nobody goes to the bed. The scene is staged like the mod's own Goddess scene
++//   in the same house (BuildScene): the player stands where he stood before the fade (0x087 into
++//   the bed becomes x 13.835, z 3.383, turned 90 to face -x), the King and the baby stand in
++//   front of him where the King stood before (0x086 at x 12.516, z 3.650 and x 12.5, z 3.7, turned
++//   272.8 to face him), the lying motion 0x128 becomes the cheer, and every shot after the fade is
++//   kWholeRoom, the shot from beside the two that shows them face to face. (Tried in the game: any
++//   spot near the bed left the player on it or hidden behind the King in the original shots.)
++// Empty if the scene is not as expected.
 +std::string KingBirthForMen(std::string data) {
 +    if (data.size() < 0x1C || data.compare(0, 4, "OPAL") != 0) {
 +        return {};
 +    }
++    constexpr uint32_t kKing = 60;
 +    const uint32_t table = ReadBigEndian32(data, 0xC);
 +    const uint32_t code = ReadBigEndian32(data, 0x10);
 +    const uint32_t count = ReadBigEndian32(data, 0x14);
 +    if (table + 4 * size_t(count) > data.size()) {
 +        return {};
 +    }
-+    int changed = 0, placed = 0, turned = 0, stood = 0;
++    // A float argument is two words, 0x02000000 and its bits: the n-th float after "who" is at
++    // at + 12 + 8n.
++    const auto putFloat = [&](size_t at, int n, float value) {
++        if (at + 16 + 8 * size_t(n) <= data.size() && ReadBigEndian32(data, at + 8 + 8 * size_t(n)) == 0x02000000u) {
++            PutBigEndian32(data, at + 12 + 8 * size_t(n), Bits(value));
++        }
++    };
++    int cheers = 0, placed = 0, stood = 0;
++    bool afterFade = false;
 +    for (uint32_t i = 0; i < count; ++i) {
 +        const size_t at = code + ReadBigEndian32(data, table + 4 * size_t(i));
 +        if (at + 12 > data.size()) {
 +            return {};
 +        }
 +        const uint32_t command = ReadBigEndian32(data, at) & 0xFFF;
++        const uint32_t who = ReadBigEndian32(data, at + 4);
++        const bool baby = who == kFirstChild || who == kSecondChild;
 +        if (command == 0x28D && at + 16 <= data.size() && ReadBigEndian32(data, at + 8) == kPlayer &&
 +            ReadBigEndian32(data, at + 12) == 0x6D) {
 +            PutBigEndian32(data, at + 12, 0x74);
 +            continue;
 +        }
-+        if (ReadBigEndian32(data, at + 4) != kPlayer) {
++        if ((command == 0x08F || command == 0x08B) && who == kPlayer) {
++            for (const size_t word : {at + 8, at + 16}) {
++                if ((word == at + 8 || command == 0x08B) && word + 4 <= data.size() &&
++                    ReadBigEndian32(data, word) == 0x93) {
++                    PutBigEndian32(data, word, 0x8D);
++                    ++cheers;
++                }
++            }
++            // Lying down: the cheer instead, then standing (motion 0).
++            if (command == 0x08B && at + 20 <= data.size() && ReadBigEndian32(data, at + 8) == 0x128) {
++                PutBigEndian32(data, at + 8, 0x8D);
++                PutBigEndian32(data, at + 16, 0x00);
++                ++stood;
++            }
 +            continue;
 +        }
-+        // Into the bed: who, then x, y and z, each a float (0x02000000 and its bits).
-+        if (command == 0x087 && at + 32 <= data.size() && ReadBigEndian32(data, at + 8) == 0x02000000u &&
-+            ReadBigEndian32(data, at + 24) == 0x02000000u) {
-+            PutBigEndian32(data, at + 12, Bits(kStandX));
-+            PutBigEndian32(data, at + 28, Bits(kStandZ));
++        // Into the bed: the fade is over, and the player stays on his feet where he stood.
++        if (command == 0x087 && who == kPlayer) {
++            putFloat(at, 0, 13.835f);
++            putFloat(at, 2, 3.383f);
++            afterFade = true;
 +            ++placed;
 +            continue;
 +        }
-+        // Its turn right after (0x091: who and three angles), 0 there.
-+        if (command == 0x091 && placed == 1 && turned == 0 && at + 32 <= data.size() &&
-+            ReadBigEndian32(data, at + 20) == 0 && ReadBigEndian32(data, at + 16) == 0x02000000u) {
-+            PutBigEndian32(data, at + 20, Bits(kStandTurn));
-+            ++turned;
++        if (!afterFade) {
 +            continue;
 +        }
-+        // Lying down: the cheer instead, then standing (motion 0).
-+        if (command == 0x08B && at + 20 <= data.size() && ReadBigEndian32(data, at + 8) == 0x128) {
-+            PutBigEndian32(data, at + 8, 0x8D);
-+            PutBigEndian32(data, at + 16, 0x00);
-+            ++stood;
-+            continue;
-+        }
-+        if (command != 0x08F && command != 0x08B) {
-+            continue;
-+        }
-+        for (const size_t word : {at + 8, at + 16}) {
-+            if ((word == at + 8 || command == 0x08B) && word + 4 <= data.size() &&
-+                ReadBigEndian32(data, word) == 0x93) {
-+                PutBigEndian32(data, word, 0x8D);
-+                ++changed;
++        if (command == 0x091 && (who == kPlayer || who == kKing || baby)) {
++            putFloat(at, 1, who == kPlayer ? 90.064f : 272.834f);
++        } else if (command == 0x086 && who == kKing) {
++            putFloat(at, 0, 12.516f);
++            putFloat(at, 1, 3.650f);
++        } else if (command == 0x086 && baby) {
++            putFloat(at, 0, 12.500f);
++            putFloat(at, 1, 3.700f);
++        } else if (command == 0x0C2 || command == 0x0C3) {
++            // The camera's position (0x0C2) or aim (0x0C3): three floats from at + 4.
++            const float position[3] = {kWholeRoom.x, kWholeRoom.y, kWholeRoom.z};
++            const float aim[3] = {kWholeRoom.dx, kWholeRoom.dy, kWholeRoom.dz};
++            const float* shot = command == 0x0C2 ? position : aim;
++            for (int n = 0; n < 3; ++n) {
++                if (at + 12 + 8 * size_t(n) <= data.size() && ReadBigEndian32(data, at + 4 + 8 * size_t(n)) == 0x02000000u) {
++                    PutBigEndian32(data, at + 8 + 8 * size_t(n), Bits(shot[n]));
++                }
 +            }
 +        }
 +    }
-+    return changed != 0 && placed == 1 && turned == 1 && stood == 1 ? data : std::string();
++    return cheers != 0 && placed == 1 && stood == 1 ? data : std::string();
 +}
 +
 +void PrepareAdoption() {
