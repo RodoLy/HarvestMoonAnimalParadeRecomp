@@ -234,10 +234,10 @@ index 0000000..12f6789
 +} // namespace Bluetooth
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
-index 0000000..0824700
+index 0000000..34af5c1
 --- /dev/null
 +++ b/runtime/include/game_mods.h
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,50 @@
 +#pragma once
 +
 +// Game mods: optional changes to a game, each with a switch in Config.toml [mods] (off unless its
@@ -274,6 +274,12 @@ index 0000000..0824700
 +void RegisterCheatsPanel(SettingsPanel panel);
 +bool HasCheats();
 +void DrawCheats();
++
++// A mod that uses the right stick itself (the free camera): the game then never gets it as the
++// D-pad.
++void SetRightStickTaken(bool taken);
++
++bool RightStickTaken();
 +
 +// A mod's preparation: registered at startup by each mod's source file.
 +using PrepareFn = void (*)();
@@ -657,7 +663,7 @@ index e3ba175..46585bb 100644
 +        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
 +        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..c661256 100644
+index ea5a12b..74add26 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
 @@ -51,6 +51,11 @@ struct RuntimeUserConfig {
@@ -672,18 +678,20 @@ index ea5a12b..c661256 100644
      std::optional<uint32_t> disabledPostProcessingPaths;
      std::optional<float> audioVolume;
      std::optional<float> audioMusicVolume;
-@@ -86,6 +91,10 @@ struct RuntimeUserConfig {
+@@ -86,6 +91,12 @@ struct RuntimeUserConfig {
      // it here instead of copying the pack, so an asset-only update is visible on the next launch.
      std::optional<std::string> retroRewindRoot;
      std::vector<std::string> overlayRoots;
 +    // [mods]: one line per game mod, name = true to turn it on. Every mod starts off. A mod with a
-+    // setting has a number instead (a speed, say): on with that value.
++    // setting has a number instead (a speed, say): on with that value. A line with words (a
++    // controller button's name, say) is a setting of a mod, kept as written.
 +    std::map<std::string, bool, std::less<>> mods;
 +    std::map<std::string, double, std::less<>> modNumbers;
++    std::map<std::string, std::string, std::less<>> modTexts;
      // Controller mappings use Wii/GameCube button names as keys and up to two
      // comma-separated SDL-style physical button names ("south", or
      // "dpad_up,left_shoulder") as values; pressing either bound button counts.
-@@ -146,6 +155,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+@@ -146,6 +157,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
  
  // Must stay in step with the backend table in main.cpp, which is what actually
  // maps these to AuroraBackend.
@@ -706,7 +714,7 @@ index ea5a12b..c661256 100644
  inline bool IsSupportedGraphicsApi(std::string_view value) {
  #if defined(__APPLE__)
      static constexpr std::array<std::string_view, 2> values{"auto", "metal"};
-@@ -168,7 +193,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
+@@ -168,7 +195,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
  // 240 was offered by an early build and is no longer supported; a saved 240 is
  // migrated to 180 at the parse site.
  inline bool IsSupportedFrameInterpolationFps(uint32_t value) {
@@ -715,7 +723,7 @@ index ea5a12b..c661256 100644
  }
  
  inline std::optional<std::filesystem::path> ExecutableDirectory() {
-@@ -298,6 +323,10 @@ inline void EnsureConfigFile() {
+@@ -298,6 +325,10 @@ inline void EnsureConfigFile() {
                "# replacement would need. Both are read once, at startup.\n"
                "texture_replacements = false\n"
                "texture_dumps = false\n\n"
@@ -726,7 +734,7 @@ index ea5a12b..c661256 100644
                "[audio]\n"
                "volume = 1.0\n"
                "music_volume = 1.0\n"
-@@ -464,6 +493,39 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
+@@ -464,6 +495,41 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
      config.gxWorker = FindConfigValue<bool>(document, "video", "gx_worker");
      config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
      config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
@@ -756,6 +764,8 @@ index ea5a12b..c661256 100644
 +                                                             : value.as_floating();
 +                    config.mods[name] = number > 0.0;
 +                    config.modNumbers[name] = number;
++                } else if (value.is_string()) {
++                    config.modTexts[name] = value.as_string();
 +                }
 +            }
 +        }
@@ -766,7 +776,7 @@ index ea5a12b..c661256 100644
      config.textureReplacements = FindConfigValue<bool>(document, "video", "texture_replacements");
      config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
      if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-@@ -665,6 +727,14 @@ inline bool SetDisplayMode(std::string value) {
+@@ -665,6 +731,14 @@ inline bool SetDisplayMode(std::string value) {
      return WriteSetting("video", "display_mode", FormatString(value));
  }
  
@@ -781,7 +791,7 @@ index ea5a12b..c661256 100644
  inline bool SetSkipUnreadyPipelines(bool value) {
      Mutable().skipUnreadyPipelines = value;
      return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
-@@ -680,6 +750,34 @@ inline bool SetDisableCopyFilter(bool value) {
+@@ -680,6 +754,34 @@ inline bool SetDisableCopyFilter(bool value) {
      return WriteSetting("video", "disable_copy_filter", value ? "true" : "false");
  }
  
@@ -816,7 +826,7 @@ index ea5a12b..c661256 100644
  inline bool SetShowFps(bool value) {
      Mutable().showFps = value;
      return WriteSetting("video", "show_fps", value ? "true" : "false");
-@@ -979,6 +1077,57 @@ inline bool DisableCopyFilter(bool fallback = true) {
+@@ -979,6 +1081,64 @@ inline bool DisableCopyFilter(bool fallback = true) {
      return Get().disableCopyFilter.value_or(fallback);
  }
  
@@ -856,6 +866,13 @@ index ea5a12b..c661256 100644
 +    const auto& numbers = Get().modNumbers;
 +    const auto found = numbers.find(name);
 +    return found != numbers.end() ? found->second : fallback;
++}
++
++// A game mod's setting when its line in [mods] is words, or `fallback` when it is not.
++inline std::string ModText(std::string_view name, std::string fallback) {
++    const auto& texts = Get().modTexts;
++    const auto found = texts.find(name);
++    return found != texts.end() ? found->second : std::move(fallback);
 +}
 +
 +inline bool SetModEnabled(std::string_view name, bool value) {
@@ -1675,10 +1692,10 @@ index 0000000..1d2a9f9
 +} // namespace Bluetooth
 diff --git a/runtime/src/hle/bluetooth/emulated_remote_host.cpp b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
 new file mode 100644
-index 0000000..e922e34
+index 0000000..b0f07c3
 --- /dev/null
 +++ b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
-@@ -0,0 +1,205 @@
+@@ -0,0 +1,211 @@
 +// Routes the first remote slot to the emulated Wii Remote (emulated_remote.h) for a foreign game while
 +// no real remote is attached there, and feeds it the PC's controls: every GameCube pad as the runtime's
 +// input bindings map it (F10), the keyboard and any controller together, and the mouse as the pointer,
@@ -1687,6 +1704,7 @@ index 0000000..e922e34
 +#include "bluetooth/emulated_remote_host.h"
 +
 +#include "bluetooth/emulated_remote.h"
++#include "game_mods.h"
 +#include "guest_abi/guest_region.h"
 +#include "input_bindings.h"
 +#include "runtime_log.h"
@@ -1741,6 +1759,11 @@ index 0000000..e922e34
 +        further(pad.substickX, pad.substickY, status.substickX, status.substickY);
 +        pad.triggerL = std::max(pad.triggerL, status.triggerL);
 +        pad.triggerR = std::max(pad.triggerR, status.triggerR);
++    }
++    // A game mod that uses the right stick itself (hle/game_mods/game_mods.h) keeps it from the game.
++    if (GameMods::RightStickTaken()) {
++        pad.substickX = 0;
++        pad.substickY = 0;
 +    }
 +    return pad;
 +}
@@ -2138,12 +2161,682 @@ index 0000000..9ed4312
 +// Keeps the money and the stamina as the cheats that are on want them. Once a frame, from the
 +// player's update (player_speed.cpp).
 +void AnimalParadeCheatsEveryFrame();
+diff --git a/runtime/src/hle/game_mods/animal_parade_player.h b/runtime/src/hle/game_mods/animal_parade_player.h
+new file mode 100644
+index 0000000..bbd9a1f
+--- /dev/null
++++ b/runtime/src/hle/game_mods/animal_parade_player.h
+@@ -0,0 +1,6 @@
++// Harvest Moon: Animal Parade: the player, as the player's update last saw it (player_speed.cpp).
++#pragma once
++
++// The player's feet (x, y, z), when the game updated the player in the last moments; false while it
++// does not (a menu, a scene that holds the player, a change of area).
++bool AnimalParadePlayerPosition(float feet[3]);
+diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
+new file mode 100644
+index 0000000..84a5a98
+--- /dev/null
++++ b/runtime/src/hle/game_mods/free_camera.cpp
+@@ -0,0 +1,652 @@
++// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
++// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
++//   [mods]
++//   free_camera = true
++//
++// Controls, outdoors only (in buildings and the mines the game's camera stays, because their rooms
++// are boxes with no ceiling or back walls; and in scenes, which move the camera themselves):
++//   right stick                turn the camera around the player, and tilt it up and down
++//   R3 (right stick pressed)   put the camera back behind the player, as the game had it
++//   keyboard: J and L turn, I and K tilt, U puts it back
++// Each of the five (left, right, up, down, back) can have another key and another controller button
++// or stick direction, chosen in the launcher (Controls) and kept in [mods]:
++//   free_camera_left_key = 13            an SDL scancode, as in the launcher; -1 none
++//   free_camera_left_button = "right_stick_left"   a [controller] name: a button ("left_shoulder"),
++//                                        a stick direction ("right_stick_up"), or "disabled"
++// and the same for right, up, down and reset. A stick direction turns the camera as far as it is
++// pushed; a button or a key turns it at full speed.
++// Talking with someone (its own setting, on unless Config.toml says
++//   free_camera_talk = false
++// ): the game's camera, as in the original game, while the talk lasts; then the player's camera
++// again, where it was.
++// Walking follows the picture: pushing the left stick up walks away from the camera, wherever it is.
++// The game does that itself: it turns the stick by the engine camera's yaw, the one this mod writes.
++// While the mod is on the game never sees the right stick (the port otherwise gives it the C-stick
++// as the D-pad).
++//
++// How it works. The engine's camera is an AA_CCamera (vtable 0x8040DDD8, 0x820 bytes):
++//   +0x08, +0x0C, +0x10   the eye, x y z
++//   +0x14                 the pitch, in radians: positive looks down
++//   +0x18                 the yaw: 0 looks along -z, a positive yaw turns to the right (+x)
++//   +0x1C                 the roll
++// The game's camera code (BB_CCamera) writes the eye and the angles every frame, following the
++// player, and the engine turns them into the picture's view at 0x8005277C, reached through
++// 0x80052778 (the frame's layers call it, 0x8024C4E0..0x8024C510). Just before that, once the right
++// stick has been moved, this mod writes its own camera there: its own angles and distance around a
++// point just above the player (taken from the game's camera at that moment, so the picture does
++// not jump). Places where the game's camera holds a set angle do not change it. Until the stick
++// moves, after R3, after a change of area, indoors, and while no player is being updated, the
++// game's own camera is what shows.
++//
++// Walls. The engine's collision manager (aa_CollisionManager.cpp; at 0x804D71DC: +0x04 the count,
++// +0x08 the entries, 0xA4 bytes each) keeps a shape for everything the player bumps into: a box for
++// a wall or a fence (+0x38 = 2), a cylinder for the people and animals (3), and outdoors a mesh of
++// triangles for each group of buildings (4). Each says what may hit it at +0x04: 0x2 the meshes,
++// 0x4 the people and animals, 0xFFFF the walls. The game asks it whether anything stands between two
++// points with 0x80040DF4 (r3 and r4 the two points, r5 what may count; r3 back 1 when something
++// does, the nearest point it touches at 0x804D71DC + 0x0C) - the sun uses it to know when it is
++// hidden. This mod asks it the same about the player and the camera, leaving out the people and
++// animals and the boxes, and pulls the camera in front of whatever is in between: it never ends up
++// behind a house. The boxes are left out because they are not what one sees: around the farm, by
++// the beach, a wooden fence a little over knee high has a box as tall as a wall, so the player
++// cannot climb it, and the camera came in close in front of a fence it could see over (while the
++// question runs, each box's +0x54, "in use", is 0; it is put back right after). Something small
++// does not count either: in town the fences, their pillars and the lamp posts are in the same mesh
++// as the houses, so a small thing is told apart by asking again with the line moved a little -
++// higher (kLowThings), to one side or the other (kThinThings), or both. If one of those lines finds
++// nothing, the thing is low or thin, and the camera stays where it is, looking over it or past it;
++// a house stops all of them.
++//
++// Among many houses the nearest wall changes from one frame to the next (the line grazes an edge,
++// then misses it), so the camera keeps the nearest wall of the last moment (kWallMemory) and moves
++// to its new distance smoothly instead of at once: it does not tremble.
++//
++// The sun's glare. The sun (0x80248B68 every frame) ends with 0x80249048, which works out how much
++// the camera looks into the sun and lays its glare over the picture. The game's own cameras never
++// face the sun, but a turned one can, and then the picture washes out. While this mod holds the
++// camera, 0x80249048 is skipped, so the glare stays as it was when the right stick took the camera.
++//
++// The sky (0x800F8718 every frame) works out the light it lays on the ground from the camera: the
++// sky's own turn (at 0x80501FCC) from the camera's view (at +0x3C0 of the camera at
++// *0x80501E78), and how strong the light is from how much that camera looks toward the sun (through
++// 0x800531BC). The game's own cameras never look toward the sun from near the ground; a turned one
++// does, and the grass washes out nearly white. So while this mod holds the camera, the sky works
++// it out from the view of the game's camera as it was when the right stick took it (turned, from
++// where the mod's camera stands), and the camera gets its own view back right after. The ground
++// then reads the sky's light the way the sky laid it out for the game's camera.
++//
++// Talks. The game's camera system keeps what it is doing at 0x805B0710, a state of the table at
++// 0x804A8818 (each entry: the state, what starts it, what runs it every frame): 2 follows the player
++// in the field, 3 goes into a talk, 4 holds it, and 5 comes back out of it and goes back to 2. While
++// it is 3, 4 or 5, this mod leaves the game's camera as it is. Between two text boxes of one talk
++// the game goes back to 2 for a moment; so the player's camera only comes back once it has stayed
++// 2 for a while (kAfterTalk), not as a flash between the boxes.
++//
++// The current area is game variables 0x36 (its kind: 0 the outdoors, 1 the buildings, 2 the mines)
++// and 0x37 (which one), at the game's state + 0x148C and + 0x1490 (the getter is 0x8010B154).
++// The player comes from the player's update (player_speed.cpp).
++
++#include "animal_parade_player.h"
++#include "controller_button_names.h"
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "memory.h"
++#include "runtime_config.h"
++#include "runtime_log.h"
++
++#include <SDL3/SDL_gamepad.h>
++#include <SDL3/SDL_keyboard.h>
++
++#include <algorithm>
++#include <array>
++#include <chrono>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <iostream>
++#include <string>
++
++// Its own namespace: the runtime is built in unity batches, where another mod's names can share this
++// file's translation unit.
++namespace FreeCamera {
++namespace {
++
++constexpr uint32_t kCameraVtable = 0x8040DDD8u;
++constexpr uint32_t kEye = 0x08;
++constexpr uint32_t kPitch = 0x14;
++constexpr uint32_t kYaw = 0x18;
++
++constexpr uint32_t kGameState = 0x806B3B80u;
++constexpr uint32_t kAreaKind = 0x148Cu;   // game variable 0x36
++constexpr uint32_t kAreaId = 0x1490u;     // game variable 0x37
++constexpr uint32_t kOutdoors = 0;
++
++constexpr float kTurnSpeed = 2.4f;        // radians a second, stick all the way
++constexpr float kTiltSpeed = 1.2f;
++constexpr float kLowestPitch = 0.05f;     // nearly level with the ground
++constexpr float kHighestPitch = 1.40f;    // nearly straight down
++constexpr float kDeadZone = 0.2f;
++
++constexpr uint32_t kCollisionManager = 0x804D71DCu;
++constexpr uint32_t kShapeSize = 0xA4;
++constexpr uint32_t kSomethingBetween = 0x80040DF4u;
++constexpr uint32_t kNotCharacters = 0xFFFBu;   // every shape but the people and animals (0x4)
++constexpr float kClosest = 1.5f;          // the nearest the camera comes to the point it looks at
++constexpr float kWallGap = 0.3f;          // how far in front of a wall the camera stops
++constexpr float kBackOut = 2.5f;          // how fast it goes back out once the wall is gone, a second
++constexpr float kPullIn = 10.0f;          // how quickly it comes in front of a wall (a share a second)
++constexpr float kLowThings = 1.2f;        // a thing this much lower than the line is not a wall
++constexpr float kThinThings = 0.7f;       // nor one the line misses this far to one side
++constexpr auto kWallMemory = std::chrono::milliseconds(400);
++constexpr float kLookHeight = 0.7f;       // the game's cameras look this far above the player's feet
++constexpr float kFollowing = 1.5f;        // how close to the player's head the game's line of sight
++                                          // passes while it follows the player
++constexpr float kScene = 4.0f;            // farther than this, the game's camera is a scene's
++constexpr uint32_t kSkyCamera = 0x80501E78u;  // the camera the sky works its light out from (see above)
++constexpr uint32_t kSkyCameraView = 0x3C0;    // and that camera's view: 3 rows of 4 floats
++constexpr uint32_t kCameraMode = 0x805B0710u;  // the game's camera system: what it is doing
++constexpr uint32_t kIntoTalk = 3;              // 3 into a talk, 4 in it, 5 out of it
++constexpr uint32_t kOutOfTalk = 5;
++constexpr auto kAfterTalk = std::chrono::milliseconds(500);
++
++bool Enabled() {
++    static const bool enabled = RuntimeConfigFile::ModEnabled("free_camera");
++    return enabled;
++}
++
++// "free_camera_talk": the game's camera while talking. On unless its line says false.
++bool GameCameraInTalks() {
++    static const bool on = [] {
++        const auto& mods = RuntimeConfigFile::Get().mods;
++        const auto found = mods.find("free_camera_talk");
++        return found == mods.end() || found->second;
++    }();
++    return on;
++}
++
++// In a talk, or out of one for less than kAfterTalk.
++bool Talking() {
++    static std::chrono::steady_clock::time_point lastTalk;
++    const auto now = std::chrono::steady_clock::now();
++    const uint32_t mode = Memory::Read32(kCameraMode);
++    if (mode >= kIntoTalk && mode <= kOutOfTalk) {
++        lastTalk = now;
++        return true;
++    }
++    return now - lastTalk < kAfterTalk;
++}
++
++float ReadFloat(uint32_t address) {
++    const uint32_t bits = Memory::Read32(address);
++    float value;
++    std::memcpy(&value, &bits, sizeof(value));
++    return value;
++}
++
++void WriteFloat(uint32_t address, float value) {
++    uint32_t bits;
++    std::memcpy(&bits, &value, sizeof(bits));
++    Memory::Write32(address, bits);
++}
++
++struct Input {
++    float turn = 0, tilt = 0;   // the right stick (or J L, I K, or what was chosen instead)
++    bool reset = false;         // R3 (or U, or what was chosen instead)
++};
++
++// One of the five controls: a key and a controller button or stick direction.
++struct Control {
++    int key = -1;                                  // an SDL scancode, or -1
++    uint32_t button = PAD_NATIVE_BUTTON_DISABLED;  // a button, or a stick direction (PADIsAxisButton)
++};
++enum ControlId { kLeft, kRight, kUp, kDown, kReset, kControlCount };
++
++// The controls as chosen in Config.toml, or as they start.
++const std::array<Control, kControlCount>& Controls() {
++    static const std::array<Control, kControlCount> controls = [] {
++        struct Start {
++            const char* name;
++            int key;
++            const char* button;
++        };
++        const Start starts[kControlCount] = {
++            {"left", SDL_SCANCODE_J, "right_stick_left"},
++            {"right", SDL_SCANCODE_L, "right_stick_right"},
++            {"up", SDL_SCANCODE_I, "right_stick_up"},
++            {"down", SDL_SCANCODE_K, "right_stick_down"},
++            {"reset", SDL_SCANCODE_U, "right_stick"},
++        };
++        std::array<Control, kControlCount> chosen;
++        for (int i = 0; i < kControlCount; ++i) {
++            const std::string prefix = std::string("free_camera_") + starts[i].name;
++            chosen[i].key = static_cast<int>(RuntimeConfigFile::ModNumber(prefix + "_key", starts[i].key));
++            const std::string name = RuntimeConfigFile::ModText(prefix + "_button", starts[i].button);
++            const auto* item = ControllerNames::FindNativeButton(name);
++            chosen[i].button = item != nullptr ? item->nativeButton : PAD_NATIVE_BUTTON_DISABLED;
++        }
++        return chosen;
++    }();
++    return controls;
++}
++
++// How far a controller's control is pushed, 0 to 1: a stick direction as far as the stick is pushed
++// that way (nothing inside kDeadZone), a button or trigger 1 while it is held.
++float Pushed(SDL_Gamepad* pad, uint32_t button) {
++    if (button == PAD_NATIVE_BUTTON_DISABLED || button == PAD_NATIVE_BUTTON_INVALID) {
++        return 0.0f;
++    }
++    if (PADIsAxisButton(button)) {
++        float value = static_cast<float>(SDL_GetGamepadAxis(pad, static_cast<SDL_GamepadAxis>(PADAxisButtonAxis(button)))) /
++                      32767.0f;
++        if (PADAxisButtonNegative(button)) {
++            value = -value;
++        }
++        return value < kDeadZone ? 0.0f : std::min(value, 1.0f);
++    }
++    return SDL_GetGamepadButton(pad, static_cast<SDL_GamepadButton>(button)) ? 1.0f : 0.0f;
++}
++
++// The controls, straight from SDL: every controller, and the keyboard while the game has it.
++Input ReadInput() {
++    const auto& controls = Controls();
++    Input in;
++    auto keep = [](float& into, float value) { if (std::fabs(value) > std::fabs(into)) into = value; };
++    int count = 0;
++    SDL_JoystickID* ids = SDL_GetGamepads(&count);
++    for (int i = 0; ids != nullptr && i < count; ++i) {
++        SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
++        if (pad == nullptr) {
++            continue;
++        }
++        keep(in.turn, Pushed(pad, controls[kRight].button) - Pushed(pad, controls[kLeft].button));
++        keep(in.tilt, Pushed(pad, controls[kDown].button) - Pushed(pad, controls[kUp].button));
++        in.reset |= Pushed(pad, controls[kReset].button) > 0.5f;
++    }
++    SDL_free(ids);
++    if (SDL_GetKeyboardFocus() != nullptr) {
++        int keys = 0;
++        const bool* state = SDL_GetKeyboardState(&keys);
++        auto held = [&](ControlId id) {
++            const int key = controls[id].key;
++            return state != nullptr && key > 0 && key < keys && state[key] ? 1.0f : 0.0f;
++        };
++        keep(in.turn, held(kRight) - held(kLeft));
++        keep(in.tilt, held(kDown) - held(kUp));
++        in.reset |= held(kReset) > 0.0f;
++    }
++    return in;
++}
++
++// The camera once the right stick has taken it: its own angles and distance around the player,
++// whatever the game's camera does in that place. Until then (and after R3 or a change of area) it is
++// the game's camera.
++// The sky (see above): the view of the camera it works its light out from, the last time the
++// game's own camera was the one in the picture.
++struct SkyView {
++    bool known = false;
++    float view[3][4] = {};
++};
++SkyView g_skyView;
++bool g_shownThisFrame = false;         // the mod's camera is the one in the picture this frame
++
++struct Orbit {
++    bool taken = false;
++    uint32_t camera = 0;        // the one engine camera the stick took: no other is ever touched
++    float yaw = 0, pitch = 0;   // as the engine camera's
++    float distance = 0;         // from the point it looks at
++    float lookAt[3] = {};       // that point, from the player's feet
++    float shown = 0;            // the distance shown now: shorter while a wall is in the way
++    float wallRoom = 0;         // the room in front of the nearest wall of the last moment
++    std::chrono::steady_clock::time_point wallSeen;  // when that wall was last found
++    uint32_t areaKind = 0xFFFFFFFFu, areaId = 0xFFFFFFFFu;
++    std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
++};
++Orbit g_orbit;
++
++bool IsMainCamera(uint32_t camera) {
++    if (Memory::Read32(camera) != kCameraVtable) {
++        return false;
++    }
++    const float pitch = ReadFloat(camera + kPitch);
++    return pitch > 0.01f && pitch < 1.55f;
++}
++
++void Forward(float pitch, float yaw, float out[3]) {
++    out[0] = std::sin(yaw) * std::cos(pitch);
++    out[1] = -std::sin(pitch);
++    out[2] = -std::cos(yaw) * std::cos(pitch);
++}
++
++// Where the game's camera looks: the point on its line of sight nearest the player's head (the
++// game's cameras look a little above the player), how far along the line it is, and how far it
++// passes from the head.
++struct Sight {
++    float target[3];
++    float along;
++    float miss;
++};
++
++Sight GameSight(uint32_t camera, const float feet[3]) {
++    float eye[3], forward[3];
++    for (int i = 0; i < 3; ++i) {
++        eye[i] = ReadFloat(camera + kEye + 4 * i);
++    }
++    Forward(ReadFloat(camera + kPitch), ReadFloat(camera + kYaw), forward);
++    const float head[3] = {feet[0], feet[1] + kLookHeight, feet[2]};
++    Sight sight{};
++    for (int i = 0; i < 3; ++i) {
++        sight.along += (head[i] - eye[i]) * forward[i];
++    }
++    float miss = 0;
++    for (int i = 0; i < 3; ++i) {
++        sight.target[i] = eye[i] + forward[i] * sight.along;
++        miss += (head[i] - sight.target[i]) * (head[i] - sight.target[i]);
++    }
++    sight.miss = sight.along > 0.5f ? std::sqrt(miss) : 1e9f;
++    return sight;
++}
++
++// The right stick takes the camera where the game's camera is now: the same point, angle and
++// distance, so the picture does not jump. When the game's camera looks a little off the player
++// (after the camera was put back, it can stay that way until the next area), the point is just
++// above the player instead, seen from where the game's camera is: the picture moves a little once.
++bool Take(Orbit& o, uint32_t camera, const float feet[3], const Sight& sight) {
++    const float pitch = ReadFloat(camera + kPitch), yaw = ReadFloat(camera + kYaw);
++    float target[3] = {sight.target[0], sight.target[1], sight.target[2]};
++    float along = sight.along;
++    if (sight.miss > kFollowing) {
++        const float head[3] = {feet[0], feet[1] + kLookHeight, feet[2]};
++        float eyeToHead = 0;
++        for (int i = 0; i < 3; ++i) {
++            target[i] = head[i];
++            const float d = head[i] - ReadFloat(camera + kEye + 4 * i);
++            eyeToHead += d * d;
++        }
++        along = std::max(kClosest, std::sqrt(eyeToHead));
++        RT_LOG(RT_TAG_VI) << "[free-camera] taken with the game's camera " << sight.miss
++                          << " off the player" << std::endl;
++    }
++    o.taken = true;
++    o.camera = camera;
++    o.yaw = yaw;
++    o.pitch = std::clamp(pitch, kLowestPitch, kHighestPitch);
++    o.distance = along;
++    o.shown = along;
++    o.wallRoom = along;
++    for (int i = 0; i < 3; ++i) {
++        o.lookAt[i] = target[i] - feet[i];
++    }
++    return true;
++}
++
++// How far along the line from `from` (0) to `to` (1) the first wall stands, or 1 when none does:
++// the game's own question (0x80040DF4), asked with a few bytes of the game's stack for the two
++// points. The game's registers are put back afterwards, as they were.
++float FirstWall(CpuContext* ctx, const float from[3], const float to[3]) {
++    // Without the boxes: each one is out of use (+0x54 = 0) while the question runs.
++    const uint32_t count = Memory::Read32(kCollisionManager + 0x04);
++    const uint32_t shapes = Memory::Read32(kCollisionManager + 0x08);
++    const bool known = shapes != 0 && count <= 0x1000 && Memory::Contains(shapes, count * kShapeSize);
++    uint32_t inUse[0x100];
++    const uint32_t hidden = known ? std::min<uint32_t>(count, 0x100) : 0;
++    for (uint32_t i = 0; i < hidden; ++i) {
++        const uint32_t shape = shapes + i * kShapeSize;
++        inUse[i] = Memory::Read32(shape + 0x54);
++        if (Memory::Read32(shape + 0x38) == 2) {
++            Memory::Write32(shape + 0x54, 0);
++        }
++    }
++    const CpuContext saved = *ctx;
++    const uint32_t stack = (saved.gpr[1] - 0x60u) & ~0xFu;
++    Memory::Write32(stack, saved.gpr[1]);  // the back chain, as a real call would leave it
++    for (int i = 0; i < 3; ++i) {
++        WriteFloat(stack + 0x10 + 4 * i, from[i]);
++        WriteFloat(stack + 0x20 + 4 * i, to[i]);
++    }
++    ctx->gpr[1] = stack;
++    ctx->gpr[3] = stack + 0x10;
++    ctx->gpr[4] = stack + 0x20;
++    ctx->gpr[5] = kNotCharacters;
++    GuestFunctions::BaseTranslation(kSomethingBetween)(ctx);
++    const bool hit = ctx->gpr[3] != 0;
++    float point[3];
++    for (int i = 0; i < 3; ++i) {
++        point[i] = ReadFloat(kCollisionManager + 0x0C + 4 * i);
++    }
++    *ctx = saved;
++    for (uint32_t i = 0; i < hidden; ++i) {
++        Memory::Write32(shapes + i * kShapeSize + 0x54, inUse[i]);
++    }
++    if (!hit) {
++        return 1.0f;
++    }
++    float whole = 0, part = 0;
++    for (int i = 0; i < 3; ++i) {
++        whole += (to[i] - from[i]) * (to[i] - from[i]);
++        part += (point[i] - from[i]) * (point[i] - from[i]);
++    }
++    return whole > 0 ? std::clamp(std::sqrt(part / whole), 0.0f, 1.0f) : 1.0f;
++}
++
++// Whether what stands between `from` and `to` is small - a fence, a pillar, a lamp post: the same
++// line moved a little higher, a little to one side, or both, misses it. A house stops them all.
++bool SmallThing(CpuContext* ctx, const float from[3], const float to[3]) {
++    // Sideways: level with the ground, across the line.
++    float side[3] = {to[2] - from[2], 0.0f, from[0] - to[0]};
++    const float length = std::sqrt(side[0] * side[0] + side[2] * side[2]);
++    if (length > 0.0f) {
++        side[0] *= kThinThings / length;
++        side[2] *= kThinThings / length;
++    }
++    const float moves[5][3] = {
++        {0.0f, kLowThings, 0.0f},
++        {side[0], kLowThings, side[2]},
++        {-side[0], kLowThings, -side[2]},
++        {side[0], 0.0f, side[2]},
++        {-side[0], 0.0f, -side[2]},
++    };
++    for (const auto& move : moves) {
++        float movedFrom[3], movedTo[3];
++        for (int i = 0; i < 3; ++i) {
++            movedFrom[i] = from[i] + move[i];
++            movedTo[i] = to[i] + move[i];
++        }
++        if (FirstWall(ctx, movedFrom, movedTo) >= 1.0f) {
++            return true;
++        }
++    }
++    return false;
++}
++
++// Once a frame, with the main camera.
++void TurnCamera(CpuContext* ctx, uint32_t camera) {
++    Orbit& o = g_orbit;
++    const auto now = std::chrono::steady_clock::now();
++    const float dt = std::min(0.1f, std::chrono::duration<float>(now - o.last).count());
++    o.last = now;
++
++    // A new area starts with the game's camera.
++    const uint32_t state = Memory::Read32(kGameState);
++    if (state == 0 || !Memory::Contains(state, kAreaId + 4)) {
++        return;
++    }
++    const uint32_t kind = Memory::Read32(state + kAreaKind), id = Memory::Read32(state + kAreaId);
++    if (kind != o.areaKind || id != o.areaId) {
++        o.areaKind = kind;
++        o.areaId = id;
++        o.taken = false;
++    }
++    float feet[3];
++    if (kind != kOutdoors) {
++        o.taken = false;  // buildings and mines keep the game's camera
++        return;
++    }
++    if (!AnimalParadePlayerPosition(feet)) {
++        return;  // no player being updated (a menu, a scene that holds the player): the game's camera
++    }
++
++    // A scene's camera, looking away from the player: the game's, for as long as it lasts.
++    const Sight sight = GameSight(camera, feet);
++    if (sight.miss > kScene) {
++        // For the log: the stick moved, and the camera was left to a scene (at most every 2 seconds).
++        static std::chrono::steady_clock::time_point s_noted;
++        const Input in = ReadInput();
++        if ((in.turn != 0 || in.tilt != 0) && now - s_noted > std::chrono::seconds(2)) {
++            s_noted = now;
++            RT_LOG(RT_TAG_VI) << "[free-camera] left to a scene: the game's camera " << sight.miss
++                              << " off the player, " << sight.along << " away" << std::endl;
++        }
++        return;
++    }
++    // A talk: the game's own camera while it lasts, then the player's again, where it was.
++    if (o.taken && GameCameraInTalks() && Talking()) {
++        return;
++    }
++    const Input in = ReadInput();
++    if (in.reset) {
++        o.taken = false;
++    }
++    if (!o.taken && (in.turn != 0 || in.tilt != 0) && !Take(o, camera, feet, sight)) {
++        return;
++    }
++    if (!o.taken) {
++        return;
++    }
++    o.yaw = std::remainder(o.yaw + in.turn * kTurnSpeed * dt, 6.28318530718f);
++    o.pitch = std::clamp(o.pitch + in.tilt * kTiltSpeed * dt, kLowestPitch, kHighestPitch);
++
++    float forward[3], target[3], wanted[3];
++    Forward(o.pitch, o.yaw, forward);
++    for (int i = 0; i < 3; ++i) {
++        target[i] = feet[i] + o.lookAt[i];
++        wanted[i] = target[i] - forward[i] * o.distance;
++    }
++    // In front of the first wall between the player and the camera; a small thing (a fence, a
++    // pillar, a lamp post) is no wall.
++    float wall = FirstWall(ctx, target, wanted);
++    if (wall < 1.0f && SmallThing(ctx, target, wanted)) {
++        wall = 1.0f;
++    }
++    float room = std::max(kClosest, wall * o.distance - kWallGap);
++    // The nearest wall of the last moment still counts, so a line that grazes an edge every other
++    // frame does not move the camera in and out.
++    if (room <= o.wallRoom || now - o.wallSeen > kWallMemory) {
++        if (room < o.distance - kWallGap) {
++            o.wallRoom = room;
++            o.wallSeen = now;
++        } else if (now - o.wallSeen > kWallMemory) {
++            o.wallRoom = o.distance;
++        }
++    }
++    room = std::min(room, o.wallRoom);
++    // In front of a wall quickly, back out of it slowly, both without a jump.
++    o.shown = room < o.shown ? std::max(room, o.shown + (room - o.shown) * std::min(1.0f, kPullIn * dt))
++                             : std::min(room, o.shown + kBackOut * dt);
++    for (int i = 0; i < 3; ++i) {
++        WriteFloat(camera + kEye + 4 * i, target[i] - forward[i] * o.shown);
++    }
++    WriteFloat(camera + kPitch, o.pitch);
++    WriteFloat(camera + kYaw, o.yaw);
++    g_shownThisFrame = true;
++}
++
++// The sky's camera's view, as 3 rows of 4 floats.
++void ReadView(uint32_t address, float view[3][4]) {
++    for (int r = 0; r < 3; ++r) {
++        for (int c = 0; c < 4; ++c) {
++            view[r][c] = ReadFloat(address + 16 * r + 4 * c);
++        }
++    }
++}
++
++void WriteView(uint32_t address, const float view[3][4]) {
++    for (int r = 0; r < 3; ++r) {
++        for (int c = 0; c < 4; ++c) {
++            WriteFloat(address + 16 * r + 4 * c, view[r][c]);
++        }
++    }
++}
++
++// Before the sky works out its light (see above): with the game's camera in the picture, its view
++// is kept; with the mod's, the sky camera gets the game camera's turn, from where the mod's camera
++// stands, and `saved` keeps the mod's view to give back. Whether there is anything to give back.
++bool SkyBefore(float saved[3][4], uint32_t& address) {
++    if (!Enabled()) {
++        return false;
++    }
++    const uint32_t camera = Memory::Read32(kSkyCamera);
++    if (camera == 0 || !Memory::Contains(camera + kSkyCameraView, 48)) {
++        return false;
++    }
++    address = camera + kSkyCameraView;
++    SkyView& game = g_skyView;
++    if (!g_orbit.taken || !g_shownThisFrame) {
++        ReadView(address, game.view);
++        game.known = true;
++        return false;
++    }
++    if (!game.known) {
++        return false;
++    }
++    ReadView(address, saved);
++    // Where the mod's camera stands: -(turn transposed) * move. The game's turn puts it back.
++    float eye[3];
++    for (int i = 0; i < 3; ++i) {
++        eye[i] = -(saved[0][i] * saved[0][3] + saved[1][i] * saved[1][3] + saved[2][i] * saved[2][3]);
++    }
++    float view[3][4];
++    for (int r = 0; r < 3; ++r) {
++        for (int c = 0; c < 3; ++c) {
++            view[r][c] = game.view[r][c];
++        }
++        view[r][3] = -(view[r][0] * eye[0] + view[r][1] * eye[1] + view[r][2] * eye[2]);
++    }
++    WriteView(address, view);
++    return true;
++}
++
++} // namespace
++} // namespace FreeCamera
++
++// 0x80052778 (the camera in r3): the engine makes the picture's view from a camera. Every layer of
++// the frame calls it with its own camera, and the game has more than the main one that look down
++// at the world: the faces in the talk window are drawn through one of their own. Once the stick
++// has taken a camera, only that one is ever changed.
++extern "C" void AnimalParadeCameraView(CpuContext* ctx) {
++    using namespace FreeCamera;
++    if (Enabled()) {
++        GameMods::SetRightStickTaken(true);
++        const uint32_t camera = ctx->gpr[3];
++        if (g_orbit.taken ? camera == g_orbit.camera : IsMainCamera(camera)) {
++            g_shownThisFrame = false;
++            TurnCamera(ctx, camera);
++        }
++    }
++    GuestFunctions::BaseTranslation(0x80052778u)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80052778, AnimalParadeCameraView);
++
++// 0x80249048: the sun's glare over the picture (see above). Skipped while the mod holds the camera.
++extern "C" void AnimalParadeSunGlare(CpuContext* ctx) {
++    using namespace FreeCamera;
++    if (Enabled() && g_orbit.taken) {
++        return;
++    }
++    GuestFunctions::BaseTranslation(0x80249048u)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 80249048, AnimalParadeSunGlare);
++
++// 0x800F8718: the sky, every frame. With the mod's camera in the picture, it works its light out
++// from the game's camera (see above).
++extern "C" void AnimalParadeSky(CpuContext* ctx) {
++    float saved[3][4];
++    uint32_t view = 0;
++    const bool turned = FreeCamera::SkyBefore(saved, view);
++    GuestFunctions::BaseTranslation(0x800F8718u)(ctx);
++    if (turned) {
++        FreeCamera::WriteView(view, saved);
++    }
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 800F8718, AnimalParadeSky);
 diff --git a/runtime/src/hle/game_mods/game_mods.cpp b/runtime/src/hle/game_mods/game_mods.cpp
 new file mode 100644
-index 0000000..f3e9ee3
+index 0000000..fe265c4
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/game_mods.cpp
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,112 @@
 +// The list of game mods' disc overlays (see game_mods.h).
 +
 +#include "game_mods.h"
@@ -2152,6 +2845,7 @@ index 0000000..f3e9ee3
 +
 +#include <imgui.h>
 +
++#include <atomic>
 +#include <mutex>
 +
 +namespace GameMods {
@@ -2220,6 +2914,16 @@ index 0000000..f3e9ee3
 +            panel.draw();
 +        }
 +    }
++}
++
++std::atomic<bool> g_rightStickTaken{false};
++
++void SetRightStickTaken(bool taken) {
++    g_rightStickTaken.store(taken, std::memory_order_relaxed);
++}
++
++bool RightStickTaken() {
++    return g_rightStickTaken.load(std::memory_order_relaxed);
 +}
 +
 +Registration::Registration(PrepareFn prepare) {
@@ -2316,10 +3020,10 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..6edd8b7
+index 0000000..80d1ae0
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,166 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -2356,6 +3060,7 @@ index 0000000..6edd8b7
 +// as in the original game.
 +
 +#include "animal_parade_cheats.h"
++#include "animal_parade_player.h"
 +#include "game_mods.h"
 +#include "guest_abi/cpu_context.h"
 +#include "guest_function_imports.h"
@@ -2365,6 +3070,7 @@ index 0000000..6edd8b7
 +#include "runtime_log.h"
 +
 +#include <chrono>
++#include <cstring>
 +#include <cstdint>
 +#include <iostream>
 +#include <set>
@@ -2422,14 +3128,33 @@ index 0000000..6edd8b7
 +    s_since = now;
 +}
 +
++// The player the update last ran for, and when (for animal_parade_player.h).
++uint32_t g_player = 0;
++std::chrono::steady_clock::time_point g_playerSeen;
++
 +} // namespace
 +} // namespace PlayerSpeed
++
++// The player is a BB_CCharaObjePc; its feet are at +0x08, +0x0C, +0x10.
++bool AnimalParadePlayerPosition(float feet[3]) {
++    using namespace PlayerSpeed;
++    if (g_player == 0 || std::chrono::steady_clock::now() - g_playerSeen > std::chrono::milliseconds(300)) {
++        return false;
++    }
++    for (int i = 0; i < 3; ++i) {
++        const uint32_t bits = Memory::Read32(g_player + 0x08 + 4 * i);
++        std::memcpy(&feet[i], &bits, sizeof(float));
++    }
++    return true;
++}
 +
 +// 0x800CFB30 (the player in r3, the time step in f1): the player's update, once a frame. The cheats
 +// (animal_parade_cheats.cpp) use it as their once-a-frame moment too.
 +extern "C" void AnimalParadePlayerUpdate(CpuContext* ctx) {
 +    using namespace PlayerSpeed;
 +    AnimalParadeCheatsEveryFrame();  // the cheats' money and stamina, once a frame
++    g_player = ctx->gpr[3];
++    g_playerSeen = std::chrono::steady_clock::now();
 +    const double walking = WalkingSpeed();
 +    const double actions = ActionSpeed();
 +    if (walking == 1.0 && actions == 1.0) {

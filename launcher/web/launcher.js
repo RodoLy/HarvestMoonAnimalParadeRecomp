@@ -34,7 +34,7 @@ const T = {
     prepared: 'El juego está listo.', opening: 'Abriendo el juego…',
     hintMove: 'Elegir', hintChange: 'Cambiar', f10: 'Menú en el juego',
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
-    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', cheatNoSettings: 'Este truco no tiene ajustes.', noCheats: 'No hay trucos.', modKeys: (setting) => setting ? 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.' : 'Enter o ◀ ▶ lo activan o desactivan.', noManifest: 'sin manifiesto',
+    noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', cheatNoSettings: 'Este truco no tiene ajustes.', noCheats: 'No hay trucos.', modKeys: (setting) => !setting ? 'Enter o ◀ ▶ lo activan o desactivan.' : setting.yesNo ? 'Enter lo activa o desactiva; ◀ ▶ cambian su ajuste.' : 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.', yes: 'Sí', no: 'No', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
     keyboard: 'Teclado', keyboardHint: 'El teclado como el control del jugador 1. Apagado, se juega solo con un control o un Wii Remote real.',
     controller: 'Control', controllerHint: 'Conecta un control y el juego lo toma en lugar del teclado.',
@@ -44,6 +44,7 @@ const T = {
     bindHint: (name) => 'Enter y luego presiona la tecla o el botón del control para ' + name + '.',
     bindKeyOnly: 'En el control es el stick izquierdo; aquí se cambia la tecla.',
     homeNote: 'Home es + y − a la vez.',
+    cameraNote: 'Es del mod Cámara libre: solo sale mientras está activado. En el control puede ser un botón o una dirección de un stick; el stick derecho ya no le llega al juego, otro botón sí. Cuenta al abrir el juego.',
     capture: (name) => 'Presiona una tecla o un botón del control para ' + name + '. Supr la deja sin tecla; Esc cancela.',
     captureKeyOnly: (name) => 'Presiona una tecla para ' + name + '. Supr la deja sin tecla; Esc cancela.',
     pressNow: 'Presiona…', none: 'Ninguno',
@@ -69,7 +70,7 @@ const T = {
     prepared: 'The game is ready.', opening: 'Opening the game…',
     hintMove: 'Select', hintChange: 'Change', f10: 'Menu in the game',
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
-    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', cheatNoSettings: 'This cheat has no settings.', noCheats: 'There are no cheats.', modKeys: (setting) => setting ? 'Enter turns it on or off; ◀ ▶ change the speed.' : 'Enter or ◀ ▶ turn it on or off.', noManifest: 'no manifest',
+    noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', cheatNoSettings: 'This cheat has no settings.', noCheats: 'There are no cheats.', modKeys: (setting) => !setting ? 'Enter or ◀ ▶ turn it on or off.' : setting.yesNo ? 'Enter turns it on or off; ◀ ▶ change its setting.' : 'Enter turns it on or off; ◀ ▶ change the speed.', yes: 'Yes', no: 'No', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
     keyboard: 'Keyboard', keyboardHint: 'The keyboard as player 1\'s controller. Off, the game is played only with a controller or a real Wii Remote.',
     controller: 'Controller', controllerHint: 'Connect a controller and the game uses it instead of the keyboard.',
@@ -79,6 +80,7 @@ const T = {
     bindHint: (name) => 'Enter, then press the key or the controller button for ' + name + '.',
     bindKeyOnly: 'On a controller it is the left stick; here the key is changed.',
     homeNote: 'Home is + and − together.',
+    cameraNote: 'It belongs to the Free camera mod: it only shows while the mod is on. On a controller it can be a button or a direction of a stick; the right stick no longer reaches the game, any other button still does. It counts when the game starts.',
     capture: (name) => 'Press a key or a controller button for ' + name + '. Delete leaves it without a key; Esc cancels.',
     captureKeyOnly: (name) => 'Press a key for ' + name + '. Delete leaves it without a key; Esc cancels.',
     pressNow: 'Press…', none: 'None',
@@ -129,6 +131,12 @@ const ACTIONS = [
   { id: 'stickLeft', es: 'Stick del Nunchuk ←', en: 'Nunchuk stick ←', keyOnly: true },
   { id: 'stickRight', es: 'Stick del Nunchuk →', en: 'Nunchuk stick →', keyOnly: true },
   { id: 'fastForward', es: 'Avance rápido', en: 'Fast-forward' },
+  // The Free camera mod's controls ([mods] in Config.toml), only while it is on.
+  { id: 'cameraLeft', es: 'Cámara: girar ←', en: 'Camera: turn ←', camera: true },
+  { id: 'cameraRight', es: 'Cámara: girar →', en: 'Camera: turn →', camera: true },
+  { id: 'cameraUp', es: 'Cámara: inclinar ↑', en: 'Camera: tilt ↑', camera: true },
+  { id: 'cameraDown', es: 'Cámara: inclinar ↓', en: 'Camera: tilt ↓', camera: true },
+  { id: 'cameraReset', es: 'Cámara: regresar atrás de ti', en: 'Camera: back behind you', camera: true },
 ];
 
 // Keys: the browser's name for each key (KeyboardEvent.code), the game's number for it (an SDL
@@ -169,7 +177,8 @@ function padLabel(name) { return PAD_LABEL[name] || name || '—'; }
 // The game's mods: each one is a line in Config.toml [mods] (host/launcher.cpp kMods), off until it is
 // turned on, and made inside the game itself (WiiCompiled's runtime/src/hle/game_mods). A mod's
 // "setting", when it has one, is a speed kept as a percentage in its own line of [mods] (100 is the
-// original game; it only goes up), shown as ×1, ×1.25, ×1.5… up to ×3. The mods of one "group" are
+// original game; it only goes up), shown as ×1, ×1.25, ×1.5… up to ×3; or, with "yesNo", a yes or
+// no in its own line of [mods] (true or false), which is "fallback" while the line is missing. The mods of one "group" are
 // listed together under the group's title; the "cheats" group has a tab of its own (TAB.cheats).
 const MOD_GROUPS = {
   game: { es: 'Juego', en: 'Game' },
@@ -195,6 +204,12 @@ const MODS = [
     hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. ×1 es la velocidad del juego original.',
       en: 'Your character walks and runs at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. ×1 is the original game\'s speed.' },
     setting: { key: 'faster_walking_percent', es: 'Velocidad al caminar', en: 'Walking speed', min: 100, max: 300, step: 25, fallback: 150 } },
+  { id: 'free_camera', group: 'qol', es: 'Cámara libre', en: 'Free camera',
+    setting: { key: 'free_camera_talk', yesNo: true, fallback: true,
+      es: 'Al hablar, la cámara del juego', en: 'The game\'s camera in talks' },
+    summary: { es: 'Gira la cámara con el stick derecho, como en los juegos de hoy.', en: 'Turn the camera with the right stick, as in today\'s games.' },
+    hint: { es: 'Al aire libre, el stick derecho gira la cámara alrededor de tu personaje y la inclina; R3 (apretar el stick derecho) la regresa atrás de ti. Caminas con el stick izquierdo como siempre, hacia donde mira la cámara. Con teclado: J y L giran, I y K inclinan, U la regresa; estas teclas y botones se cambian en Controles. Dentro de los edificios, las minas y las escenas se queda la cámara del juego. Con el ajuste en Sí, al hablar con alguien la cámara se pone como en el juego original y al terminar vuelve a donde la tenías. En pruebas.',
+      en: 'Outdoors, the right stick turns the camera around your character and tilts it; R3 (pressing the right stick) puts it back behind you. You walk with the left stick as always, towards where the camera looks. On the keyboard: J and L turn, I and K tilt, U puts it back; these keys and buttons are changed in Controls. In buildings, the mines and scenes the game\'s camera stays. With the setting on Yes, talking with someone puts the camera as in the original game, and it goes back to where you had it when the talk ends. Being tested.' } },
   { id: 'cheat_infinite_stamina', group: 'cheats', es: 'Estamina infinita', en: 'Infinite stamina',
     summary: { es: 'Trabajar nunca te cansa.', en: 'Work never tires you.' },
     hint: { es: 'La barra de estamina siempre está llena: puedes trabajar todo el día sin cansarte ni desmayarte.',
@@ -361,12 +376,15 @@ function rows() {
     const list = [{ label: w.keyboard, value: c.keyboard ? w.on : w.off, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
       change: toggleKeyboard, activate: toggleKeyboard }];
     for (const a of ACTIONS) {
+      if (a.camera && !state.modsOn.free_camera) continue;
       const name = a[state.lang], waiting = state.capture && state.capture.action === a;
-      const key = a.id === 'fastForward' ? c.fastForwardKey : c.keys[a.id];
-      const pad = a.keyOnly ? null : a.id === 'fastForward' ? c.fastForwardButton : c.pad[a.id];
+      const camera = c.camera || { keys: {}, pad: {} };
+      const key = a.camera ? camera.keys[a.id] : a.id === 'fastForward' ? c.fastForwardKey : c.keys[a.id];
+      const pad = a.keyOnly ? null : a.camera ? camera.pad[a.id] : a.id === 'fastForward' ? c.fastForwardButton : c.pad[a.id];
       let hint = a.id === 'fastForward' ? w.fastForwardHint + ' ' + w.bindHint(name) : w.bindHint(name);
       if (a.keyOnly) hint += ' ' + w.bindKeyOnly;
       if (a.home) hint += ' ' + w.homeNote;
+      if (a.camera) hint += ' ' + w.cameraNote;
       list.push({ label: name, hint, html: waiting ? null : bindingChips(keyLabel(key), a.keyOnly ? null : (pad === 'disabled' ? w.none : padLabel(pad))),
         value: waiting ? w.pressNow : null, tone: 'warning', activate: () => startCapture(a) });
     }
@@ -387,13 +405,13 @@ function rows() {
         send({ cmd: 'setMod', name: m.id, value: !on });
         // Turned on with its bar empty (never moved, or left at ×1): it starts at ×1.5. A speed
         // someone chose before stays as they left it.
-        if (!on && m.setting && !(Number(state.modSettings[m.setting.key]) > m.setting.min)) {
+        if (!on && m.setting && !m.setting.yesNo && !(Number(state.modSettings[m.setting.key]) > m.setting.min)) {
           state.modSettings[m.setting.key] = m.setting.fallback;
           send({ cmd: 'setModSetting', name: m.setting.key, value: m.setting.fallback });
         }
       };
       const change = m.setting ? (step) => changeModSetting(m, step) : toggle;
-      return { mod: m, label: m[state.lang], hint: w.modKeys(!!m.setting) + ' ' + w.modNext, change, activate: toggle };
+      return { mod: m, label: m[state.lang], hint: w.modKeys(m.setting) + ' ' + w.modNext, change, activate: toggle };
     });
   }
   return [];
@@ -481,6 +499,10 @@ function modsInOrder() {
 }
 
 function modSetting(m) {
+  if (m.setting.yesNo) {
+    const v = state.modSettings[m.setting.key];
+    return v === true || v === false ? v : m.setting.fallback;
+  }
   const v = Number(state.modSettings[m.setting.key]);
   return Number.isFinite(v) && v >= m.setting.min && v <= m.setting.max ? v : m.setting.fallback;
 }
@@ -491,6 +513,12 @@ function speedText(percent) {
 }
 
 function changeModSetting(m, step) {
+  if (m.setting.yesNo) {  // either arrow flips it
+    const next = !modSetting(m);
+    state.modSettings[m.setting.key] = next;
+    send({ cmd: 'setModSetting', name: m.setting.key, value: next });
+    return;
+  }
   const next = Math.max(m.setting.min, Math.min(m.setting.max, modSetting(m) + step * m.setting.step));
   state.modSettings[m.setting.key] = next;
   send({ cmd: 'setModSetting', name: m.setting.key, value: next });
@@ -517,7 +545,16 @@ function modDetails(r, i) {
   const chip = '<span style="flex:none;padding:3px 14px;border-radius:14px;font:800 17px/1.3 \'Baloo 2\',sans-serif;letter-spacing:.04em;' +
     (on ? 'background:#5aae22;color:#fff' : 'background:#e6d79a;color:#7a6224') + '">' + (on ? w.on : w.off) + '</span>';
   let setting = '<div style="font:700 17px/1.3 Dosis,sans-serif;letter-spacing:.05em;color:#a08a4a">' + esc(m.group === 'cheats' ? w.cheatNoSettings : w.modNoSettings) + '</div>';
-  if (m.setting) {
+  if (m.setting && m.setting.yesNo) {
+    const v = modSetting(m);
+    const arrow = (dir, sign) => '<span data-step="' + sign + '" style="flex:none;width:26px;text-align:center;cursor:pointer;font:800 20px/1 \'Baloo 2\',sans-serif;color:#f08a2c">' + dir + '</span>';
+    setting = '<div style="display:flex;align-items:center;gap:10px">' +
+      '<span style="flex:1;min-width:0;font:700 19px/1.2 Dosis,sans-serif;letter-spacing:.05em;color:#4a2c12">' + esc(m.setting[state.lang]) + '</span>' +
+      arrow('◀', -1) +
+      '<span style="flex:none;min-width:70px;box-sizing:border-box;text-align:center;padding:2px 10px;border-radius:10px;background:' + (v ? '#5aae22' : '#fff') + ';border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 19px/1.3 \'Baloo 2\',sans-serif;color:' + (v ? '#fff' : '#5e3712') + '">' + (v ? w.yes : w.no) + '</span>' +
+      arrow('▶', 1) +
+    '</div>';
+  } else if (m.setting) {
     const v = modSetting(m), share = (v - m.setting.min) / (m.setting.max - m.setting.min);
     const arrow = (dir, sign) => '<span data-step="' + sign + '" style="flex:none;width:26px;text-align:center;cursor:pointer;font:800 20px/1 \'Baloo 2\',sans-serif;color:#f08a2c">' + dir + '</span>';
     setting = '<div style="display:flex;align-items:center;gap:10px">' +
@@ -785,14 +822,22 @@ function captureKey(code) {
   if (code === 'F10') { state.toast = w.reserved; state.capture = null; return render(); }
   const number = code === 'Delete' ? -1 : KEY_NUMBER[code];
   if (number == null) return;
-  if (action.id === 'fastForward') state.controls.fastForwardKey = number;
+  if (action.camera) cameraControls().keys[action.id] = number;
+  else if (action.id === 'fastForward') state.controls.fastForwardKey = number;
   else { state.controls.keys[action.id] = number; state.controls.keyboard = true; }
   send({ cmd: 'setKey', action: action.id, scancode: number });
   endCapture();
 }
 
+// The free camera's keys and buttons in the page's state (filled by the program's "controls").
+function cameraControls() {
+  if (!state.controls.camera) state.controls.camera = { keys: {}, pad: {} };
+  return state.controls.camera;
+}
+
 function bindPad(action, name) {
-  if (action.id === 'fastForward') state.controls.fastForwardButton = name;
+  if (action.camera) cameraControls().pad[action.id] = name;
+  else if (action.id === 'fastForward') state.controls.fastForwardButton = name;
   else state.controls.pad[action.id] = name;
   send({ cmd: 'setPad', action: action.id, value: name });
   endCapture();
@@ -847,7 +892,10 @@ if (window.chrome && window.chrome.webview) {
   state.controls = { keyboard: true, fastForwardKey: 43, fastForwardButton: 'disabled',
     keys: { a: 44, b: 225, x: 30, y: 31, start: 40, z: 42, l: 20, r: 8, up: 82, down: 81, left: 80, right: 79, stickRight: 7, stickLeft: 4, stickUp: 26, stickDown: 22 },
     pad: { a: 'south', b: 'east', x: 'west', y: 'north', start: 'start', z: 'right_shoulder', l: 'left_trigger', r: 'right_trigger',
-      up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right' } };
+      up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right' },
+    camera: { keys: { cameraLeft: 13, cameraRight: 15, cameraUp: 12, cameraDown: 14, cameraReset: 24 },
+      pad: { cameraLeft: 'right_stick_left', cameraRight: 'right_stick_right', cameraUp: 'right_stick_up', cameraDown: 'right_stick_down',
+        cameraReset: 'right_stick' } } };
   send = (m) => {
     if (m.cmd === 'prepare' || m.cmd === 'chooseDisc') {
       state.hasDisc = true;

@@ -9,8 +9,10 @@
 //   chooseDisc   ask for the disc image, remember it in UserData\disc.txt, and prepare
 //   openLog      open the newest UserData\Logs\...\console.log
 //   setOption    write one setting to UserData\Config.toml
-//   setKey       bind a keyboard key to a button (UserData\keyboard_bindings.dat) or to fast-forward
-//   setPad       bind a controller button to a button ([controller] in Config.toml) or to fast-forward
+//   setKey       bind a keyboard key to a button (UserData\keyboard_bindings.dat), to fast-forward or
+//                to the free camera ([mods] in Config.toml)
+//   setPad       bind a controller button to a button ([controller] in Config.toml), to fast-forward or
+//                to the free camera
 //   setKeyboard  turn the keyboard on or off as the first player's controller
 //   resetControls  put every key and controller button back as they start
 //   setMod       turn a game mod on or off ([mods] in Config.toml)
@@ -335,6 +337,29 @@ const char* const kDefaultPad[12] = {"south", "east", "west", "north", "start", 
                                      "dpad_up", "dpad_down", "dpad_left", "dpad_right"};
 constexpr int32_t kDefaultFastForwardKey = 43;  // Tab
 
+// The free camera's controls (mod free_camera), each a key and a controller button or stick
+// direction, kept in [mods] as free_camera_<name>_key and free_camera_<name>_button. The page calls
+// them by its own names (cameraLeft...).
+struct CameraControl {
+    const wchar_t* page;
+    const char* name;
+    int32_t key;         // as it starts: J, L, I, K, U
+    const char* button;  // as it starts: the right stick, and R3
+};
+const CameraControl kCameraControls[] = {
+    {L"cameraLeft", "left", 13, "right_stick_left"},    {L"cameraRight", "right", 15, "right_stick_right"},
+    {L"cameraUp", "up", 12, "right_stick_up"},          {L"cameraDown", "down", 14, "right_stick_down"},
+    {L"cameraReset", "reset", 24, "right_stick"},
+};
+
+const CameraControl* FindCameraControl(const std::wstring& page) {
+    for (const auto& control : kCameraControls) if (page == control.page) return &control;
+    return nullptr;
+}
+
+std::string CameraKeyLine(const CameraControl& control) { return std::string("free_camera_") + control.name + "_key"; }
+std::string CameraButtonLine(const CameraControl& control) { return std::string("free_camera_") + control.name + "_button"; }
+
 fs::path KeyboardPath() { return UserData() / L"keyboard_bindings.dat"; }
 
 struct KeyboardFile {
@@ -449,12 +474,33 @@ std::wstring ControlsJson(const ConfigFile& config) {
     int32_t fastKey = kDefaultFastForwardKey;
     try { fastKey = std::stoi(config.Get("speed", "fast_forward_key").value_or("43")); } catch (...) {}
     json << L"},\"fastForwardKey\":" << fastKey
-         << L",\"fastForwardButton\":" << JsonString(Wide(PadPrimary(config.Get("speed", "fast_forward_button").value_or("disabled")))) << L"}";
+         << L",\"fastForwardButton\":" << JsonString(Wide(PadPrimary(config.Get("speed", "fast_forward_button").value_or("disabled"))));
+    json << L",\"camera\":{\"keys\":{";
+    for (size_t i = 0; i < std::size(kCameraControls); ++i) {
+        const auto& control = kCameraControls[i];
+        int32_t key = control.key;
+        try { key = std::stoi(config.Get("mods", CameraKeyLine(control)).value_or(std::to_string(control.key))); } catch (...) {}
+        json << (i ? L"," : L"") << L"\"" << control.page << L"\":" << key;
+    }
+    json << L"},\"pad\":{";
+    for (size_t i = 0; i < std::size(kCameraControls); ++i) {
+        const auto& control = kCameraControls[i];
+        json << (i ? L"," : L"") << L"\"" << control.page << L"\":"
+             << JsonString(Wide(PadPrimary(config.Get("mods", CameraButtonLine(control)).value_or(control.button))));
+    }
+    json << L"}}}";
     return json.str();
 }
 
-// A key for a button, a stick direction or fast-forward. The keyboard turns on with it.
+// A key for a button, a stick direction, fast-forward or the free camera. The keyboard turns on with
+// a button's or a stick direction's.
 void SetKey(const std::wstring& action, int32_t key) {
+    if (const CameraControl* control = FindCameraControl(action)) {
+        ConfigFile config = ConfigFile::Load();
+        config.Set("mods", CameraKeyLine(*control), std::to_string(key));
+        config.Save();
+        return;
+    }
     if (action == L"fastForward") {
         ConfigFile config = ConfigFile::Load();
         config.Set("speed", "fast_forward_key", std::to_string(key));
@@ -477,11 +523,13 @@ void SetKey(const std::wstring& action, int32_t key) {
     keyboard.Save();
 }
 
-// A controller button ("south", "left_trigger"...) for a button or fast-forward. A second button
-// someone wrote by hand in Config.toml stays.
+// A controller button ("south", "left_trigger"...) for a button, fast-forward or the free camera. A
+// second button someone wrote by hand in Config.toml stays.
 void SetPad(const std::wstring& action, const std::string& value) {
     ConfigFile config = ConfigFile::Load();
-    if (action == L"fastForward") {
+    if (const CameraControl* control = FindCameraControl(action)) {
+        config.Set("mods", CameraButtonLine(*control), "\"" + value + "\"");
+    } else if (action == L"fastForward") {
         config.Set("speed", "fast_forward_button", "\"" + value + "\"");
     } else if (const int i = ButtonIndex(action); i >= 0) {
         const std::string old = config.Get("controller", kButtonNames[i]).value_or("");
@@ -510,6 +558,10 @@ void ResetControls() {
     for (int i = 0; i < 12; ++i) config.Set("controller", kButtonNames[i], std::string("\"") + kDefaultPad[i] + "\"");
     config.Set("speed", "fast_forward_key", std::to_string(kDefaultFastForwardKey));
     config.Set("speed", "fast_forward_button", "\"disabled\"");
+    for (const auto& control : kCameraControls) {
+        config.Set("mods", CameraKeyLine(control), std::to_string(control.key));
+        config.Set("mods", CameraButtonLine(control), std::string("\"") + control.button + "\"");
+    }
     config.Save();
 }
 
@@ -784,10 +836,13 @@ int ConnectedControllers() {
 // The game's mods (runtime/src/hle/game_mods in WiiCompiled's patch): each is a line in [mods] of
 // Config.toml, off unless it says true. Some have a setting, a percentage in a line of its own in
 // [mods] (from 100, the original game, to 300). The page has their names, descriptions and limits.
-const char* const kMods[] = {"romance_any_gender",     "no_place_sign",        "faster_actions",  "faster_walking",
+const char* const kMods[] = {"romance_any_gender",     "no_place_sign",        "faster_actions",  "faster_walking", "free_camera",
                               "cheat_infinite_stamina", "cheat_infinite_money", "cheat_infinite_lumber",
                               "cheat_infinite_stone", "cheat_infinite_feed", "cheat_stop_time"};
 const char* const kModSettings[] = {"faster_actions_percent", "faster_walking_percent"};
+// Settings that are a yes or no, in a line of their own in [mods] (true or false); the page knows
+// what each is while its line is missing.
+const char* const kModYesNo[] = {"free_camera_talk"};
 
 // A whole number of at most three digits: what a percentage line may hold.
 bool IsPercent(const std::string& text) {
@@ -818,6 +873,10 @@ std::wstring StateJson(const wchar_t* status) {
     for (size_t i = 0; i < std::size(kModSettings); ++i) {
         const std::string value = config.Get("mods", kModSettings[i]).value_or("");
         json << (i ? L"," : L"") << L"\"" << Wide(kModSettings[i]) << L"\":" << (IsPercent(value) ? Wide(value) : L"null");
+    }
+    for (const char* key : kModYesNo) {
+        const std::string value = config.Get("mods", key).value_or("");
+        json << L",\"" << Wide(key) << L"\":" << (value == "true" ? L"true" : value == "false" ? L"false" : L"null");
     }
     json << L"}}";
     return json.str();
@@ -899,12 +958,18 @@ void OnPageMessage(const std::wstring& json) {
         }
         PostToPage(StateJson(CurrentStatus()));
     } else if (cmd == L"setModSetting") {
-        // A mod's percentage, from 100 to 300.
+        // A mod's percentage, from 100 to 300, or a yes or no.
         const std::string name = Utf8(message[L"name"]);
         const std::string value = Utf8(message[L"value"]);
         if (std::find_if(std::begin(kModSettings), std::end(kModSettings), [&](const char* key) { return name == key; }) !=
                 std::end(kModSettings) &&
             IsPercent(value) && std::stoi(value) >= 100 && std::stoi(value) <= 300) {
+            ConfigFile config = ConfigFile::Load();
+            config.Set("mods", name, value);
+            config.Save();
+        } else if (std::find_if(std::begin(kModYesNo), std::end(kModYesNo), [&](const char* key) { return name == key; }) !=
+                       std::end(kModYesNo) &&
+                   (value == "true" || value == "false")) {
             ConfigFile config = ConfigFile::Load();
             config.Set("mods", name, value);
             config.Save();

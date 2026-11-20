@@ -1,0 +1,279 @@
+# Free camera / Cámara libre
+
+[Español abajo](#español)
+
+## English
+
+The `free_camera` mod (off by default, in the launcher's Mods tab under Quality of life) is the
+orbit camera below: outdoors, the right stick turns the camera around the player and tilts it, R3
+puts it back, and the left stick walks as always (J L, I K and U on the keyboard). Code:
+`runtime/src/hle/game_mods/free_camera.cpp` in the WiiCompiled patch.
+
+Its five controls (turn left and right, tilt up and down, put it back) can each have another key
+and another controller button or stick direction, in the launcher's Controls tab, where they show
+while the mod is on. They are kept in `[mods]` of Config.toml, read when the game starts:
+
+```toml
+free_camera_left_key = 13                  # an SDL scancode (J); -1 for none
+free_camera_left_button = "right_stick_left"  # a [controller] name: a button or a stick direction
+# ...and right, up, down and reset the same way
+```
+
+A stick direction turns the camera as far as the stick is pushed; a button or a key at full speed.
+The right stick never reaches the game while the mod is on; any other button chosen here still
+does what the game gives it as well.
+
+What was learned building it:
+
+- The engine camera is an `AA_CCamera` (vtable 0x8040DDD8): the eye at +0x08..+0x10, the pitch at
+  +0x14 (positive looks down) and the yaw at +0x18 (0 looks along -z, positive turns towards +x).
+  The mod writes them in its wrapper of 0x80052778, the call every layer of the frame makes.
+- Walking follows the picture by itself: the game turns the stick by that camera's yaw, so the
+  turned camera needs nothing more.
+- The area is game variables 0x36 (0 outdoors, 1 buildings, 2 mines) and 0x37. The camera only
+  turns outdoors, and only while the game's camera looks at the player (scenes are left alone).
+- The water's reflection has a camera of its own and keeps the game's angle.
+- Once the right stick moves, the camera keeps its own angle, tilt and distance around a point just
+  above the player, so places where the game's camera holds a set angle do not turn it back. R3 or
+  a change of area gives the camera back to the game. After R3 the game's camera can stay looking a
+  little off the player until the next area; the stick used to wait for it to look at the player
+  again, and the camera could not be turned. It now takes the camera anyway, around the point just
+  above the player, and notes in the log when that happens (and when a moved stick is left to a
+  scene).
+- Walls: the camera asks the game's own question, 0x80040DF4 (the one the sun uses to know whether
+  something hides it), whether anything stands between the player and the camera, and stops in front
+  of it. The engine's collision manager (0x804D71DC: the count at +0x04, the entries at +0x08, 0xA4
+  bytes each) holds boxes for walls and fences, cylinders for people and animals, and outdoors a
+  mesh of triangles for each group of buildings; the question leaves out the people and animals.
+  Something small is not a wall. In town the fences, their pillars and the lamp posts are in the same
+  mesh as the houses (a log of the shapes around the player at the town's bridge showed only that
+  mesh), so a small thing is told apart by asking again with the line moved a little: 1.2 higher,
+  0.7 to one side or the other, or both. If one of those lines finds nothing, the thing is low or
+  thin and the camera looks over it or past it; a house stops them all. Among many houses the nearest
+  wall changed from frame to frame and the camera trembled; it now keeps the nearest wall of the last
+  0.4 seconds and moves to its new distance smoothly. The boxes (walls and fences) are left out of
+  the question, each one out of use (+0x54 = 0) while it runs: the farm's knee-high fence by the
+  beach has a box as tall as a wall, and the camera kept coming in there. A try that also let thin
+  walls by (for the invisible wall at the edge of the sea) let the camera into town buildings, whose
+  walls are thin too, and was taken out: by the sea the camera still comes in.
+- The sun's glare: the sun (0x80248B68) ends with 0x80249048, which lays a glare over the picture by
+  how much the camera looks into the sun. While the mod holds the camera it is skipped, so the glare
+  stays as it was.
+- The light from the sky: every frame the sky (0x800F8718) works out the light it lays on the ground
+  and the buildings (a texture of the clouds, read through texture matrix 30 by which way each
+  surface faces) from the camera at *0x80501E78: its view at +0x3C0, and how strong the light is
+  from how much that camera looks toward the sun (0x800531BC). The game's cameras never look toward
+  the sun from near the ground, or straight down; a turned one does, and the ground washed out
+  nearly white. While the mod holds the camera, the sky's camera gets the turn of the game's camera
+  as it was when the right stick took it (from where the mod's camera stands) while 0x800F8718 runs,
+  and its own view back right after. A first try rewrote texture matrix 30 for every model; it
+  helped looking toward the sun but, together with this, washed the ground out looking straight
+  down, and was taken out. A try before that (leaving out the lights' specular highlights) did
+  nothing: the game has none.
+- Talks: with its setting "The game's camera in talks" (`free_camera_talk` in `[mods]`, on unless
+  it says false), talking with someone shows the game's own camera, as in the original game, and the
+  player's camera comes back where it was when the talk ends. The game's camera system keeps what
+  it is doing at 0x805B0710, a state of the table at 0x804A8818 (each entry: the state, what starts
+  it, what runs it every frame): 2 follows the player in the field, 3 goes into a talk, 4 holds it,
+  5 comes back out. Found by comparing memory (F8) before, during and after a talk. A first try
+  watched for the camera of the talk window's face, which only some talks have.
+
+A first try let the camera fly on its own while the player stood still; the orbit camera replaced
+it. The study from before follows.
+
+### How the game's camera works
+
+- **Every area has a fixed camera.** `param/camera/camera.dat` holds one entry of 0x58 bytes per
+  map (0x5E of them). An entry is a camera that follows the player from a set offset, for
+  instance a target 0.7 above the player and the eye at (-5, 4, 6) from it, with zoom steps, a
+  60° field of view and near and far planes of 0.025 and 250. The game's debug build could move it
+  and save it ("Save Default Map Camera", `cam_pos`, `cam_rot`, `%s/map_camera/%s.txt`).
+- **Three kinds of camera.** The map camera above; `FixedCamera` (`FIX_CAMERA_%02d`), a camera
+  standing in one place; and `MotionCamera` (`MOTION_CAMERA_%02d`, `MOTION_CAM_SET`,
+  `MOTION_CAM_PLAY`), the one the scenes move. The functions that run them are around
+  0x8003D000-0x8003F000; they set the engine's camera through small setters (0x80066898,
+  0x800668A8, 0x80066930 and the like).
+- **The engine's camera.** Every frame 0x8005277C (an `AA_CCamera` wrapper) reads the eye and the
+  target from the engine camera (+4: the eye at +4..+0xC), sets the field of view and the aspect,
+  and builds the projection (0x803060BC, the function the wide picture already widens). This is
+  the last point before the picture is drawn: a camera written here is what the player sees.
+- **Culling.** The game decides what is on screen from the same camera (0x80064638 builds the
+  frustum from tan(fovy / 2) · aspect). The wide picture had to widen it too, or the sides of
+  the picture stayed empty.
+
+### Two ways to do it
+
+1. **Orbit camera (the game's camera, turned).** The right stick turns the map camera's offset
+   around the player and pulls it closer or farther. The game keeps doing everything else: it
+   follows the player, culls, and the scenes keep their own cameras.
+   - To check first: whether walking follows the camera (the player's update turns the stick into a
+     direction from the camera's angle; if it reads the live camera, walking turns with it, as
+     players expect).
+   - Indoors the fixed camera hides walls that were never modelled: turning it there would show
+     the back of the room. The mod would turn only outdoors, or within limits per area.
+   - Size: one or two sessions.
+2. **Free camera (detached).** A camera that flies on its own, for photos or to look around:
+   written into the engine camera at 0x8005277C every frame, moved with the right stick (turn) and
+   the left stick or the triggers (move), while the player stands still.
+   - Culling has to come from the free camera, or things vanish where the game's camera does not
+     look.
+   - Areas only have what their camera shows: outside the play area, or behind the fixed cameras
+     indoors, there are holes and unfinished backs.
+   - Scenes: off while a `MotionCamera` or `FixedCamera` is running.
+   - Size: several sessions; it builds on the orbit camera's findings.
+
+### Controls
+
+The Wii game uses the Wii Remote and the Nunchuk, one stick. A PC controller's right stick is not
+used by the port (the launcher's controls bind the buttons, the D-pad and the left stick), so the
+mod can read it directly through SDL, as the fast-forward button is read (`runtime/src/hle/vi.cpp`,
+`FastForwardButtonHeld`). On the keyboard and mouse it would need keys of its own, chosen in the
+launcher.
+
+### Plan
+
+Start with the orbit camera as a quality of life mod, off by default: find how walking takes its
+direction from the camera, turn the map camera with the right stick, and limit it indoors. Then the
+free camera, on top of it.
+
+---
+
+## Español
+
+El mod `free_camera` (apagado de inicio, en la pestaña Mods del launcher, en Calidad de vida) es la
+cámara orbital de abajo: al aire libre, el stick derecho gira la cámara alrededor del personaje y la
+inclina, R3 la regresa, y el stick izquierdo camina como siempre (J L, I K y U con el teclado).
+Código: `runtime/src/hle/game_mods/free_camera.cpp` en el parche de WiiCompiled.
+
+Sus cinco controles (girar a la izquierda y a la derecha, inclinar hacia arriba y hacia abajo,
+regresarla) pueden tener cada uno otra tecla y otro botón o dirección de stick del control, en la
+pestaña Controles del launcher, donde salen mientras el mod está activado. Se guardan en `[mods]`
+de Config.toml y se leen al abrir el juego:
+
+```toml
+free_camera_left_key = 13                  # un scancode de SDL (J); -1 para ninguna
+free_camera_left_button = "right_stick_left"  # un nombre de [controller]: un botón o una dirección de stick
+# ...y right, up, down y reset igual
+```
+
+Una dirección de stick gira la cámara tanto como se empuja el stick; un botón o una tecla, a toda
+velocidad. El stick derecho nunca le llega al juego mientras el mod está activado; cualquier otro
+botón elegido aquí también sigue haciendo lo que el juego le da.
+
+Lo que se aprendió al hacerlo:
+
+- La cámara del motor es un `AA_CCamera` (vtable 0x8040DDD8): el ojo en +0x08..+0x10, la
+  inclinación en +0x14 (positiva mira hacia abajo) y el giro en +0x18 (0 mira hacia -z, positivo
+  gira hacia +x). El mod los escribe en su envoltura de 0x80052778, la llamada que hace cada capa
+  del cuadro.
+- Caminar sigue a la imagen solo: el juego gira el stick según el giro de esa cámara, así que la
+  cámara girada no necesita nada más.
+- La zona son las variables del juego 0x36 (0 al aire libre, 1 edificios, 2 minas) y 0x37. La cámara
+  solo gira al aire libre, y solo mientras la cámara del juego mira al personaje (las escenas no se
+  tocan).
+- El reflejo del agua tiene su propia cámara y se queda con el ángulo del juego.
+- En cuanto se mueve el stick derecho, la cámara guarda su propio giro, inclinación y distancia
+  alrededor de un punto un poco arriba del personaje, así que los lugares donde la cámara del juego
+  tiene un ángulo fijo ya no la regresan. R3 o un cambio de zona le devuelven la cámara al juego.
+  Después de R3 la cámara del juego puede quedarse mirando un poco al lado del personaje hasta la
+  siguiente zona; el stick esperaba a que lo volviera a mirar, y la cámara ya no se podía girar.
+  Ahora la toma de todos modos, alrededor del punto un poco arriba del personaje, y lo anota en el
+  registro (y también cuando un stick movido se deja a una escena).
+- Paredes: la cámara hace la misma pregunta que el juego, 0x80040DF4 (la que usa el sol para saber si
+  algo lo tapa): si hay algo entre el personaje y la cámara, y se detiene delante. El administrador
+  de colisiones del motor (0x804D71DC: la cuenta en +0x04, las entradas en +0x08, 0xA4 bytes cada
+  una) guarda cajas para paredes y cercas, cilindros para personas y animales, y al aire libre una
+  malla de triángulos por cada grupo de edificios; la pregunta deja fuera a personas y animales.
+  Algo pequeño no es pared. En el pueblo las cercas, sus pilares y los postes de luz están en la
+  misma malla que las casas (un registro de las formas alrededor del personaje en el puente del
+  pueblo solo mostró esa malla), así que algo pequeño se distingue preguntando otra vez con la línea
+  movida un poco: 1.2 más arriba, 0.7 a un lado o al otro, o las dos cosas. Si una de esas líneas no
+  encuentra nada, la cosa es baja o delgada y la cámara mira por encima o a un lado; una casa las
+  detiene todas. Entre muchas casas la pared más cercana cambiaba de un cuadro a otro y la cámara
+  temblaba; ahora guarda la pared más cercana de los últimos 0.4 segundos y llega a su nueva
+  distancia suave. Las cajas (paredes y cercas) quedan fuera de la pregunta, cada una fuera de uso
+  (+0x54 = 0) mientras corre: la cerca de la granja junto a la playa, que llega a la rodilla, tiene
+  una caja tan alta como una pared, y ahí la cámara se acercaba. Un intento que además dejaba pasar
+  paredes delgadas (por la pared invisible a la orilla del mar) metía la cámara en los edificios del
+  pueblo, cuyas paredes también son delgadas, y se quitó: junto al mar la cámara todavía se acerca.
+- El resplandor del sol: el sol (0x80248B68) termina con 0x80249048, que pone un resplandor sobre la
+  imagen según cuánto mira la cámara hacia el sol. Mientras el mod tiene la cámara se salta, así que
+  el resplandor se queda como estaba.
+- La luz del cielo: cada cuadro el cielo (0x800F8718) calcula la luz que pone sobre el suelo y los
+  edificios (una textura de las nubes, leída con la matriz de textura 30 según hacia dónde mira cada
+  superficie) con la cámara en *0x80501E78: su vista en +0x3C0, y qué tan fuerte es la luz según
+  cuánto mira esa cámara hacia el sol (0x800531BC). Las cámaras del juego nunca miran hacia el sol
+  desde cerca del suelo, ni directo hacia abajo; una girada sí, y el suelo se veía casi blanco.
+  Mientras el mod tiene la cámara, la cámara del cielo recibe el giro de la cámara del juego como
+  estaba cuando el stick derecho la tomó (desde donde está la cámara del mod) mientras corre
+  0x800F8718, y recupera su propia vista justo después. Un primer intento reescribía la matriz de
+  textura 30 para cada modelo; ayudaba mirando hacia el sol, pero junto con esto lavaba el suelo
+  mirando directo hacia abajo, y se quitó. Un intento anterior (quitar los brillos especulares de
+  las luces) no hizo nada: el juego no tiene.
+- Pláticas: con su ajuste "Al hablar, la cámara del juego" (`free_camera_talk` en `[mods]`,
+  encendido salvo que diga false), al hablar con alguien se ve la cámara del propio juego, como en
+  el original, y al terminar la plática la cámara del jugador vuelve a donde estaba. El sistema de
+  cámara del juego guarda lo que está haciendo en 0x805B0710, un estado de la tabla en 0x804A8818
+  (cada entrada: el estado, lo que lo empieza y lo que lo corre cada cuadro): 2 sigue al personaje
+  en el campo, 3 entra a una plática, 4 la mantiene y 5 sale de ella. Se encontró comparando la
+  memoria (F8) antes, durante y después de una plática. Un primer intento buscaba la cámara de la
+  cara de la ventana de texto, que solo tienen algunas pláticas.
+
+Un primer intento soltaba la cámara para volar sola mientras el personaje se quedaba quieto; la
+cámara orbital lo reemplazó. Sigue el estudio de antes.
+
+### Cómo funciona la cámara del juego
+
+- **Cada zona tiene una cámara fija.** `param/camera/camera.dat` tiene una entrada de 0x58 bytes
+  por mapa (0x5E en total). Cada entrada es una cámara que sigue a quien juega desde una posición
+  fija, por ejemplo mirando 0.7 por encima del personaje desde (-5, 4, 6), con pasos de zoom, un
+  campo de visión de 60° y planos cercano y lejano de 0.025 y 250. La versión de depuración del
+  juego podía moverla y guardarla ("Save Default Map Camera", `cam_pos`, `cam_rot`,
+  `%s/map_camera/%s.txt`).
+- **Tres tipos de cámara.** La del mapa; `FixedCamera` (`FIX_CAMERA_%02d`), una cámara parada en un
+  lugar; y `MotionCamera` (`MOTION_CAMERA_%02d`, `MOTION_CAM_SET`, `MOTION_CAM_PLAY`), la que
+  mueven las escenas. Las funciones que las manejan están cerca de 0x8003D000-0x8003F000 y ponen
+  la cámara del motor con funciones pequeñas (0x80066898, 0x800668A8, 0x80066930 y parecidas).
+- **La cámara del motor.** En cada cuadro, 0x8005277C (un `AA_CCamera`) lee el ojo y el punto al
+  que mira de la cámara del motor (+4: el ojo en +4..+0xC), pone el campo de visión y la
+  proporción, y arma la proyección (0x803060BC, la función que ya ensancha la imagen ancha). Es el
+  último paso antes de dibujar: una cámara escrita ahí es lo que se ve.
+- **Recorte.** El juego decide qué está en pantalla con la misma cámara (0x80064638 arma el campo
+  de visión con tan(fovy / 2) · proporción). La imagen ancha tuvo que ensancharlo también, o los
+  lados de la imagen quedaban vacíos.
+
+### Dos maneras de hacerlo
+
+1. **Cámara orbital (la del juego, girada).** El stick derecho gira la posición de la cámara del
+   mapa alrededor del personaje y la acerca o la aleja. El juego sigue haciendo lo demás: sigue al
+   personaje, recorta, y las escenas siguen con sus propias cámaras.
+   - Lo primero a revisar: si caminar sigue a la cámara (la actualización del personaje convierte
+     el stick en una dirección según el ángulo de la cámara; si lee la cámara viva, caminar gira
+     con ella, como se espera).
+   - Dentro de las casas la cámara fija esconde paredes que nunca se modelaron: girarla ahí
+     mostraría la parte de atrás del cuarto. El mod giraría solo al aire libre, o con límites por
+     zona.
+   - Tamaño: una o dos sesiones.
+2. **Cámara libre (suelta).** Una cámara que vuela sola, para fotos o para mirar alrededor: se
+   escribe en la cámara del motor en 0x8005277C en cada cuadro y se mueve con el stick derecho
+   (girar) y el izquierdo o los gatillos (moverse), mientras el personaje se queda quieto.
+   - El recorte tiene que salir de la cámara libre, o las cosas desaparecen donde la cámara del
+     juego no mira.
+   - Las zonas solo tienen lo que su cámara muestra: fuera del área de juego, o detrás de las
+     cámaras fijas de las casas, hay huecos y partes sin terminar.
+   - Escenas: apagada mientras corre una `MotionCamera` o una `FixedCamera`.
+   - Tamaño: varias sesiones; se apoya en lo que se aprenda con la orbital.
+
+### Controles
+
+El juego de Wii usa el Wii Remote y el Nunchuk, un solo stick. El port no usa el stick derecho de un
+control de PC (los controles del launcher asignan los botones, la cruceta y el stick izquierdo), así
+que el mod puede leerlo directo con SDL, como se lee el botón de avance rápido
+(`runtime/src/hle/vi.cpp`, `FastForwardButtonHeld`). Con teclado y ratón necesitaría teclas propias,
+elegidas en el launcher.
+
+### Plan
+
+Empezar por la cámara orbital como mod de calidad de vida, apagado de inicio: ver cómo caminar toma
+su dirección de la cámara, girar la cámara del mapa con el stick derecho y limitarla dentro de las
+casas. Después la cámara libre, encima de eso.

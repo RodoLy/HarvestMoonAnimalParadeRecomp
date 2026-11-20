@@ -215,6 +215,29 @@
       }
     },
     {
+      "id": "free_camera",
+      "label": "Free camera",
+      "help": "Outdoors, the right stick turns the camera around your character; R3 puts it back. You walk with the left stick as always.",
+      "group": "Mods",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/free_camera": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/free_camera": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/free_camera": "false"
+      }
+    },
+    {
       "id": "cheat_infinite_stamina",
       "label": "Infinite stamina",
       "help": "The stamina bar stays full. Also in the game's F10 menu, under Cheats.",
