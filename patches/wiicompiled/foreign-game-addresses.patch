@@ -3336,10 +3336,10 @@ index 0000000..80d1ae0
 +FOREIGN_GAME_WRAPPER(RBIEE9, 800CFB30, AnimalParadePlayerUpdate);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..420775c
+index 0000000..5bab219
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1256 @@
+@@ -0,0 +1,1344 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -3376,8 +3376,13 @@ index 0000000..420775c
 +//   birth lines to the question sets too, as slots 20 to 29. The Goddess's lines are new: the mod adds them to
 +//   every love message pack (msglang/<language>/<male|female>/love*.mpc) as messages 0xE000 and
 +//   on, in Spanish for the Spanish packs and in English for the others.
-+// - The Harvest Goddess and the Harvest King as spouses keep their own scenes: their child already
-+//   comes by magic.
++// - The Harvest Goddess as a spouse keeps her own scenes: she already brings the baby by magic.
++//   The Harvest King's births (GOD_L000016 and GOD_L000030) have the player expecting the baby:
++//   feeling ill, lying down, and in bed after the birth. For a man the mod plays copies of them
++//   (sample_118.opb and sample_119.opb) where the player cheers (0x8D) instead of holding his
++//   belly (0x93), with sparkles over him instead of drops of sweat, and the King's lines there (in the male love pack, which only a man married to
++//   the King sees) tell that he asked the Harvest Goddess for a baby for the two of them and that
++//   the player only closes his eyes (romance_lines.cpp).
 +//
 +// The wedding (each candidate's L000007) keeps the original scene but for its last shot: there
 +// the groom carries the bride in his arms (motion 0x225 for both, placed on the same spot), and two
@@ -3422,6 +3427,12 @@ index 0000000..420775c
 +constexpr uint32_t kSecondGoddessFile = 18424;         // sample_123.opb
 +// Previews (kTestAdoptionKey): one per candidate, sample_100.opb on (files 18401 on).
 +constexpr uint32_t kFirstPreviewFile = 18401;
++// The Harvest King's births for a man (sample_118.opb and sample_119.opb), in place of his events
++// 3090 (GOD_L000016) and 3106 (GOD_L000030).
++constexpr uint32_t kKingFirstBirthForMenFile = 18419;
++constexpr uint32_t kKingSecondBirthForMenFile = 18420;
++constexpr uint32_t kKingFirstBirth = 3090;
++constexpr uint32_t kKingSecondBirth = 3106;
 +// The wedding with its last shot changed (sample_120.opb and sample_121.opb).
 +constexpr uint32_t kWeddingOfBridesFile = 18421;
 +constexpr uint32_t kWeddingOfGroomsFile = 18422;
@@ -3453,8 +3464,21 @@ index 0000000..420775c
 +};
 +std::map<uint32_t, Adoption> g_adoptions;  // by the question's and the birth's events
 +std::map<uint32_t, uint32_t> g_weddings;    // a candidate's wedding event: the candidate
++bool g_kingBirthsForMen = false;  // sample_118.opb and sample_119.opb were written
 +bool g_testAdoption = false;
 +uint32_t g_sceneBaby = 0;  // the baby of the last adoption scene started (62 or 63)
++
++// The event whose scene the bedtime preview plays instead (kTestSceneKey), or 0: the number in
++// test_scene.txt of the mod's folder when there is one (read every time, so one game can look at
++// scene after scene), otherwise the one in Config.toml.
++uint32_t TestScene() {
++    std::ifstream file(GameMods::Folder(kMod) / "test_scene.txt");
++    long scene = 0;
++    if (file >> scene && scene > 0) {
++        return static_cast<uint32_t>(scene);
++    }
++    return static_cast<uint32_t>(RuntimeConfigFile::ModNumber(kTestSceneKey, 0));
++}
 +
 +} // namespace
 +
@@ -3466,6 +3490,11 @@ index 0000000..420775c
 +        return;
 +    }
 +    if (Memory::Read32(kGameState) == 0) {
++        return;
++    }
++    if ((event == kKingFirstBirth || event == kKingSecondBirth) && g_kingBirthsForMen &&
++        static_cast<int>(Memory::Read32(VariableAddress(0x23))) == kMan) {
++        ctx->gpr[3] = event == kKingFirstBirth ? kKingFirstBirthForMenFile : kKingSecondBirthForMenFile;
 +        return;
 +    }
 +    const auto wedding = g_weddings.find(event);
@@ -3482,6 +3511,14 @@ index 0000000..420775c
 +    }
 +    if (g_testAdoption && !found->second.goddess && found->second.child == 0 &&
 +        found->second.character == AdoptionPreviewCharacter()) {
++        const uint32_t scene = TestScene();
++        if (scene != 0 && g_adoptions.count(scene) == 0) {
++            ctx->gpr[3] = scene;  // that event's scene, as the mod sends it
++            AnimalParadeEventScene(ctx);
++            std::fprintf(stderr, "[mod %s] test: bedtime plays event %u's scene (file %u)\n", kMod, scene,
++                         ctx->gpr[3]);
++            return;
++        }
 +        ctx->gpr[3] = kFirstPreviewFile + static_cast<uint32_t>(found->second.preview);
 +        g_sceneBaby = kFirstChild;
 +        return;
@@ -4429,6 +4466,47 @@ index 0000000..420775c
 +    return changed == 2 ? data : std::string();
 +}
 +
++// A Harvest King's birth scene (loveGod/GOD_L000016.opb or GOD_L000030.opb) for a man: the
++// player's motion 0x93 (holding the belly) becomes 0x8D (the player's cheer), wherever the scene
++// loads (0x08F) or plays (0x08B: who, motion, 1, the motion after it) it, and the drops of sweat
++// over the player (0x28D: a number, who, effect 0x6D) become effect 0x74, the yellow sparkles of
++// glad surprise. Empty if the scene has no 0x93 for the player.
++std::string KingBirthForMen(std::string data) {
++    if (data.size() < 0x1C || data.compare(0, 4, "OPAL") != 0) {
++        return {};
++    }
++    const uint32_t table = ReadBigEndian32(data, 0xC);
++    const uint32_t code = ReadBigEndian32(data, 0x10);
++    const uint32_t count = ReadBigEndian32(data, 0x14);
++    if (table + 4 * size_t(count) > data.size()) {
++        return {};
++    }
++    int changed = 0;
++    for (uint32_t i = 0; i < count; ++i) {
++        const size_t at = code + ReadBigEndian32(data, table + 4 * size_t(i));
++        if (at + 12 > data.size()) {
++            return {};
++        }
++        const uint32_t command = ReadBigEndian32(data, at) & 0xFFF;
++        if (command == 0x28D && at + 16 <= data.size() && ReadBigEndian32(data, at + 8) == kPlayer &&
++            ReadBigEndian32(data, at + 12) == 0x6D) {
++            PutBigEndian32(data, at + 12, 0x74);
++            continue;
++        }
++        if ((command != 0x08F && command != 0x08B) || ReadBigEndian32(data, at + 4) != kPlayer) {
++            continue;
++        }
++        for (const size_t word : {at + 8, at + 16}) {
++            if ((word == at + 8 || command == 0x08B) && word + 4 <= data.size() &&
++                ReadBigEndian32(data, word) == 0x93) {
++                PutBigEndian32(data, word, 0x8D);
++                ++changed;
++            }
++        }
++    }
++    return changed != 0 ? data : std::string();
++}
++
 +void PrepareAdoption() {
 +    if (!Enabled() || ::GuestRegion::ForeignGameAddress("RBIEE9", 1u) == 0) {
 +        return;
@@ -4526,6 +4604,16 @@ index 0000000..420775c
 +    } else {
 +        std::ofstream(scenes / "sample_120.opb", std::ios::binary | std::ios::trunc) << brides;
 +        std::ofstream(scenes / "sample_121.opb", std::ios::binary | std::ios::trunc) << grooms;
++    }
++    // The Harvest King's births for a man.
++    const std::string kingFirst = KingBirthForMen(ReadFile(love / "loveGod" / "GOD_L000016.opb"));
++    const std::string kingSecond = KingBirthForMen(ReadFile(love / "loveGod" / "GOD_L000030.opb"));
++    g_kingBirthsForMen = !kingFirst.empty() && !kingSecond.empty();
++    if (g_kingBirthsForMen) {
++        write("sample_118.opb", kingFirst);
++        write("sample_119.opb", kingSecond);
++    } else {
++        std::fprintf(stderr, "[mod %s] the Harvest King's births are not as expected; they stay as is\n", kMod);
 +    }
 +    g_testAdoption = RuntimeConfigFile::ModEnabled(kTestAdoptionKey);
 +    if (g_testAdoption) {
@@ -5275,10 +5363,10 @@ index 0000000..ff1de61
 +}
 diff --git a/runtime/src/hle/game_mods/romance_any_gender.h b/runtime/src/hle/game_mods/romance_any_gender.h
 new file mode 100644
-index 0000000..9fd13c7
+index 0000000..7ead784
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_any_gender.h
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,79 @@
 +#pragma once
 +
 +// Shared by the three source files of the Harvest Moon: Animal Parade mod "romance_any_gender":
@@ -5306,8 +5394,14 @@ index 0000000..9fd13c7
 +//   candidate chosen in the panel in the spouse's place, in any game and changing nothing in it.
 +//   That candidate's question event (L000015) loses its conditions but its own "done" flag, and
 +//   romance_adoption.cpp sends it to the preview.
++// - kTestSceneKey (a number): with kTestAdoptionKey on, the bedtime preview plays the scene of this
++//   event instead (as the mod would send it for the player's sex), to look at any love scene, the
++//   Harvest Goddess's and the Harvest King's for example, without playing up to it. 0 is the
++//   adoption preview. A number in UserData\Cache\Mods\romance_any_gender\test_scene.txt
++//   comes first, read at every bedtime.
 +inline constexpr const char* kTestProposalKey = "romance_any_gender_test_proposal";
 +inline constexpr const char* kTestAdoptionKey = "romance_any_gender_test_adoption";
++inline constexpr const char* kTestSceneKey = "romance_any_gender_test_scene";
 +
 +// The candidate the adoption preview shows: the one chosen in the testing panel (F10 > Mods) when
 +// the game started. The panel keeps the choice in UserData\Cache\Mods\romance_any_gender\
@@ -5354,10 +5448,10 @@ index 0000000..9fd13c7
 +} // namespace RomanceAnyGender
 diff --git a/runtime/src/hle/game_mods/romance_lines.cpp b/runtime/src/hle/game_mods/romance_lines.cpp
 new file mode 100644
-index 0000000..5b8033b
+index 0000000..5a0400e
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_lines.cpp
-@@ -0,0 +1,496 @@
+@@ -0,0 +1,559 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part three: the lines of couples of the
 +// same sex. (Part one is romance_any_gender.cpp, part two the adoption, romance_adoption.cpp.)
 +//
@@ -5396,9 +5490,10 @@ index 0000000..5b8033b
 +    const char* to;
 +};
 +
-+// The women candidates; the men candidates are the rest of the packs below.
++// The women candidates (with the Harvest Goddess and the Witch Princess); the men candidates are the
++// rest of the packs below.
 +bool WomanCandidate(const std::string& pack) {
-+    for (const char* name : {"Rena", "Katy", "Mai", "Selr", "Putt", "Ktmi", "Anis", "Lumi"}) {
++    for (const char* name : {"Rena", "Katy", "Mai", "Selr", "Putt", "Ktmi", "Anis", "Lumi", "Gdss", "Wich"}) {
 +        if (pack == name) {
 +            return true;
 +        }
@@ -5700,6 +5795,68 @@ index 0000000..5b8033b
 +    {"bri", "Wong", 14098, "husband and wife", "married"},
 +    {"bri", "Juli", 16486, "boyfriend and girlfriend", "boyfriends"},
 +    {"bri", "Juli", 16574, "Now we're husband and wife.", "Now we're married."},
++
++    // The Harvest Goddess (a woman marrying her) and the Harvest King (a man marrying him), in the
++    // three languages. The King's births (19294 to 19298) are rewritten for a man: he asked the
++    // Harvest Goddess for a baby, and the player only closes his eyes (romance_adoption.cpp plays
++    // those scenes with the player cheering instead of feeling ill). British English 19256 offered
++    // "Wife's birthday!" for the King's own birthday.
++    {"spa", "Gdss", 18264, "ocupado", "ocupada"},
++    {"spa", "Gdss", 18301, "\njuntos", "\njuntas"},
++    {"spa", "Gdss", 18388, "parezca a su padre", "parezca a ti"},
++    {"spa", "Gdss", 18396, "que se pareciera a su padre", "que se pareciera a ti"},
++    {"spa", "Gdss", 18425, "un padre fabuloso", "una madre fabulosa"},
++    {"spa", "Gdss", 18460, "¡Da - Dadá!", "¡Ma - Mamá!"},
++    {"spa", "Gdss", 18461, "diciendo papá", "diciendo mamá"},
++    {"spa", "Gdss", 18475, "diciendo papá", "diciendo mamá"},
++    {"spa", "Gdss", 18465, "Papá\nPapi\nPapaíto\nPadre", "Mamá\nMami\nMamita\nMadre"},
++    {"spa", "Gdss", 27763, "¡Son marido y mujer!", "¡Ya son esposas!"},
++    {"spa", "Gdss", 27765, "casados,", "casadas,"},
++    {"spa", "Gdss", 27767, "\nMarido", "\nEsposa"},
++    {"spa", "God", 27783, "Ahora sois marido y mujer.", "Ahora sois esposos."},
++    {"spa", "God", 27787, "Mi mujer.", "Mi esposo."},
++    {"spa", "God", 19259, "considerada", "considerado"},
++    {"spa", "God", 19340, "¡Mamá!", "¡Papá!"},
++    {"spa", "God", 19341, "ha dicho mamá.", "ha dicho papá."},
++    {"spa", "God", 19355, "¡Ha dicho mamá!", "¡Ha dicho papá!"},
++    {"spa", "God", 19345, "Mamá.\nMamita.\nMami.\nMadre.", "Papá.\nPapi.\nPapaíto.\nPadre."},
++    {"spa", "God", 19296, "Tienes mala cara...", "Tengo una sorpresa para ti..."},
++    {"spa", "God", 19297, "¿Qué?\n¿Está en camino?", "Le pedí a la Diosa de la\nCosecha un bebé para los dos."},
++    {"spa", "God", 19298, "Rápido, túmbate.", "Cierra los ojos un momento..."},
++    {"spa", "God", 19294, "Bien hecho.", "Ya puedes abrirlos."},
++    {"eng", "Gdss", 27763, "are husband and wife.", "are now married."},
++    {"eng", "Gdss", 18388, "A boy like you", "A little boy"},
++    {"eng", "Gdss", 18396, "A boy like you", "A little boy"},
++    {"eng", "Gdss", 18460, "Dada!", "Mama!"},
++    {"eng", "Gdss", 18461, "is saying Daddy.", "is saying Mommy."},
++    {"eng", "Gdss", 18475, "is saying Daddy.", "is saying Mommy."},
++    {"eng", "Gdss", 18465, "Dad\nDaddy\nPapa\nFather", "Mom\nMama\nMommy\nMother"},
++    {"eng", "God", 27783, "are husband and wife.", "are now married."},
++    {"eng", "God", 19340, "Mama!", "Dada!"},
++    {"eng", "God", 19341, "is saying Mama.", "is saying Daddy."},
++    {"eng", "God", 19355, "is saying Mama.", "is saying Daddy."},
++    {"eng", "God", 19345, "Mom\nMama\nMommy\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"eng", "God", 19296, "Hmm... You look ashen.", "I have a surprise for you."},
++    {"eng", "God", 19297, "What?\nThe baby?", "I asked the Harvest Goddess\nfor a baby for us two."},
++    {"eng", "God", 19298, "Quickly, lie down.", "Close your eyes a moment."},
++    {"eng", "God", 19294, "Good work.", "Now open them."},
++    {"bri", "Gdss", 27763, "are husband and wife.", "are now married."},
++    {"bri", "Gdss", 18388, "A boy like you", "A little boy"},
++    {"bri", "Gdss", 18396, "A boy like you", "A little boy"},
++    {"bri", "Gdss", 18460, "Da... Dada.", "Ma... Mama."},
++    {"bri", "Gdss", 18461, "is saying Daddy.", "is saying Mummy."},
++    {"bri", "Gdss", 18475, "is saying Daddy.", "is saying Mummy."},
++    {"bri", "Gdss", 18465, "Dad\nDaddy\nPapa\nFather", "Mum\nMummy\nMama\nMother"},
++    {"bri", "God", 27783, "are husband and wife.", "are now married."},
++    {"bri", "God", 19340, "Ma... Mama!", "Da... Dada!"},
++    {"bri", "God", 19341, "is saying Mama.", "is saying Daddy."},
++    {"bri", "God", 19355, "is saying Mama.", "is saying Daddy."},
++    {"bri", "God", 19345, "Mom\nMama\nMa\nMother", "Dad\nDaddy\nPapa\nFather"},
++    {"bri", "God", 19256, "Wife's birthday!", "Husband's birthday!"},
++    {"bri", "God", 19296, "Hm, you look a little pale.", "I have a surprise for you."},
++    {"bri", "God", 19297, "What?\nThe baby is coming?", "I asked the Harvest Goddess\nfor a baby for us two."},
++    {"bri", "God", 19298, "Quick! lie down.", "Close your eyes a moment."},
++    {"bri", "God", 19294, "Good work.", "Now open them."},
 +};
 +
 +// UTF-16 big-endian (the packs' text) to UTF-8 and back.

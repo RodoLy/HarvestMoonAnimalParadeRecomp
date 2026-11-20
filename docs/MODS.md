@@ -110,8 +110,23 @@ with the same timing as the original:
 4. The Goddess leaves, and the scene ends as the birth does: what the baby will be like, the
    parenting book (first child), the spouse's hearts, the baby in the family.
 
-With the Harvest Goddess or the Harvest King as the spouse nothing changes: their child already
-comes by magic.
+**The Harvest Goddess and the Harvest King.** Their scenes are their own (`loveGdss/GDSS_*.opb`
+and `loveGod/GOD_*.opb`, events 2815-2861 and 3069-3115), made for a man marrying the Goddess and a
+woman marrying the King. With the mod a woman can marry the Goddess and a man the King, and those
+scenes play for them as they are, but for these changes:
+
+- Their lines: the Goddess's pack for a woman and the King's for a man had never been seen, and
+  talk as the original pairing would: "¿Estás ocupado?", "¡Son marido y mujer!", "Eres un padre
+  fabuloso", the child saying "papá" to a woman or "mamá" to a man. `romance_lines.cpp` fixes them
+  as it does the villagers' (Spanish, US and British English).
+- The Goddess already brings her baby by magic (GDSS_L000016): nothing more changes.
+- The King's births (GOD_L000016 and GOD_L000030, events 3090 and 3106) have the player expecting
+  the baby: feeling ill (motion `0x93` with drops of sweat, effect `0x6D`), lying down, and in bed
+  after the birth. For a man the mod plays copies (`sample_118.opb` and `sample_119.opb`, files
+  18419 and 18420) where the player cheers (`0x8D`) with sparkles (effect `0x74`), and the King's
+  lines there say that he asked the Harvest Goddess for a baby for the two of them, and to close
+  the eyes a moment.
+- Their weddings have no shot of one carrying the other, so they play as they are.
 
 | | How |
 |---|---|
@@ -130,6 +145,12 @@ restart: going to bed at home plays a preview with the candidate chosen in that 
 restart) in the spouse's place, in any game, and changes nothing in it (no child, no flags; only the name
 typed goes on the first baby's record, which no one has yet and a real birth names again). It is
 `romance_any_gender_test_adoption = true` in Config.toml.
+
+With that preview on, a number in `UserData\Cache\Mods\romance_any_gender\test_scene.txt` (or
+`romance_any_gender_test_scene` in Config.toml) makes bedtime play that event's scene instead, as
+the mod sends it for the player's sex: any love scene can be looked at without playing up to it.
+The file is read at every bedtime. A scene that happens somewhere else plays in the dark (only its
+lines show), unless it takes the player there itself, as the weddings do.
 
 The spouse calls the player by the name the wedding sets (game variable 0x51). A test that makes a
 marriage by changing the game's memory has to set it too (to 0), or those lines show no name.
@@ -349,7 +370,23 @@ lugar, con los mismos tiempos que el original:
 4. La Diosa se va y la escena termina como el parto: cómo será el bebé, el libro de crianza (primer
    hijo), los corazones de la pareja, el bebé en la familia.
 
-Con la Diosa o el Rey de la Cosecha como pareja no cambia nada: su hijo ya llega por magia.
+**La Diosa y el Rey de la Cosecha.** Sus escenas son las suyas (`loveGdss/GDSS_*.opb` y
+`loveGod/GOD_*.opb`, eventos 2815-2861 y 3069-3115), hechas para un hombre que se casa con la Diosa y
+una mujer que se casa con el Rey. Con el mod una mujer puede casarse con la Diosa y un hombre con el
+Rey, y esas escenas les salen tal cual, salvo estos cambios:
+
+- Sus frases: el paquete de la Diosa para una mujer y el del Rey para un hombre nunca se habían
+  visto, y hablan como la pareja original: "¿Estás ocupado?", "¡Son marido y mujer!", "Eres un padre
+  fabuloso", el hijo diciéndole "papá" a una mujer o "mamá" a un hombre. `romance_lines.cpp` las
+  arregla como las de los aldeanos (español, inglés de EE. UU. e inglés británico).
+- La Diosa ya trae a su bebé por magia (GDSS_L000016): no cambia nada más.
+- Los partos del Rey (GOD_L000016 y GOD_L000030, eventos 3090 y 3106) tienen a quien juega
+  esperando al bebé: se siente mal (movimiento `0x93` con gotas de sudor, efecto `0x6D`), se acuesta
+  y queda en cama tras el parto. Para un hombre el mod pone copias (`sample_118.opb` y
+  `sample_119.opb`, archivos 18419 y 18420) donde quien juega celebra (`0x8D`) con destellos (efecto
+  `0x74`), y las frases del Rey ahí dicen que le pidió a la Diosa de la Cosecha un bebé para los dos,
+  y que cierre los ojos un momento.
+- Sus bodas no tienen una toma de uno cargando al otro, así que salen tal cual.
 
 | | Cómo |
 |---|---|
@@ -368,6 +405,13 @@ irse a dormir en casa se ve una versión de prueba con el candidato elegido en e
 reinicia) en el lugar de la pareja, en cualquier partida, y no cambia nada en ella (ni hijo ni
 banderas; solo el nombre escrito queda en la ficha del primer bebé, que nadie tiene aún y que un
 parto de verdad vuelve a nombrar). Es `romance_any_gender_test_adoption = true` en Config.toml.
+
+Con esa versión de prueba activada, un número en
+`UserData\Cache\Mods\romance_any_gender\test_scene.txt` (o `romance_any_gender_test_scene` en
+Config.toml) hace que al irse a dormir salga la escena de ese evento, tal como el mod la manda para
+el sexo de quien juega: cualquier escena de amor se puede ver sin jugar hasta ella. El archivo se
+lee cada vez. Una escena que pasa en otro lugar sale a oscuras (solo se ven sus frases), salvo que
+ella misma lleve a quien juega allí, como las bodas.
 
 La pareja llama a quien juega por el nombre que fija la boda (variable 0x51 del juego). Una prueba
 que hace un matrimonio cambiando la memoria del juego también tiene que fijarla (a 0), o esas frases
