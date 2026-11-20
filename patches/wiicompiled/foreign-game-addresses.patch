@@ -6889,10 +6889,10 @@ index 3a8c43b..1df0c2c 100644
      g_hleGxState.vertsRemaining=nv; g_hleGxState.inBegin=nv!=0; g_hleGxState.auroraBeginCalled=false;
 diff --git a/runtime/src/hle/input/touch_controls.cpp b/runtime/src/hle/input/touch_controls.cpp
 new file mode 100644
-index 0000000..a48e988
+index 0000000..ae75169
 --- /dev/null
 +++ b/runtime/src/hle/input/touch_controls.cpp
-@@ -0,0 +1,460 @@
+@@ -0,0 +1,478 @@
 +// The on-screen controller (touch_controls.h).
 +//
 +// Every finger that comes down is given to the control under it and stays with that control until
@@ -6908,9 +6908,11 @@ index 0000000..a48e988
 +//
 +//       ✚  D-pad                              x       a b x y
 +//                                           y   a
-+//           ( )  left stick                   b
-+//                                ( )  right stick
++//                                             b
++//      ( )  left stick                       ( )  right stick
 +//                      -   HOME   +
++//
++// The sticks are at the sides, under the D-pad and the buttons, where the thumbs rest.
 +//
 +// El control en pantalla. Cada dedo se queda con el control donde cayó hasta que se levanta; un
 +// dedo fuera de los controles es el puntero del Wii Remote y presiona A.
@@ -6977,8 +6979,8 @@ index 0000000..a48e988
 +    {Kind::Button, false, kPadX, "x", 1.0f, 1.0f, -0.20f, -0.73f, 0.062f, 0.085f},
 +    {Kind::Button, false, kPadY, "y", 1.0f, 1.0f, -0.31f, -0.62f, 0.062f, 0.085f},
 +    {Kind::DPad, false, 0, "", 0.0f, 1.0f, 0.21f, -0.62f, 0.13f, 0.18f},
-+    {Kind::Stick, false, 0, "", 0.0f, 1.0f, 0.45f, -0.22f, 0.13f, 0.21f},
-+    {Kind::Stick, true, 0, "", 1.0f, 1.0f, -0.45f, -0.22f, 0.13f, 0.21f},
++    {Kind::Stick, false, 0, "", 0.0f, 1.0f, 0.20f, -0.22f, 0.13f, 0.21f},
++    {Kind::Stick, true, 0, "", 1.0f, 1.0f, -0.20f, -0.22f, 0.13f, 0.21f},
 +};
 +constexpr int kControlCount = static_cast<int>(sizeof(kControls) / sizeof(kControls[0]));
 +constexpr int kPointer = -1;
@@ -7313,17 +7315,33 @@ index 0000000..a48e988
 +            text(middle, c.label, std::strlen(c.label) > 1 ? r * 0.55f : r * 1.1f);
 +            break;
 +        case Kind::DPad: {
++            // One cross, as on a controller: a middle square and four arms, the pressed arms
++            // lit, a small arrow in each arm and one outline around the whole cross.
 +            uint32_t pressed = 0;
 +            if (held[i]) pressed = DPadButtons(fingerOf[i], c, s);
-+            const float arm = r * 0.36f;
++            const float w = r * 0.34f;   // half the width of an arm
++            const float x = middle.x, y = middle.y;
++            draw->AddRectFilled(ImVec2(x - w, y - w), ImVec2(x + w, y + w), fill);
 +            struct Arm { uint32_t bit; float dx, dy; };
 +            const Arm arms[] = {{kPadUp, 0, -1}, {kPadDown, 0, 1}, {kPadLeft, -1, 0}, {kPadRight, 1, 0}};
 +            for (const Arm& a : arms) {
-+                const ImVec2 armMiddle(middle.x + a.dx * r * 0.62f, middle.y + a.dy * r * 0.62f);
-+                const ImVec2 from(armMiddle.x - arm, armMiddle.y - arm), to(armMiddle.x + arm, armMiddle.y + arm);
-+                draw->AddRectFilled(from, to, (pressed & a.bit) ? fillHeld : fill, arm * 0.3f);
-+                draw->AddRect(from, to, edge, arm * 0.3f, 0, line);
++                // The arm from the middle square to the tip, and its arrow pointing out.
++                const ImVec2 inner(x + a.dx * w, y + a.dy * w), tip(x + a.dx * r, y + a.dy * r);
++                const ImVec2 from(std::min(inner.x, tip.x) - (a.dx == 0 ? w : 0), std::min(inner.y, tip.y) - (a.dy == 0 ? w : 0));
++                const ImVec2 to(std::max(inner.x, tip.x) + (a.dx == 0 ? w : 0), std::max(inner.y, tip.y) + (a.dy == 0 ? w : 0));
++                draw->AddRectFilled(from, to, (pressed & a.bit) ? fillHeld : fill);
++                const float at = r * 0.66f, size = w * 0.5f;
++                const ImVec2 point(x + a.dx * (at + size * 0.6f), y + a.dy * (at + size * 0.6f));
++                const ImVec2 base(x + a.dx * (at - size * 0.4f), y + a.dy * (at - size * 0.4f));
++                draw->AddTriangleFilled(point, ImVec2(base.x - a.dy * size, base.y + a.dx * size),
++                                        ImVec2(base.x + a.dy * size, base.y - a.dx * size), ink);
 +            }
++            const ImVec2 outline[] = {
++                {x - w, y - r}, {x + w, y - r}, {x + w, y - w}, {x + r, y - w}, {x + r, y + w}, {x + w, y + w},
++                {x + w, y + r}, {x - w, y + r}, {x - w, y + w}, {x - r, y + w}, {x - r, y - w}, {x - w, y - w},
++            };
++            draw->AddPolyline(outline, 12, edge, ImDrawFlags_Closed, line);
++            draw->AddCircleFilled(middle, w * 0.45f, IM_COL32(255, 255, 255, 40));
 +            break;
 +        }
 +        case Kind::Stick: {
