@@ -40,7 +40,6 @@
 
     <div id="tabs" class="abs" style="right:64px;top:36px;height:64px;display:flex;align-items:flex-end;gap:8px"></div>
 
-    <div id="paradeTop" class="abs" style="left:488px;top:-12px;width:186px;height:110px;overflow:hidden;pointer-events:none"></div>
     <div id="paradeBottom" class="abs" style="right:98px;top:456px;height:60px;padding:0 6px;overflow:hidden;display:flex;align-items:flex-end;pointer-events:none"></div>
 
     <div class="abs" style="left:70px;top:40px;height:64px;min-width:320px;box-sizing:border-box;border-radius:32px;background:#6a3c14;box-shadow:0 4px 0 rgba(58,31,8,.35),inset 0 0 0 2px rgba(255,255,255,.08);display:flex;align-items:center;padding:0 40px 0 84px;font-size:36px;letter-spacing:.04em;color:#fff;white-space:nowrap">
@@ -69,13 +68,8 @@
         <div id="langEs" style="height:32px;padding:0 16px;border-radius:16px;display:grid;place-items:center;font-size:19px;letter-spacing:.05em;cursor:pointer">Español</div>
         <div id="langEn" style="height:32px;padding:0 16px;border-radius:16px;display:grid;place-items:center;font-size:19px;letter-spacing:.05em;cursor:pointer">English</div>
       </div>
-      <div style="display:flex;align-items:center;gap:22px;font-size:21px;letter-spacing:.05em;color:#fff;-webkit-text-stroke:4px #5e3712;paint-order:stroke fill;white-space:nowrap">
-        <div style="display:flex;align-items:center;gap:8px"><span class="key">▲▼</span><span id="hintMove"></span></div>
-        <div style="display:flex;align-items:center;gap:8px"><span class="key">◀▶</span><span id="hintChange"></span></div>
-        <div style="display:flex;align-items:center;gap:8px"><span class="key" style="border-radius:14px">Enter</span><span>OK</span></div>
-        <div id="esc" style="display:flex;align-items:center;gap:8px;cursor:pointer"><span class="key">Esc</span><span id="escLabel"></span></div>
-        <div style="display:flex;align-items:center;gap:8px"><span class="key">F10</span><span id="f10Label"></span></div>
-      </div>
+      <!-- The keys (or, after a controller was used, its buttons) and what they do: launcher.js. -->
+      <div id="hints" style="display:flex;align-items:center;gap:16px;font-size:21px;letter-spacing:.05em;color:#fff;-webkit-text-stroke:4px #5e3712;paint-order:stroke fill;white-space:nowrap"></div>
       <div style="justify-self:end;height:40px;padding:0 18px;border-radius:20px;background:#5e3712;display:flex;align-items:center;gap:10px">
         <span id="versionLabel" style="font-size:19px;letter-spacing:.08em;color:#f3ddb0"></span>
         <span id="version" style="font:800 22px/1 'Baloo 2',sans-serif;color:#ffe36b;padding-top:2px"></span>

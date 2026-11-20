@@ -215,6 +215,10 @@ const Option kOptions[] = {
     {"language", "console", "language", Option::Text, "english"},
     {"fastForward", "speed", "hold_to_fast_forward", Option::Bool, "false", "hold_tab_to_fast_forward"},
     {"showFps", "video", "show_fps", Option::Bool, "false"},
+    // Real Wii Remotes, as the game's F10 menu keeps them (runtime_config.h).
+    {"wiiRemotes", "controller", "wii_remotes", Option::Bool, "false"},
+    {"wiiAutoPair", "controller", "wii_auto_pair", Option::Bool, "true"},
+    {"wiiSensorBar", "controller", "wii_sensor_bar", Option::Text, "below"},
 };
 
 // The page's value (JSON: true, 60, 1.5, "vulkan") as the line in Config.toml.

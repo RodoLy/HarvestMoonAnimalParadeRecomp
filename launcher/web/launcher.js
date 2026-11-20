@@ -36,13 +36,13 @@ const T = {
     optionsNote: 'Dentro del juego, F10 abre estas mismas opciones y más (controles, sonido).',
     noMods: 'No hay mods.', modNext: 'Se aplica la próxima vez que abras el juego.', modNoSettings: 'Este mod no tiene ajustes.', cheatNoSettings: 'Este truco no tiene ajustes.', noCheats: 'No hay trucos.', modKeys: (setting) => !setting ? 'Enter o ◀ ▶ lo activan o desactivan.' : setting.yesNo ? 'Enter lo activa o desactiva; ◀ ▶ cambian su ajuste.' : 'Enter lo activa o desactiva; ◀ ▶ cambian la velocidad.', yes: 'Sí', no: 'No', noManifest: 'sin manifiesto',
     noDescription: 'Este mod no trae descripción.', noManifestHint: 'Un mod sin mod.json: se carga, pero no dice qué hace.',
-    keyboard: 'Teclado', keyboardHint: 'El teclado como el control del jugador 1. Apagado, se juega solo con un control o un Wii Remote real.',
-    controller: 'Control', controllerHint: 'Conecta un control y el juego lo toma en lugar del teclado.',
+    keyboard: 'Teclado', keyboardHint: 'Con Sí, el teclado maneja el Wii Remote y el Nunchuk con las teclas de abajo, y el mouse es el puntero. Con No, se juega solo con un control o un Wii Remote real.',
+    controller: 'Control', controllerHint: 'Conecta un control (Xbox, PlayStation, Switch y otros) y presiona un botón: el juego lo toma como el Wii Remote y el Nunchuk. Sus botones son la columna Control.',
     notConnected: 'No conectado', connected: 'Conectado',
     mouse: 'Mouse', mouseHint: 'El mouse es el puntero del Wii Remote: clic izquierdo A, clic derecho B.', pointer: 'Puntero',
     wiimote: 'Wii Remote real', wiimoteHint: 'Un Wii Remote real se empareja dentro del juego, en F10.', inF10: 'En F10',
     bindHint: (name) => 'Enter y luego presiona la tecla o el botón del control para ' + name + '.',
-    bindKeyOnly: 'En el control es el stick izquierdo; aquí se cambia la tecla.',
+    bindKeyOnly: 'En el control siempre es el stick izquierdo; aquí se cambia la tecla.',
     homeNote: 'Home es + y − a la vez.',
     cameraNote: 'Es del mod Cámara libre: solo sale mientras está activado. En el control puede ser un botón o una dirección de un stick; el stick derecho ya no le llega al juego, otro botón sí. Cuenta al abrir el juego.',
     capture: (name) => 'Presiona una tecla o un botón del control para ' + name + '. Supr la deja sin tecla; Esc cancela.',
@@ -51,6 +51,14 @@ const T = {
     fastForwardHint: 'Mantenerlo acelera todo el juego hasta cuatro veces. Se enciende en Opciones.',
     reset: 'Restaurar los controles', resetHint: 'Vuelve a poner las teclas y los botones del control como al principio.', resetDone: 'Se restauraron los controles.',
     reserved: 'F10 abre el menú del juego; elige otra tecla.',
+    // The Controls tab's parts.
+    colGame: 'Botón del Wii', colKeys: 'Teclado', colPad: 'Control',
+    sections: { general: 'General', remote: 'Wii Remote', nunchuk: 'Nunchuk', dpad: 'Cruceta del Wii Remote', extras: 'Extras', camera: 'Cámara libre (mod)', real: 'Wii Remote real (Bluetooth)' },
+    padNone: 'Ninguno conectado', padSeen: 'Conectado',
+    keyboardOn: 'Activado', keyboardOff: 'Desactivado', mouseValue: 'Puntero', realOn: 'Activado', realOff: 'Desactivado',
+    useKeyboard: 'Jugar con el teclado', realRemote: 'Wii Remote real', leftStick: 'Stick izquierdo',
+    controllerNow: (name) => 'Control conectado: ' + name + '. El juego lo usa como Wii Remote y Nunchuk.',
+    hintOk: 'OK', hintBack: 'Atrás', hintTabs: 'Pestañas',
   },
   en: {
     subtitle: 'native PC port', tabs: ['Game', 'Options', 'Mods', 'Cheats', 'Controls'],
@@ -72,13 +80,13 @@ const T = {
     optionsNote: 'Inside the game, F10 opens these same options and more (controls, sound).',
     noMods: 'There are no mods.', modNext: 'It applies the next time the game starts.', modNoSettings: 'This mod has no settings.', cheatNoSettings: 'This cheat has no settings.', noCheats: 'There are no cheats.', modKeys: (setting) => !setting ? 'Enter or ◀ ▶ turn it on or off.' : setting.yesNo ? 'Enter turns it on or off; ◀ ▶ change its setting.' : 'Enter turns it on or off; ◀ ▶ change the speed.', yes: 'Yes', no: 'No', noManifest: 'no manifest',
     noDescription: 'This mod has no description.', noManifestHint: 'A mod without mod.json: it loads, but does not say what it does.',
-    keyboard: 'Keyboard', keyboardHint: 'The keyboard as player 1\'s controller. Off, the game is played only with a controller or a real Wii Remote.',
-    controller: 'Controller', controllerHint: 'Connect a controller and the game uses it instead of the keyboard.',
+    keyboard: 'Keyboard', keyboardHint: 'With Yes, the keyboard plays the Wii Remote and Nunchuk with the keys below, and the mouse is the pointer. With No, the game is played only with a controller or a real Wii Remote.',
+    controller: 'Controller', controllerHint: 'Connect a controller (Xbox, PlayStation, Switch and others) and press a button: the game takes it as the Wii Remote and Nunchuk. Its buttons are the Controller column.',
     notConnected: 'Not connected', connected: 'Connected',
     mouse: 'Mouse', mouseHint: 'The mouse is the Wii Remote pointer: left click A, right click B.', pointer: 'Pointer',
     wiimote: 'Real Wii Remote', wiimoteHint: 'A real Wii Remote is paired inside the game, in F10.', inF10: 'In F10',
     bindHint: (name) => 'Enter, then press the key or the controller button for ' + name + '.',
-    bindKeyOnly: 'On a controller it is the left stick; here the key is changed.',
+    bindKeyOnly: 'On a controller it is always the left stick; here the key is changed.',
     homeNote: 'Home is + and − together.',
     cameraNote: 'It belongs to the Free camera mod: it only shows while the mod is on. On a controller it can be a button or a direction of a stick; the right stick no longer reaches the game, any other button still does. It counts when the game starts.',
     capture: (name) => 'Press a key or a controller button for ' + name + '. Delete leaves it without a key; Esc cancels.',
@@ -87,6 +95,14 @@ const T = {
     fastForwardHint: 'Holding it runs the whole game up to four times faster. Turn it on in Options.',
     reset: 'Reset the controls', resetHint: 'Puts the keys and the controller buttons back as they start.', resetDone: 'The controls were reset.',
     reserved: 'F10 opens the game\'s menu; choose another key.',
+    // The Controls tab's parts.
+    colGame: 'Wii button', colKeys: 'Keyboard', colPad: 'Controller',
+    sections: { general: 'General', remote: 'Wii Remote', nunchuk: 'Nunchuk', dpad: 'Wii Remote D-pad', extras: 'Extras', camera: 'Free camera (mod)', real: 'Real Wii Remote (Bluetooth)' },
+    padNone: 'None connected', padSeen: 'Connected',
+    keyboardOn: 'On', keyboardOff: 'Off', mouseValue: 'Pointer', realOn: 'On', realOff: 'Off',
+    useKeyboard: 'Play with the keyboard', realRemote: 'Real Wii Remote', leftStick: 'Left stick',
+    controllerNow: (name) => 'Controller connected: ' + name + '. The game uses it as the Wii Remote and Nunchuk.',
+    hintOk: 'OK', hintBack: 'Back', hintTabs: 'Tabs',
   },
 };
 
@@ -116,27 +132,41 @@ const OPTS = [
       en: 'Holding its key (Tab to begin with) or its button fast-forwards everything; change them in Controls. Fast loading is always on.' } },
   { key: 'showFps', es: 'Mostrar FPS', en: 'Show FPS', flag: true, settings: [false, true],
     hint: { es: 'Muestra los cuadros por segundo en una esquina.', en: 'Shows the frames per second in a corner.' } },
+  // Real Wii Remotes ([controller] in Config.toml, as F10 > Controllers keeps them). They show in the
+  // Controls tab, under "Real Wii Remote", not in Options.
+  { key: 'wiiRemotes', controls: true, es: 'Usar Wii Remotes reales', en: 'Use real Wii Remotes', flag: true, yesNo: true, settings: [false, true],
+    hint: { es: 'Juega con Wii Remotes de verdad por Bluetooth en lugar del Wii Remote del teclado o del control. Para emparejar uno, con el juego abierto presiona el botón rojo SYNC (o 1 y 2 a la vez) del Wii Remote. Se aplica la próxima vez que abras el juego.',
+      en: 'Play with real Wii Remotes over Bluetooth instead of the keyboard\'s or the controller\'s Wii Remote. To pair one, with the game open press the red SYNC button (or 1 and 2 together) on the Wii Remote. It applies the next time the game starts.' } },
+  { key: 'wiiAutoPair', controls: true, es: 'Buscarlos automáticamente', en: 'Look for them automatically', flag: true, yesNo: true, settings: [false, true],
+    hint: { es: 'Mientras no haya un Wii Remote conectado, el juego sigue buscando uno que esté en modo de emparejamiento. Buscar puede cortar un momento el sonido de unos audífonos Bluetooth.',
+      en: 'While no Wii Remote is connected, the game keeps looking for one in pairing mode. Looking can briefly cut the sound of Bluetooth headphones.' } },
+  { key: 'wiiSensorBar', controls: true, es: 'Barra de sensores', en: 'Sensor bar',
+    values: { es: ['Abajo de la tele', 'Arriba de la tele'], en: ['Below the TV', 'Above the TV'] }, settings: ['below', 'above'],
+    hint: { es: 'Dónde está la barra de sensores de tu Wii Remote real. Se aplica la próxima vez que abras el juego.',
+      en: 'Where the sensor bar of your real Wii Remote is. It applies the next time the game starts.' } },
 ];
 
 // The Controls tab: the Wii Remote and Nunchuk buttons, each with a key and a controller button.
 // "id" is the game's own button (host/launcher.cpp); keyOnly ones have no controller button here.
+// "section" is the heading each one is listed under (T.*.sections).
 const ACTIONS = [
-  { id: 'a', es: 'A', en: 'A' }, { id: 'b', es: 'B', en: 'B' }, { id: 'x', es: '1', en: '1' }, { id: 'y', es: '2', en: '2' },
-  { id: 'start', es: '+', en: '+', home: true }, { id: 'z', es: '−', en: '−', home: true },
-  { id: 'l', es: 'Z del Nunchuk', en: 'Nunchuk Z' }, { id: 'r', es: 'C del Nunchuk', en: 'Nunchuk C' },
-  { id: 'up', es: 'Cruceta ↑', en: 'D-pad ↑' }, { id: 'down', es: 'Cruceta ↓', en: 'D-pad ↓' },
-  { id: 'left', es: 'Cruceta ←', en: 'D-pad ←' }, { id: 'right', es: 'Cruceta →', en: 'D-pad →' },
-  { id: 'stickUp', es: 'Stick del Nunchuk ↑', en: 'Nunchuk stick ↑', keyOnly: true },
-  { id: 'stickDown', es: 'Stick del Nunchuk ↓', en: 'Nunchuk stick ↓', keyOnly: true },
-  { id: 'stickLeft', es: 'Stick del Nunchuk ←', en: 'Nunchuk stick ←', keyOnly: true },
-  { id: 'stickRight', es: 'Stick del Nunchuk →', en: 'Nunchuk stick →', keyOnly: true },
-  { id: 'fastForward', es: 'Avance rápido', en: 'Fast-forward' },
+  { id: 'a', es: 'A', en: 'A', section: 'remote' }, { id: 'b', es: 'B', en: 'B', section: 'remote' },
+  { id: 'x', es: '1', en: '1', section: 'remote' }, { id: 'y', es: '2', en: '2', section: 'remote' },
+  { id: 'start', es: '+ (Más)', en: '+ (Plus)', home: true, section: 'remote' }, { id: 'z', es: '− (Menos)', en: '− (Minus)', home: true, section: 'remote' },
+  { id: 'up', es: 'Arriba', en: 'Up', section: 'dpad' }, { id: 'down', es: 'Abajo', en: 'Down', section: 'dpad' },
+  { id: 'left', es: 'Izquierda', en: 'Left', section: 'dpad' }, { id: 'right', es: 'Derecha', en: 'Right', section: 'dpad' },
+  { id: 'l', es: 'Z', en: 'Z', section: 'nunchuk' }, { id: 'r', es: 'C', en: 'C', section: 'nunchuk' },
+  { id: 'stickUp', es: 'Stick arriba', en: 'Stick up', keyOnly: true, section: 'nunchuk' },
+  { id: 'stickDown', es: 'Stick abajo', en: 'Stick down', keyOnly: true, section: 'nunchuk' },
+  { id: 'stickLeft', es: 'Stick izquierda', en: 'Stick left', keyOnly: true, section: 'nunchuk' },
+  { id: 'stickRight', es: 'Stick derecha', en: 'Stick right', keyOnly: true, section: 'nunchuk' },
+  { id: 'fastForward', es: 'Avance rápido', en: 'Fast-forward', section: 'extras' },
   // The Free camera mod's controls ([mods] in Config.toml), only while it is on.
-  { id: 'cameraLeft', es: 'Cámara: girar ←', en: 'Camera: turn ←', camera: true },
-  { id: 'cameraRight', es: 'Cámara: girar →', en: 'Camera: turn →', camera: true },
-  { id: 'cameraUp', es: 'Cámara: inclinar ↑', en: 'Camera: tilt ↑', camera: true },
-  { id: 'cameraDown', es: 'Cámara: inclinar ↓', en: 'Camera: tilt ↓', camera: true },
-  { id: 'cameraReset', es: 'Cámara: regresar atrás de ti', en: 'Camera: back behind you', camera: true },
+  { id: 'cameraLeft', es: 'Girar a la izquierda', en: 'Turn left', camera: true, section: 'camera' },
+  { id: 'cameraRight', es: 'Girar a la derecha', en: 'Turn right', camera: true, section: 'camera' },
+  { id: 'cameraUp', es: 'Inclinar hacia arriba', en: 'Tilt up', camera: true, section: 'camera' },
+  { id: 'cameraDown', es: 'Inclinar hacia abajo', en: 'Tilt down', camera: true, section: 'camera' },
+  { id: 'cameraReset', es: 'Regresar atrás de ti', en: 'Back behind you', camera: true, section: 'camera' },
 ];
 
 // Keys: the browser's name for each key (KeyboardEvent.code), the game's number for it (an SDL
@@ -236,25 +266,15 @@ const MODS = [
       en: 'The game\'s clock stands still while you play. Sleeping still takes you to the next day, and the scenes that move the time on still do.' } },
 ];
 
-// The tab symbols. Controls is a plain gamepad (drawn here, in the text's colour).
-const GAMEPAD = '<svg viewBox="0 0 24 16" width="1.15em" height="0.8em" style="display:block" fill="currentColor">' +
-  '<mask id="gamepadHoles"><rect width="24" height="16" fill="#fff"/>' +
-  '<path d="M5.2 4.4h1.6v1.8h1.8v1.6H6.8v1.8H5.2V7.8H3.4V6.2h1.8z" fill="#000"/>' +
-  '<circle cx="17.2" cy="5.4" r="1.2" fill="#000"/><circle cx="19.4" cy="7.6" r="1.2" fill="#000"/></mask>' +
-  '<path mask="url(#gamepadHoles)" d="M6 1h12a5 5 0 0 1 4.8 3.6l1 4.6A3.6 3.6 0 0 1 17.6 12L15.8 10H8.2L6.4 12A3.6 3.6 0 0 1 .2 9.2l1-4.6A5 5 0 0 1 6 1z"/></svg>';
-const SYMS = ['★', '⚙\uFE0E', '✿\uFE0E', '♣\uFE0E', GAMEPAD];
 // The tabs, in the order they are drawn. Mods and Cheats are the same kind of list: the cheats are
 // mods too (lines of [mods] in Config.toml), shown apart so that playing with mods is not playing
 // with cheats.
 const TAB = { game: 0, options: 1, mods: 2, cheats: 3, controls: 4 };
-const TAB_COUNT = SYMS.length;
+const TAB_COUNT = 5;
 const isModList = (tab) => tab === TAB.mods || tab === TAB.cheats;
 // The mods each of those two tabs lists: the cheats group on Cheats, every other group on Mods.
 const modsOfTab = (tab) => MODS.filter((m) => (m.group === 'cheats') === (tab === TAB.cheats));
 const ROW_ANIMALS = [['elephant', 'giraffe', 'zebra', 'hippo'], ['cow', 'horse', 'sheep', 'chicken', 'duck', 'chick', 'lion', 'ostrich'], ['cow'], ['cow'], ['sheep', 'chicken', 'duck', 'zebra']];
-// The top parade sits between the panel's title and the tabs, so it is kept narrow.
-const PARADE_TOP = [{ n: 'giraffe', left: 0, h: 92, sway: true }, { n: 'elephant', left: 38, w: 64, h: 64 }, { n: 'lion', left: 96, w: 60, h: 60, hop: true },
-  { n: 'ostrich', left: 142, h: 84, sway: true }, { n: 'hippo', left: 74, w: 46, h: 46 }];
 const PARADE_BOTTOM = [{ n: 'horse', w: 48, h: 48 }, { n: 'cow', w: 46, h: 46, ml: -4 }, { n: 'sheep', w: 42, h: 42, ml: -4 }, { n: 'chicken', w: 36, h: 36, ml: -4, hop: true },
   { n: 'chick', w: 18, h: 18, ml: -2, hop: true }, { n: 'duck', w: 36, h: 36, hop: true }, { n: 'chick', w: 18, h: 18, ml: -2, hop: true }];
 
@@ -267,8 +287,10 @@ const state = {
   status: 'notPrepared', // 'ready' | 'notPrepared' | 'preparing' | 'failed'
   hasDisc: false, discId: 'RBIEE9', error: '',
   stage: 0, fraction: 0, // the preparation: which step (0 extract, 1 translate, 2 compile) and how far, 0..1
-  options: { picture: 0, interpolation: 0, resolution: 0, fullscreen: 0, api: 0, language: 0, fastForward: 0, showFps: 0 },
-  controllers: 0,
+  options: { picture: 0, interpolation: 0, resolution: 0, fullscreen: 0, api: 0, language: 0, fastForward: 0, showFps: 0, wiiRemotes: 0, wiiAutoPair: 1, wiiSensorBar: 0 },
+  controllers: 0,        // how many controllers the system sees (the program counts them)
+  pads: [],              // the names of the controllers the page itself sees (the Gamepad API)
+  input: 'keys',         // what was used last to move around the page: 'keys' or 'pad'
   controls: { keyboard: true, keys: {}, pad: {}, fastForwardKey: 43, fastForwardButton: 'disabled' },
   capture: null,         // the button waiting for a key or a controller button: { action, until }
   mods: MODS, modsOn: {}, modSettings: {},
@@ -338,6 +360,22 @@ function parade(list, flex) {
 // The rows of each tab. A row has a label, maybe a value, a hint for the message box, and what
 // Enter (activate) and the arrows (change) do.
 
+// A button's name in the messages: its section and its own ("Nunchuk: Z").
+function actionName(a) { return t().sections[a.section] + ': ' + a[state.lang]; }
+
+// One of OPTS as a row: the arrows (or Enter) go through its values.
+function optionRow(o, note) {
+  const w = t(), v = state.options[o.key], n = o.settings.length;
+  const change = (step) => {
+    const next = (v + step + n) % n;
+    state.options[o.key] = next;
+    send({ cmd: 'setOption', key: o.key, value: o.settings[next] });
+  };
+  const value = o.flag ? (v ? (o.yesNo ? w.yes : w.on) : (o.yesNo ? w.no : w.off)) : o.values[state.lang][v];
+  return { label: o[state.lang], hint: o.hint[state.lang] + note, arrows: true, value,
+    tone: o.flag ? (v ? 'on' : 'off') : 'value', change, activate: () => change(1) };
+}
+
 function rows() {
   const w = t(), st = state.status;
   if (state.tab === TAB.game) {
@@ -359,25 +397,23 @@ function rows() {
       { label: st === 'preparing' ? w.cancel : w.exit, value: 'Esc', tone: 'key', hint: w.exitHint, activate: escape }];
   }
   if (state.tab === TAB.options) {
-    return OPTS.filter((o) => o.key !== 'language').map((o) => {
-      const v = state.options[o.key], n = o.settings.length;
-      const change = (step) => {
-        const next = (v + step + n) % n;
-        state.options[o.key] = next;
-        send({ cmd: 'setOption', key: o.key, value: o.settings[next] });
-      };
-      return { label: o[state.lang], hint: o.hint[state.lang] + ' ' + w.optionsNote, arrows: true, value: o.flag ? (v ? w.on : w.off) : o.values[state.lang][v],
-        tone: o.flag ? (v ? 'on' : 'off') : 'value', change, activate: () => change(1) };
-    });
+    return OPTS.filter((o) => o.key !== 'language' && !o.controls).map((o) => optionRow(o, ' ' + w.optionsNote));
   }
   if (state.tab === TAB.controls) {
+    // In sections: General, then the Wii Remote's and the Nunchuk's buttons (each with its key and
+    // its controller button, in two columns), the extras, the free camera's while its mod is on, and
+    // the real Wii Remotes' settings.
     const c = state.controls;
     const toggleKeyboard = () => { c.keyboard = !c.keyboard; send({ cmd: 'setKeyboard', value: c.keyboard }); };
-    const list = [{ label: w.keyboard, value: c.keyboard ? w.on : w.off, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
-      change: toggleKeyboard, activate: toggleKeyboard }];
+    const list = [{ section: w.sections.general },
+      { label: w.useKeyboard, value: c.keyboard ? w.yes : w.no, tone: c.keyboard ? 'on' : 'off', arrows: true, hint: w.keyboardHint,
+        change: toggleKeyboard, activate: toggleKeyboard },
+      { label: w.reset, value: 'Enter', tone: 'key', hint: w.resetHint, activate: () => { send({ cmd: 'resetControls' }); state.toast = w.resetDone; } }];
+    let section = '';
     for (const a of ACTIONS) {
       if (a.camera && !state.modsOn.free_camera) continue;
-      const name = a[state.lang], waiting = state.capture && state.capture.action === a;
+      if (a.section !== section) { section = a.section; list.push({ section: w.sections[section], columns: true }); }
+      const name = actionName(a), waiting = state.capture && state.capture.action === a;
       const camera = c.camera || { keys: {}, pad: {} };
       const key = a.camera ? camera.keys[a.id] : a.id === 'fastForward' ? c.fastForwardKey : c.keys[a.id];
       const pad = a.keyOnly ? null : a.camera ? camera.pad[a.id] : a.id === 'fastForward' ? c.fastForwardButton : c.pad[a.id];
@@ -385,14 +421,12 @@ function rows() {
       if (a.keyOnly) hint += ' ' + w.bindKeyOnly;
       if (a.home) hint += ' ' + w.homeNote;
       if (a.camera) hint += ' ' + w.cameraNote;
-      list.push({ label: name, hint, html: waiting ? null : bindingChips(keyLabel(key), a.keyOnly ? null : (pad === 'disabled' ? w.none : padLabel(pad))),
-        value: waiting ? w.pressNow : null, tone: 'warning', activate: () => startCapture(a) });
+      list.push({ label: a[state.lang], hint, binding: true, waiting,
+        keyText: keyLabel(key), padText: a.keyOnly ? null : pad === 'disabled' || pad == null ? w.none : padLabel(pad),
+        activate: () => startCapture(a) });
     }
-    list.push({ label: w.reset, value: 'Enter', tone: 'key', hint: w.resetHint, activate: () => { send({ cmd: 'resetControls' }); state.toast = w.resetDone; } });
-    list.push(
-      { label: w.controller, value: state.controllers ? w.connected : w.notConnected, tone: state.controllers ? 'on' : 'warning', hint: w.controllerHint },
-      { label: w.mouse, value: w.pointer, tone: 'value', hint: w.mouseHint },
-      { label: w.wiimote, value: w.inF10, tone: 'value', hint: w.wiimoteHint });
+    list.push({ section: w.sections.real });
+    for (const o of OPTS.filter((o) => o.controls)) list.push(optionRow(o, ''));
     return list;
   }
   if (isModList(state.tab)) {
@@ -424,14 +458,21 @@ function overall() {
 }
 
 function count() { return rows().length; }
+// Section headings are not rows to choose: moving goes past them.
+const choosable = (r) => r && !r.section;
+function firstChoosable() { const list = rows(); const i = list.findIndex(choosable); return i < 0 ? 0 : i; }
 function move(step) {
-  const n = count();
+  const list = rows(), n = list.length;
   if (!n) return;
-  state.sel = (state.sel + step + n) % n; state.toast = '';
+  let i = state.sel;
+  for (let k = 0; k < n; ++k) { i = (i + step + n) % n; if (choosable(list[i])) break; }
+  // Going past the last row back to the first (or the other way) also shows the headings there.
+  if (step > 0 && i < state.sel) state.scroll = 0;
+  state.sel = i; state.toast = '';
   render();
   showChosenRow();
 }
-function setTab(i) { state.tab = (i + TAB_COUNT) % TAB_COUNT; state.sel = 0; state.scroll = 0; state.toast = ''; render(); }
+function setTab(i) { state.tab = (i + TAB_COUNT) % TAB_COUNT; state.scroll = 0; state.toast = ''; state.sel = firstChoosable(); render(); }
 function escape() {
   if (state.status === 'preparing') send({ cmd: 'cancel' });
   else send({ cmd: 'exit' });
@@ -487,6 +528,59 @@ function normalRow(r, i, chosen) {
     '<span style="position:relative;flex:1;align-self:flex-end;margin:0 14px 13px;border-bottom:2px solid rgba(255,255,255,.7)"></span>' +
     '<div style="position:relative;flex:none;margin-right:16px;display:flex;align-items:center;gap:10px;font:800 18px/1 \'Baloo 2\',sans-serif;color:#f08a2c">' +
       arrow('◀', -1) + value + arrow('▶', 1) + '</div></div>';
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Controls tab: a bar with what is connected on top, and the list in sections. The buttons'
+// rows have two columns, the key and the controller button, named in each section's heading.
+
+const CELL = 210;  // the width of each column
+function controllerNames() {
+  // The names the page sees (once a controller has been touched, the browser tells its name), or
+  // the program's count.
+  const names = state.pads.map((id) => id.replace(/\s*\(.*\)\s*$/, '').replace(/^[0-9a-f]{4}-[0-9a-f]{4}-/i, '').trim() || id);
+  return names.length ? names : state.controllers > 0 ? [t().padSeen] : [];
+}
+function deviceBar() {
+  const w = t(), names = controllerNames(), c = state.controls;
+  const card = (title, value, color, wide) =>
+    '<div style="flex:' + (wide ? '1 1 0' : 'none') + ';min-width:0;height:46px;box-sizing:border-box;border-radius:12px;background:#fffbe2;border:2px solid #dcc06a;display:flex;align-items:center;gap:9px;padding:0 14px">' +
+      '<span style="flex:none;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 2px rgba(90,60,20,.35);background:' + color + '"></span>' +
+      '<span style="flex:none;font-size:19px;letter-spacing:.04em;color:#8a6a2a">' + title + '</span>' +
+      '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 19px/1.2 \'Baloo 2\',sans-serif;color:#4a2c12">' + esc(value) +
+        '</span></div>';
+  const real = state.options.wiiRemotes;
+  return '<div class="abs" style="left:62px;top:122px;width:1124px;display:flex;gap:10px">' +
+    card(w.colPad, names.length ? names.join(', ') : w.padNone, names.length ? '#5cc93a' : '#f59a1c', true) +
+    card(w.colKeys, c.keyboard ? w.keyboardOn : w.keyboardOff, c.keyboard ? '#5cc93a' : '#bba870') +
+    card(w.mouse, w.mouseValue, '#5cc93a') +
+    card(w.realRemote, real ? w.realOn : w.realOff, real ? '#5cc93a' : '#bba870') + '</div>';
+}
+
+function controlsRow(r, i, chosen) {
+  const w = t();
+  if (r.section) {
+    const columns = r.columns ? '<span style="width:' + CELL + 'px;text-align:center">' + w.colKeys + '</span><span style="width:' + CELL + 'px;text-align:center">' + w.colPad + '</span>' : '';
+    return '<div style="flex:none;height:30px;margin-top:' + (i ? 8 : 0) + 'px;display:flex;align-items:flex-end;gap:16px;padding:0 20px 3px 14px;border-bottom:3px solid #e2c65a;font-size:19px;letter-spacing:.08em;color:#7a5418">' +
+      '<span style="flex:1">' + esc(r.section) + '</span>' + columns + '</div>';
+  }
+  const label = '<span style="position:relative;flex:1;min-width:0;margin-left:22px;font-size:25px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (chosen ? '#d2401a' : '#4a2c12') + '">' + esc(r.label) + '</span>';
+  let right;
+  if (r.binding) {
+    const cell = (text, muted) => '<span style="position:relative;width:' + CELL + 'px;display:grid;place-items:center">' + (r.waiting
+      ? '<span style="font:800 18px \'Baloo 2\',sans-serif;color:#d2401a">' + w.pressNow + '</span>'
+      : muted ? '<span style="font-size:18px;letter-spacing:.04em;color:#a08a4a">' + esc(text) + '</span>'
+      : '<span style="min-width:140px;max-width:' + (CELL - 10) + 'px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:1px 12px;border-radius:9px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 18px/1.4 \'Baloo 2\',sans-serif;color:#5e3712">' + esc(text) + '</span>') + '</span>';
+    right = '<div style="position:relative;flex:none;display:flex;gap:16px;margin-right:20px">' + cell(r.keyText) + cell(r.padText == null ? w.leftStick : r.padText, r.padText == null) + '</div>';
+  } else {
+    const value = r.tone === 'key'
+      ? '<span style="min-width:58px;box-sizing:border-box;text-align:center;padding:2px 12px;border-radius:8px;background:#5e3712;color:#fff3d0;font:700 19px/1.3 Dosis,sans-serif;letter-spacing:.05em">' + esc(r.value) + '</span>'
+      : '<span style="font:700 24px/1.2 Dosis,sans-serif;letter-spacing:.05em;white-space:nowrap;color:' + (TONES[r.tone] || '#4a2c12') + '">' + esc(r.value) + '</span>';
+    const arrow = (dir, sign) => '<span data-step="' + sign + '" style="width:18px;text-align:center;cursor:pointer">' + (r.arrows ? dir : '') + '</span>';
+    right = '<div style="position:relative;flex:none;width:' + (2 * CELL + 16) + 'px;margin-right:20px;display:flex;align-items:center;justify-content:center;gap:12px;font:800 18px/1 \'Baloo 2\',sans-serif;color:' + (chosen ? '#f08a2c' : '#d8b860') + '">' +
+      arrow('◀', -1) + value + arrow('▶', 1) + '</div>';
+  }
+  return '<div data-row="' + i + '" style="position:relative;flex:none;height:48px;border-radius:6px;background:#f1d250;display:flex;align-items:center;cursor:pointer">' + glow(chosen) + label + right + '</div>';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -590,13 +684,15 @@ function renderMods(list, sel) {
 function render() {
   uid = 0;
   const w = t(), tab = state.tab, list = rows();
-  const sel = Math.min(state.sel, Math.max(0, count() - 1));
+  let sel = Math.min(state.sel, Math.max(0, list.length - 1));
+  if (list[sel] && !choosable(list[sel])) sel = state.sel = Math.max(0, list.findIndex((r, i) => i > sel && choosable(r)));
 
   $('subtitle').textContent = w.subtitle;
-  $('hintMove').textContent = w.hintMove;
-  $('hintChange').textContent = w.hintChange;
-  $('f10Label').textContent = w.f10;
-  $('escLabel').textContent = state.status === 'preparing' ? w.cancel : w.exit;
+  const hint = (key, text, id, round) => '<div' + (id ? ' id="' + id + '"' : '') + ' style="display:flex;align-items:center;gap:8px' + (id ? ';cursor:pointer' : '') + '"><span class="key"' + (round ? ' style="border-radius:14px"' : '') + '>' + key + '</span><span>' + text + '</span></div>';
+  $('hints').innerHTML = state.input === 'pad'
+    ? hint('✚', w.hintMove) + hint('A', w.hintOk, null, true) + hint('B', w.hintBack, null, true) + hint('LB RB', w.hintTabs) + hint('F10', w.f10)
+    : hint('▲▼', w.hintMove) + hint('◀▶', w.hintChange) + hint('Enter', 'OK', null, true) +
+      hint('Esc', state.status === 'preparing' ? w.cancel : w.exit, 'esc') + hint('F10', w.f10);
   $('versionLabel').textContent = w.version;
   $('version').textContent = state.version;
   for (const [id, code] of [['langEs', 'es'], ['langEn', 'en']]) {
@@ -605,14 +701,15 @@ function render() {
   }
 
   // Tabs.
-  $('tabs').innerHTML =
-    '<div data-tabstep="-1" style="margin:0 4px 20px 0;height:28px;padding:0 9px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;display:grid;place-items:center;font:800 15px/1 \'Baloo 2\',sans-serif;color:#5e3712;cursor:pointer">◀ L</div>' +
-    SYMS.map((sym, i) => i === tab
-      ? '<div style="height:64px;box-sizing:border-box;padding:0 18px 4px 10px;border-radius:18px 18px 0 0;background:#a8d830;border:4px solid #3f7d14;border-bottom:none;display:flex;align-items:center;gap:10px">' +
-        '<span style="width:40px;height:40px;border-radius:50%;background:#3f7d14;display:grid;place-items:center;font:800 22px/1 \'Baloo 2\',sans-serif;color:#fff">' + sym + '</span>' +
-        '<span style="font-size:23px;letter-spacing:.06em;color:#234a08;white-space:nowrap">' + w.tabs[i] + '</span></div>'
-      : '<div class="tabcircle" data-tab="' + i + '" style="width:50px;height:50px;margin-bottom:10px;box-sizing:border-box;border-radius:50%;background:#fff6d6;border:3px solid #fff;box-shadow:0 3px 0 rgba(74,44,18,.28);display:grid;place-items:center;font:800 23px/1 \'Baloo 2\',sans-serif;color:#8a5a2a;cursor:pointer">' + sym + '</div>').join('') +
-    '<div data-tabstep="1" style="margin:0 0 20px 4px;height:28px;padding:0 9px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;display:grid;place-items:center;font:800 15px/1 \'Baloo 2\',sans-serif;color:#5e3712;cursor:pointer">R ▶</div>';
+  // Tabs: each with its name; the chosen one joins the board. L and R (or Q and E, or the
+  // controller's LB and RB) go to the one beside it.
+  const step = (dir, text) => '<div data-tabstep="' + dir + '" style="margin:0 ' + (dir < 0 ? '2px' : '0') + ' 18px ' + (dir > 0 ? '2px' : '0') + ';height:28px;padding:0 8px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;display:grid;place-items:center;font:800 14px/1 \'Baloo 2\',sans-serif;color:#5e3712;cursor:pointer;white-space:nowrap">' + text + '</div>';
+  const padKeys = state.input === 'pad';
+  $('tabs').innerHTML = step(-1, padKeys ? '◀ LB' : '◀ Q') +
+    w.tabs.map((name, i) => i === tab
+      ? '<div style="height:60px;box-sizing:border-box;padding:0 18px 6px;border-radius:18px 18px 0 0;background:#a8d830;border:4px solid #3f7d14;border-bottom:none;display:grid;place-items:center;font-size:23px;letter-spacing:.05em;color:#234a08;white-space:nowrap">' + name + '</div>'
+      : '<div class="tabcircle" data-tab="' + i + '" style="height:40px;margin-bottom:10px;box-sizing:border-box;padding:0 13px;border-radius:20px;background:#fff6d6;border:3px solid #fff;box-shadow:0 3px 0 rgba(74,44,18,.28);display:grid;place-items:center;font-size:19px;letter-spacing:.04em;color:#7a4a1a;cursor:pointer;white-space:nowrap">' + name + '</div>').join('') +
+    step(1, padKeys ? 'RB ▶' : 'E ▶');
 
   const shown = modsOfTab(tab), onCount = shown.filter((m) => state.modsOn[m.id]).length;
   $('panelTitle').textContent = isModList(tab) ? w.modsOn(onCount, shown.length) : w.panel[tab];
@@ -624,9 +721,11 @@ function render() {
   if (list.length && isModList(tab)) {
     html += renderMods(list, sel);
   } else if (list.length) {
-    html += '<div class="abs wheel" style="left:56px;top:116px;width:1136px;height:352px;overflow:hidden">' +
+    const top = tab === TAB.controls ? CONTROLS_LIST_TOP : LIST_TOP;
+    if (tab === TAB.controls) html += deviceBar();
+    html += '<div class="abs wheel" style="left:56px;top:' + top + 'px;width:1136px;height:' + visible() + 'px;overflow:hidden">' +
       '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:1124px">' +
-      list.map((r, i) => (r.play ? playRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
+      list.map((r, i) => (r.play ? playRow(r, i, i === sel) : tab === TAB.controls ? controlsRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
   if (!list.length) {
     html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + (tab === TAB.cheats ? w.noCheats : w.noMods) + '</div>';
@@ -637,7 +736,7 @@ function render() {
 
   // The message box: what just happened, or what the chosen row does.
   let message = state.toast;
-  if (state.capture) message = (state.capture.action.keyOnly ? w.captureKeyOnly : w.capture)(state.capture.action[state.lang]);
+  if (state.capture) message = (state.capture.action.keyOnly ? w.captureKeyOnly : w.capture)(actionName(state.capture.action));
   if (!message && !list.length) message = (tab === TAB.cheats ? w.noCheats : w.noMods);
   if (!message && list[sel]) message = list[sel].hint || '';
   $('message').textContent = message;
@@ -649,6 +748,7 @@ function render() {
 
 $('stage').addEventListener('click', (e) => {
   if (state.capture) { endCapture(); return; }
+  if (e.target.closest('#esc')) return escape();
   const stepEl = e.target.closest('[data-step]');
   const rowEl = e.target.closest('[data-row]');
   const tabEl = e.target.closest('[data-tab]');
@@ -679,11 +779,13 @@ $('stage').addEventListener('mousemove', (e) => {
 $('stage').addEventListener('wheel', (e) => { if (e.target.closest('.wheel')) { e.preventDefault(); scrollBy(e.deltaY); } }, { passive: false });
 // The scroll bar, like any other: the handle's size is how much of the list shows, dragging it
 // or the mouse wheel moves the list smoothly, a click on the bar jumps there, the arrows step.
-const VISIBLE = 352;     // the height of the list's window
+// The height of the list's window: on Controls the bar with the devices takes its top.
+const LIST_TOP = 116, CONTROLS_LIST_TOP = 182, LIST_BOTTOM = 468;
+function visible() { return LIST_BOTTOM - (state.tab === TAB.controls ? CONTROLS_LIST_TOP : LIST_TOP); }
 const TRACK = 300;       // the inside of the bar
 function listHeight() { const list = $('list'); return list ? list.offsetHeight : 0; }
-function maxScroll() { return Math.max(0, listHeight() - VISIBLE); }
-function handleSize() { const total = listHeight(); return total > VISIBLE ? Math.max(28, TRACK * VISIBLE / total) : TRACK; }
+function maxScroll() { return Math.max(0, listHeight() - visible()); }
+function handleSize() { const total = listHeight(); return total > visible() ? Math.max(28, TRACK * visible() / total) : TRACK; }
 
 function applyScroll(smooth) {
   state.scroll = Math.max(0, Math.min(state.scroll, maxScroll()));
@@ -704,9 +806,11 @@ function scrollBy(pixels) { state.scroll += pixels; applyScroll(true); }
 function showChosenRow() {
   const row = document.querySelector('[data-row="' + state.sel + '"]');
   if (!row) return;
-  const top = row.offsetTop - 6, bottom = row.offsetTop + row.offsetHeight + 6;
+  // A section's first row brings its heading into view with it.
+  const above = row.previousElementSibling, heading = above && !above.hasAttribute('data-row') ? above : null;
+  const top = (heading || row).offsetTop - 6, bottom = row.offsetTop + row.offsetHeight + 6;
   if (top < state.scroll) state.scroll = top;
-  else if (bottom > state.scroll + VISIBLE) state.scroll = bottom - VISIBLE;
+  else if (bottom > state.scroll + visible()) state.scroll = bottom - visible();
   applyScroll(true);
 }
 
@@ -734,7 +838,6 @@ $('track').addEventListener('mousedown', (e) => {
   window.addEventListener('mousemove', follow);
   window.addEventListener('mouseup', stop);
 });
-$('esc').addEventListener('click', escape);
 $('close').addEventListener('click', () => send({ cmd: 'exit' }));
 $('minimize').addEventListener('click', () => send({ cmd: 'minimize' }));
 $('titlebar').addEventListener('mousedown', (e) => { if (!e.target.closest('.titlebutton')) send({ cmd: 'drag' }); });
@@ -754,31 +857,65 @@ function setLanguage(index) {
 $('langEs').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexOf('spanish')));
 $('langEn').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexOf('english')));
 
-window.addEventListener('keydown', (e) => {
-  if (state.capture) { e.preventDefault(); if (!e.repeat) captureKey(e.code); return; }
-  const k = e.key, tab = state.tab;
-  if (k === 'Escape') return escape();
-  if (k === 'q' || k === 'Q') return setTab(tab - 1);
-  if (k === 'e' || k === 'E') return setTab(tab + 1);
-  if (k === 'ArrowUp') { e.preventDefault(); return move(-1); }
-  if (k === 'ArrowDown') { e.preventDefault(); return move(1); }
-  const step = k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0;
+// What the keys and the controller do on the page: 'up', 'down', 'left', 'right', 'ok', 'back'
+// (the controller's B: back to the Game tab), 'prev' and 'next' (the tab beside).
+function press(what) {
+  if (what === 'prev' || what === 'next') return setTab(state.tab + (what === 'prev' ? -1 : 1));
+  if (what === 'up' || what === 'down') return move(what === 'up' ? -1 : 1);
+  if (what === 'back') { if (state.tab !== TAB.game) setTab(TAB.game); return; }
   const r = rows()[state.sel];
   if (!r) return;
+  const step = what === 'right' ? 1 : what === 'left' ? -1 : 0;
   if (step && r.change) { r.change(step); render(); }
-  if (k === 'Enter' && r.activate) { r.activate(); render(); }
+  if (what === 'ok' && r.activate) { r.activate(); render(); }
+}
+function usedInput(kind) { if (state.input !== kind) { state.input = kind; render(); } }
+
+window.addEventListener('keydown', (e) => {
+  if (state.capture) { e.preventDefault(); if (!e.repeat) captureKey(e.code); return; }
+  usedInput('keys');
+  const k = e.key;
+  if (k === 'Escape') return escape();
+  const what = { q: 'prev', Q: 'prev', e: 'next', E: 'next', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'ok' }[k];
+  if (!what) return;
+  if (k.startsWith('Arrow')) e.preventDefault();
+  press(what);
 });
+
+// The controller moves around the page too: the D-pad or the left stick choose and change, A is
+// OK, B goes back, LB and RB change the tab. Held, a direction repeats. Nothing happens while a
+// control waits for its new button, and a button still held from then does nothing until let go.
+const PAD_ACTIONS = { dpad_up: 'up', left_stick_up: 'up', dpad_down: 'down', left_stick_down: 'down', dpad_left: 'left', left_stick_left: 'left',
+  dpad_right: 'right', left_stick_right: 'right', south: 'ok', east: 'back', left_shoulder: 'prev', right_shoulder: 'next' };
+const REPEATS = new Set(['up', 'down', 'left', 'right']);
+let padHeld = new Map();  // what is held now -> when it fires next (ms)
+function readPads() {
+  const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+  const ids = pads.map((p) => p.id);
+  if (ids.join('|') !== state.pads.join('|')) { state.pads = ids; render(); }
+  const now = performance.now(), held = new Set();
+  for (const name of pressedNow(0.55)) if (PAD_ACTIONS[name]) held.add(PAD_ACTIONS[name]);
+  const next = new Map();
+  for (const what of held) {
+    const due = padHeld.get(what);
+    if (state.capture) { next.set(what, Infinity); continue; }
+    if (due === undefined) {
+      usedInput('pad');
+      press(what);
+      next.set(what, REPEATS.has(what) ? now + 380 : Infinity);
+    } else if (now >= due) {
+      press(what);
+      next.set(what, now + 110);
+    } else next.set(what, due);
+  }
+  padHeld = next;
+  requestAnimationFrame(readPads);
+}
+requestAnimationFrame(readPads);
 
 // ---------------------------------------------------------------------------------------------
 // Changing a control: Enter on a button's row waits up to ten seconds for a key or a controller
 // button. Keys come from the keyboard events; controller buttons are read with the Gamepad API.
-
-function bindingChips(key, pad) {
-  const chip = (symbol, text) => '<span style="display:flex;align-items:center;gap:6px;font:700 22px/1.2 Dosis,sans-serif;color:#4a2c12;white-space:nowrap">' +
-    '<span style="font-size:16px;color:#8a6a2a">' + symbol + '</span>' +
-    '<span style="min-width:104px;box-sizing:border-box;text-align:center;padding:1px 10px;border-radius:8px;background:#fff;border:2px solid #5e3712;box-shadow:0 2px 0 #5e3712;font:800 17px/1.4 \'Baloo 2\',sans-serif;color:#5e3712">' + esc(text) + '</span></span>';
-  return '<span style="display:flex;gap:18px">' + chip('⌨\uFE0E', key) + (pad != null ? chip('🎮\uFE0E', pad) : '') + '</span>';
-}
 
 // The controller buttons held now; a stick direction counts past "reach" (0..1) of the way.
 function pressedNow(reach) {
@@ -917,9 +1054,9 @@ if (window.chrome && window.chrome.webview) {
   };
 }
 
-document.getElementById('paradeTop').innerHTML = parade(PARADE_TOP, false);
 document.getElementById('paradeBottom').innerHTML = parade(PARADE_BOTTOM, true);
 fit();
+state.sel = firstChoosable();
 render();
 blinkEyes(document.body);
 send({ cmd: 'hello' });
