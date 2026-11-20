@@ -48,4 +48,4 @@ done
 find "$sysroot/aarch64-linux-android" -mindepth 1 -maxdepth 1 -type d -regex '.*/[0-9]+' ! -name "$api" -exec rm -rf {} +
 
 du -sh "$out"
-du -sh "$prebuilt"/* "$prebuilt/bin" "$prebuilt/lib"/* "$prebuilt/sysroot/usr"/* 2>/dev/null | sort -h | tail -n 20
+find "$prebuilt" -type f -size +8M -exec du -h {} + | sort -h | tail -n 30
