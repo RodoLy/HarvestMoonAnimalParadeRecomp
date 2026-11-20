@@ -95,7 +95,7 @@ jobs:
 
       - name: Install the NDK, the build tools and the platform
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+          (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
             "ndk;$NDK_VERSION" "build-tools;$BUILD_TOOLS_VERSION" "platforms;$ANDROID_PLATFORM" > /dev/null
           echo "NDK=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           echo "BUILD_TOOLS=$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
@@ -171,6 +171,11 @@ jobs:
           for source in "$DEPS"/*-src; do
             cp -a "$source" "$workspace/Dependencies/"
             rm -rf "$workspace/Dependencies/$(basename "$source")/.git"
+          done
+          # Windows unpacks no symbolic links: each becomes a copy of what it points at (or goes,
+          # if it points nowhere; those are only in the sources' tests).
+          find "$workspace" -type l | while read -r link; do
+            if [[ -e "$link" ]]; then cp -R --remove-destination "$(readlink -f "$link")" "$link"; else rm -f "$link"; fi
           done
           cp "$SHELL_APK" "$android/"
           cp packaging/android/configure-flags.txt "$android/"
@@ -261,7 +266,7 @@ jobs:
 
       - name: Install the NDK and the platform tools for this computer
         if: runner.os != 'Windows'
-        run: yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" platform-tools > /dev/null
+        run: (yes || true) | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" platform-tools > /dev/null
 
       - name: Install the NDK and the platform tools for this computer
         if: runner.os == 'Windows'
