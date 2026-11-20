@@ -198,7 +198,8 @@ Quality of life. Each is turned on or off and has a speed, a percentage from 100
 game) to 300, chosen with a bar in the launcher that shows it as ×1, ×1.25, ×1.5… up to ×3. In `[mods]` they are two lines each, for instance
 `faster_walking = true` and `faster_walking_percent = 150` (150 when the percentage is missing).
 `faster_actions` speeds up picking things up
-and putting them down, taking them out of the rucksack and using the tools; `faster_walking`, the
+and putting them down, taking them out of the rucksack, using the tools and looking after the
+animals (petting, brushing, carrying them, milking); `faster_walking`, the
 player's walking and running. The clock, the villagers and the animals keep their speed.
 
 What the game does, and what the mods change (`runtime/src/hle/game_mods/player_speed.cpp`):
@@ -209,7 +210,9 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
 - The mods wrap the update and act only while the player's action (+0x5EC) is in one of two lists:
   walking (39, 40, 41, and 21, 22, 23 for the stop after it) or the quick actions (picking up 94
   and 86, carrying 90 and 81, putting down 69, 72 and 88, taking out a tool 90 and 87, the hoe 95,
-  96, 98 and 99, the watering can 119, 115, 116 and 118, other tools 91 and 92). A scene, a talk or
+  96, 98 and 99, the watering can 119, 115, 116 and 118, other tools 91, 92, and 101, 102 and 106;
+  the animals: petting 77, 78 and 79, picking one up 89, brushing 129, a product into the rucksack
+  135, and the two longer care actions 211, 212, 216, 213 and 203, 208, 205). A scene, a talk or
   anything not listed plays as in the original game.
 - Walking advances by the time step, so `faster_walking` hands the player a longer one. The actions'
   animations move one step per update whatever the time, so `faster_actions` runs the player's update
@@ -465,7 +468,8 @@ juego original) a 300, que se elige con una barra en el launcher que lo muestra 
 ×1.5… hasta ×3. En `[mods]` son dos líneas cada
 uno, por ejemplo `faster_walking = true` y `faster_walking_percent = 150` (150 si falta el
 porcentaje). `faster_actions` acelera
-recoger y soltar cosas, sacarlas de la mochila y usar las herramientas; `faster_walking`, caminar y
+recoger y soltar cosas, sacarlas de la mochila, usar las herramientas y cuidar a los animales
+(acariciarlos, cepillarlos, cargarlos, ordeñarlos); `faster_walking`, caminar y
 correr. El reloj, los aldeanos y los animales van a su velocidad de siempre.
 
 Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_speed.cpp`):
@@ -476,8 +480,10 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
 - Los mods envuelven la actualización y actúan solo mientras la acción de quien juega (+0x5EC) está
   en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al frenar) o las acciones rápidas (recoger
   94 y 86, cargar 90 y 81, soltar 69, 72 y 88, sacar una herramienta 90 y 87, la azada 95, 96, 98 y
-  99, la regadera 119, 115, 116 y 118, otras herramientas 91 y 92). Una escena, una plática o
-  cualquier cosa fuera de las listas va como en el juego original.
+  99, la regadera 119, 115, 116 y 118, otras herramientas 91, 92, y 101, 102 y 106; los animales:
+  acariciar 77, 78 y 79, levantar uno 89, cepillar 129, un producto a la mochila 135, y los dos
+  cuidados más largos 211, 212, 216, 213 y 203, 208, 205). Una escena, una plática o cualquier cosa
+  fuera de las listas va como en el juego original.
 - Caminar avanza con el paso de tiempo, así que `faster_walking` le da uno más largo. Las animaciones
   de las acciones avanzan un paso por actualización sin importar el tiempo, así que `faster_actions`
   corre la actualización de quien juega más de una vez en el cuadro (dos veces a 200%, tres a 300%,
