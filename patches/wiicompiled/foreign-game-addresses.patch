@@ -3346,10 +3346,10 @@ index 0000000..80d1ae0
 +FOREIGN_GAME_WRAPPER(RBIEE9, 800CFB30, AnimalParadePlayerUpdate);
 diff --git a/runtime/src/hle/game_mods/romance_adoption.cpp b/runtime/src/hle/game_mods/romance_adoption.cpp
 new file mode 100644
-index 0000000..96f6ce0
+index 0000000..2cb1af8
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/romance_adoption.cpp
-@@ -0,0 +1,1380 @@
+@@ -0,0 +1,1382 @@
 +// Harvest Moon: Animal Parade mod "romance_any_gender", part two: the adoption. (Part one, who can
 +// fall in love with the player, is romance_any_gender.cpp.)
 +//
@@ -4484,13 +4484,15 @@ index 0000000..96f6ce0
 +// over the player (0x28D: a number, who, effect 0x6D) become effect 0x74, the yellow sparkles of
 +// glad surprise. And after the fade the player is not in bed as if he had given birth: where the
 +// scene puts him into the bed (0x087 at x 16.5, y 0, z 2.2, turned 0 by 0x091, and motion 0x128,
-+// lying down), he stands between the King and the bed, facing the King (turned 90, as at the start
-+// of the scene), and cheers. The camera there looks along -z from x 15.3, z 3.6, with the King on
-+// the left and the bed on the right, so he stands in the middle of the picture. Empty if the scene
-+// is not as expected.
-+constexpr float kStandX = 15.0f;
-+constexpr float kStandZ = 1.9f;
-+constexpr float kStandTurn = 90.0f;
++// lying down), he stands in front of the King and cheers. After the fade the King is at x 13.5,
++// z 2.6, facing +x (turned 271), holding the baby out towards where the bed is; the player stands
++// at x 15.3, z 2.4, between the King and the bed, turned 85 to face him (90 faces -x, 0 faces +z).
++// The spot was chosen by trying it in the game: there the shot of the bed shows the two face to
++// face, and the King's close-ups show the baby with the player's shoulder at the side instead of
++// his head in the middle. Empty if the scene is not as expected.
++constexpr float kStandX = 15.3f;
++constexpr float kStandZ = 2.4f;
++constexpr float kStandTurn = 85.0f;
 +
 +std::string KingBirthForMen(std::string data) {
 +    if (data.size() < 0x1C || data.compare(0, 4, "OPAL") != 0) {

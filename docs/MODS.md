@@ -124,8 +124,8 @@ scenes play for them as they are, but for these changes:
   the baby: feeling ill (motion `0x93` with drops of sweat, effect `0x6D`), lying down, and in bed
   after the birth. For a man the mod plays copies (`sample_118.opb` and `sample_119.opb`, files
   18419 and 18420) where the player cheers (`0x8D`) with sparkles (effect `0x74`), and after the
-  fade stands next to the King and the baby instead of lying in bed as if he had given birth (the
-  scene's `0x087` into the bed moves him to x 15.0, z 1.9, its `0x091` turns him to face the King,
+  fade stands in front of the King and the baby instead of lying in bed as if he had given birth (the
+  scene's `0x087` into the bed moves him to x 15.3, z 2.4, its `0x091` turns him to face the King,
   and the lying motion `0x128` becomes the cheer). The King's lines there say that he asked the
   Harvest Goddess for a baby for the two of them, and to close the eyes a moment.
 - Their weddings have no shot of one carrying the other, so they play as they are.
@@ -386,8 +386,8 @@ Rey, y esas escenas les salen tal cual, salvo estos cambios:
   esperando al bebé: se siente mal (movimiento `0x93` con gotas de sudor, efecto `0x6D`), se acuesta
   y queda en cama tras el parto. Para un hombre el mod pone copias (`sample_118.opb` y
   `sample_119.opb`, archivos 18419 y 18420) donde quien juega celebra (`0x8D`) con destellos (efecto
-  `0x74`) y, tras el fundido, queda de pie junto al Rey y el bebé en lugar de acostado en la cama
-  como si hubiera dado a luz (el `0x087` de la escena que lo mete a la cama lo pone en x 15.0, z 1.9,
+  `0x74`) y, tras el fundido, queda de pie frente al Rey y el bebé en lugar de acostado en la cama
+  como si hubiera dado a luz (el `0x087` de la escena que lo mete a la cama lo pone en x 15.3, z 2.4,
   su `0x091` lo voltea hacia el Rey, y el movimiento de acostado `0x128` se vuelve la celebración).
   Las frases del Rey ahí dicen que le pidió a la Diosa de la Cosecha un bebé para los dos, y que
   cierre los ojos un momento.
