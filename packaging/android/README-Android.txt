@@ -29,11 +29,10 @@ Without USB debugging
 ---------------------
 1. Copy AnimalParade.apk to the device and open it to install it (allow installing apps from
    that source when asked).
-2. Open the app once: it makes its folder and says where the disc goes.
-3. Copy the folder Disc\DATA from your computer's package (with sys and files in it) into
-   Android/data/io.github.hmaprecomp.animalparade/files/Disc/ on the device, over USB.
-   The result is .../files/Disc/DATA/sys/main.dol.
-4. Open the app again and choose "Try again".
+2. Open the app and choose "Choose your disc image": pick your .iso, .rvz, .wbfs, .wia or .ciso.
+   The app unpacks it once (about 5 GB, a few minutes) and starts the game.
+   (Copying the folder Disc\DATA from your computer's package into
+   Android/data/io.github.hmaprecomp.animalparade/files/Disc/ over USB works too.)
 
 Playing
 -------
@@ -85,11 +84,10 @@ Sin depuración USB
 ------------------
 1. Copia AnimalParade.apk al dispositivo y ábrelo para instalarlo (permite instalar apps de ese
    origen cuando te lo pida).
-2. Abre la app una vez: crea su carpeta y dice dónde va el disco.
-3. Copia la carpeta Disc\DATA del paquete de tu computadora (con sys y files dentro) a
-   Android/data/io.github.hmaprecomp.animalparade/files/Disc/ en el dispositivo, por USB.
-   Queda .../files/Disc/DATA/sys/main.dol.
-4. Abre la app otra vez y elige "Reintentar".
+2. Abre la app y elige "Elegir la imagen de tu disco": escoge tu .iso, .rvz, .wbfs, .wia o .ciso.
+   La app la desempaca una vez (unos 5 GB, unos minutos) y arranca el juego.
+   (También sirve copiar la carpeta Disc\DATA del paquete de tu computadora a
+   Android/data/io.github.hmaprecomp.animalparade/files/Disc/ por USB.)
 
 Cómo se juega
 -------------

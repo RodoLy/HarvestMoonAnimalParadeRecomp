@@ -10,7 +10,7 @@ code, so the app is put together there from their disc. The pieces:
 | Where | What |
 | --- | --- |
 | `android/AndroidManifest.xml`, `android/res/` | The app: its name, icon, the two activities, Android 11 (API 30) and up. |
-| `android/java/.../SetupActivity.java` | What opens first: unpacks the game's files (`assets/game`) to `Game/` in the app's folder, writes `portable.txt` and the first `UserData/Config.toml`, and checks for the disc in `Disc/DATA`. |
+| `android/java/.../SetupActivity.java` | What opens first: unpacks the game's files (`assets/game`) to `Game/` in the app's folder, writes `portable.txt` and the first `UserData/Config.toml`, and checks for the disc in `Disc/DATA`. Without it, it asks for the player's disc image with Android's file picker and unpacks it there once (`runtime/src/platform/android_disc.cpp`, with nod built for Android in CI). |
 | `android/java/.../GameActivity.java` | The game: SDL's activity with aurora's drawing surface. It tells the runtime where `Game/` is (`WIICOMPILED_GAME_DIR`). |
 | `tools/ApkPack/` | Puts the compiled game (`libmain.so`) and its files into the shell and signs the app (APK Signature Scheme v2), with no Java or Android SDK on the player's computer. |
 | `packaging/android/` | The add-on: `build-android.ps1`/`.cmd` (Windows), `build-android.sh` (Linux), the CMake flags, the NDK pruning, its README. |
@@ -50,8 +50,9 @@ happens on real devices are welcome.
 La versión de Android se hace en la computadora del jugador, como las demás: el proyecto no trae
 código del juego, así que la app se arma ahí desde su disco.
 
-- `android/`: la app (manifiesto, ícono, `SetupActivity` que desempaca los archivos del juego y
-  revisa el disco, `GameActivity` que es la actividad de SDL con la superficie de aurora).
+- `android/`: la app (manifiesto, ícono, `SetupActivity` que desempaca los archivos del juego,
+  revisa el disco y, si falta, pide la imagen del disco con el selector de archivos de Android y la
+  desempaca una vez con nod; `GameActivity` que es la actividad de SDL con la superficie de aurora).
 - `tools/ApkPack/`: mete el juego compilado (`libmain.so`) y sus archivos en el cascarón y firma la
   app (esquema v2), sin Java ni el SDK de Android en la computadora del jugador.
 - `packaging/android/`: el complemento: `build-android.ps1`/`.cmd` (Windows), `build-android.sh`
