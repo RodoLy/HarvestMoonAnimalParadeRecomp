@@ -32,8 +32,12 @@ find "$prebuilt/bin" -mindepth 1 -maxdepth 1 ! \( -name 'clang' -o -name 'clang+
     -o -name 'ld.exe' -o -name 'llvm-ar*' -o -name 'llvm-ranlib*' -o -name 'llvm-strip*' -o -name 'llvm-objcopy*' \
     -o -name 'llvm-nm*' -o -name 'llvm-readelf*' -o -name 'llvm-readobj*' -o -name 'llvm-objdump*' \
     -o -name 'aarch64-linux-android*' -o -name '*.dll' \) -exec rm -rf {} +
-# Link-time optimization plugins: nothing here uses them.
+# Link-time optimization plugins, and the libraries of the debugger, of libclang's tools and of
+# simpleperf: the compiler and the linker are programs of their own and use none of them.
 rm -f "$prebuilt/lib/LLVMgold.so" "$prebuilt/lib/libLTO.so"* "$prebuilt/lib64/LLVMgold.so" "$prebuilt/lib64/libLTO.so"*
+rm -f "$prebuilt/lib/libclang.so"* "$prebuilt/lib/libclang-cpp.so"* "$prebuilt/lib/liblldb.so"* \
+    "$prebuilt/bin/libclang.dll" "$prebuilt/bin/libclang-cpp.dll" "$prebuilt/bin/liblldb.dll"
+find "$prebuilt/lib" \( -name '*simpleperf*' -o -name 'lldb-server' \) -exec rm -rf {} +
 
 # Runtime libraries of the compiler: only 64-bit ARM, and no sanitizers.
 find "$prebuilt/lib/clang" -path '*/lib/linux/*' \( -name '*i686*' -o -name '*x86_64*' -o -name '*arm-*' \
