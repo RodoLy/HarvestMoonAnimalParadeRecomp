@@ -1,5 +1,5 @@
 diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
-index f0d4fd4..466fb7c 100644
+index f0d4fd4..1b793b7 100644
 --- a/runtime/CMakeLists.txt
 +++ b/runtime/CMakeLists.txt
 @@ -26,7 +26,7 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
@@ -11,15 +11,44 @@ index f0d4fd4..466fb7c 100644
      set(MKW_PLATFORM_WINDOWS TRUE)
  elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm64|ARM64)$")
      set(MKW_PLATFORM_MACOS TRUE)
-@@ -39,7 +39,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(
+@@ -35,11 +35,16 @@ elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm
+     else()
+         set(MKW_PLATFORM_MACOS_ARM64 TRUE)
+     endif()
++elseif(ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
++    # Android (the NDK's toolchain file): Linux underneath, so the Linux code paths serve it; the
++    # game is a shared library (libmain.so) that SDL's Java activity loads.
++    set(MKW_PLATFORM_LINUX TRUE)
++    set(MKW_PLATFORM_ANDROID TRUE)
+ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|aarch64|arm64|ARM64)$")
      set(MKW_PLATFORM_LINUX TRUE)
  else()
      message(FATAL_ERROR
 -        "WiiCompiled supports 64-bit LLVM-MinGW Clang on Windows, native Linux x86_64/aarch64, or Apple Clang on macOS x86_64/arm64")
-+        "WiiCompiled supports 64-bit LLVM-MinGW Clang on Windows (x86_64 or ARM64), native Linux x86_64/aarch64, or Apple Clang on macOS x86_64/arm64")
++        "WiiCompiled supports 64-bit LLVM-MinGW Clang on Windows (x86_64 or ARM64), native Linux x86_64/aarch64, Apple Clang on macOS x86_64/arm64, or the Android NDK (arm64-v8a)")
  endif()
  
  if(MKW_PLATFORM_WINDOWS)
+@@ -433,6 +438,19 @@ else()
+         endif()
+         set_target_properties(mkw_macos_native_compile PROPERTIES UNITY_BUILD OFF)
+     endif()
++    if(MKW_PLATFORM_ANDROID)
++        # Compile-only check of the runtime for Android, for a machine without a translation.
++        add_library(mkw_android_native_compile OBJECT ${SOURCES})
++        target_include_directories(mkw_android_native_compile PRIVATE
++            "${CMAKE_CURRENT_LIST_DIR}/include" "${CMAKE_CURRENT_LIST_DIR}/src"
++            "${CMAKE_CURRENT_LIST_DIR}/.." "${MKW_AURORA_DIR}/include")
++        target_compile_features(mkw_android_native_compile PRIVATE cxx_std_20)
++        target_compile_definitions(mkw_android_native_compile PRIVATE SDL_MAIN_HANDLED TARGET_PC)
++        target_link_libraries(mkw_android_native_compile PRIVATE
++            aurora::gx aurora::pad aurora::si aurora::vi aurora::mtx
++            mkw::pugixml mkw::toml11 mkw::cryptopp mkw::mbedtls mkw::libco)
++        set_target_properties(mkw_android_native_compile PROPERTIES UNITY_BUILD OFF)
++    endif()
+     add_custom_target(mkw_platform_paths_check DEPENDS mkw_platform)
+     message(STATUS "Translated product targets disabled (MKW_BUILD_PRODUCTS=OFF)")
+ endif()
 diff --git a/runtime/cmake/PlatformTests.cmake b/runtime/cmake/PlatformTests.cmake
 index 1a31b82..98b6d72 100644
 --- a/runtime/cmake/PlatformTests.cmake
@@ -40,6 +69,44 @@ index 1a31b82..98b6d72 100644
  # HostContext deliberately keeps the platform-specific context primitive out
  # of fiber_manager.cpp. Exercise the Linux libco handoff directly so future
  # refactors cannot silently remove its headers, implementation, or link edge.
+diff --git a/runtime/cmake/PublicProducts.cmake b/runtime/cmake/PublicProducts.cmake
+index 809f22e..e4ed375 100644
+--- a/runtime/cmake/PublicProducts.cmake
++++ b/runtime/cmake/PublicProducts.cmake
+@@ -305,7 +305,17 @@ function(mkw_add_product_icon target)
+     endif()
+ endfunction()
+ 
+-add_executable(WiiCompiled "${MKW_BASE_PRODUCT_SOURCE}")
++if(MKW_PLATFORM_ANDROID)
++    # On Android the game is libmain.so, which SDL's Java activity loads and calls SDL_main in
++    # (runtime/src/main.cpp).
++    add_library(WiiCompiled SHARED "${MKW_BASE_PRODUCT_SOURCE}")
++    set_target_properties(WiiCompiled PROPERTIES OUTPUT_NAME main)
++    target_link_libraries(WiiCompiled PRIVATE android log)
++    # 16 KB pages, which newer Android devices use; the library loads on 4 KB ones too.
++    target_link_options(WiiCompiled PRIVATE "LINKER:-z,max-page-size=16384")
++else()
++    add_executable(WiiCompiled "${MKW_BASE_PRODUCT_SOURCE}")
++endif()
+ mkw_configure_product(WiiCompiled)
+ mkw_add_product_icon(WiiCompiled)
+ target_sources(WiiCompiled PRIVATE $<TARGET_OBJECTS:mkw_base_registration>)
+diff --git a/runtime/cmake/RuntimeLibrary.cmake b/runtime/cmake/RuntimeLibrary.cmake
+index 8d6160a..9dc8917 100644
+--- a/runtime/cmake/RuntimeLibrary.cmake
++++ b/runtime/cmake/RuntimeLibrary.cmake
+@@ -17,6 +17,10 @@ endif()
+ # target-specific performance on the table.
+ if(MKW_HOST_IS_X86_64)
+     set(MKW_BASELINE_ARCH_FLAG -march=x86-64-${MKW_X86_CPU_PROFILE})
++elseif(MKW_PLATFORM_ANDROID)
++    # Built on a computer for a phone: the NDK's ARMv8-A baseline, which every 64-bit Android
++    # device runs (a Nintendo Switch's Cortex-A57 included).
++    set(MKW_BASELINE_ARCH_FLAG "")
+ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+     set(MKW_BASELINE_ARCH_FLAG -mcpu=native)
+ else()
 diff --git a/runtime/include/abi_bridge.h b/runtime/include/abi_bridge.h
 index 4ca4439..cd7d8c4 100644
 --- a/runtime/include/abi_bridge.h
@@ -663,13 +730,16 @@ index e3ba175..46585bb 100644
 +        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
 +        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..74add26 100644
+index ea5a12b..e3f615b 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
-@@ -51,6 +51,11 @@ struct RuntimeUserConfig {
+@@ -51,6 +51,14 @@ struct RuntimeUserConfig {
      std::optional<bool> textureReplacements;
      std::optional<bool> textureDumps;
      std::optional<bool> showFps;
++    // [input] touch_controls: the on-screen controller (hle/input/touch_controls.h). true, false,
++    // or "auto" (on a touch screen: Android).
++    std::optional<std::string> touchControls;
 +    std::optional<std::string> language;
 +    std::optional<bool> fastLoading;
 +    std::optional<bool> fastForwardKey;
@@ -678,7 +748,7 @@ index ea5a12b..74add26 100644
      std::optional<uint32_t> disabledPostProcessingPaths;
      std::optional<float> audioVolume;
      std::optional<float> audioMusicVolume;
-@@ -86,6 +91,12 @@ struct RuntimeUserConfig {
+@@ -86,6 +94,12 @@ struct RuntimeUserConfig {
      // it here instead of copying the pack, so an asset-only update is visible on the next launch.
      std::optional<std::string> retroRewindRoot;
      std::vector<std::string> overlayRoots;
@@ -691,7 +761,7 @@ index ea5a12b..74add26 100644
      // Controller mappings use Wii/GameCube button names as keys and up to two
      // comma-separated SDL-style physical button names ("south", or
      // "dpad_up,left_shoulder") as values; pressing either bound button counts.
-@@ -146,6 +157,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+@@ -146,6 +160,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
  
  // Must stay in step with the backend table in main.cpp, which is what actually
  // maps these to AuroraBackend.
@@ -714,7 +784,7 @@ index ea5a12b..74add26 100644
  inline bool IsSupportedGraphicsApi(std::string_view value) {
  #if defined(__APPLE__)
      static constexpr std::array<std::string_view, 2> values{"auto", "metal"};
-@@ -168,7 +195,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
+@@ -168,7 +198,7 @@ inline bool IsSupportedDisplayMode(std::string_view value) {
  // 240 was offered by an early build and is no longer supported; a saved 240 is
  // migrated to 180 at the parse site.
  inline bool IsSupportedFrameInterpolationFps(uint32_t value) {
@@ -723,7 +793,21 @@ index ea5a12b..74add26 100644
  }
  
  inline std::optional<std::filesystem::path> ExecutableDirectory() {
-@@ -298,6 +325,10 @@ inline void EnsureConfigFile() {
+@@ -187,6 +217,13 @@ inline std::optional<std::filesystem::path> ExecutableDirectory() {
+     }
+ #elif defined(__APPLE__)
+     return RuntimePlatform::ExecutableDirectory();
++#elif defined(__ANDROID__)
++    // An app has no folder of its own beside its program: the activity unpacks the game's files
++    // (dsp_coef.bin, wii_bootstrap, ...) to a folder and names it here before the game starts.
++    if (const char* directory = std::getenv("WIICOMPILED_GAME_DIR"); directory && *directory) {
++        return std::filesystem::path(directory);
++    }
++    return std::nullopt;
+ #else
+     // /proc/self/exe is a Linux-specific magic symlink to the running executable; readlink()
+     // does not NUL-terminate and silently truncates if the buffer is too small, so this grows
+@@ -298,6 +335,10 @@ inline void EnsureConfigFile() {
                "# replacement would need. Both are read once, at startup.\n"
                "texture_replacements = false\n"
                "texture_dumps = false\n\n"
@@ -734,10 +818,15 @@ index ea5a12b..74add26 100644
                "[audio]\n"
                "volume = 1.0\n"
                "music_volume = 1.0\n"
-@@ -464,6 +495,41 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
+@@ -464,6 +505,46 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
      config.gxWorker = FindConfigValue<bool>(document, "video", "gx_worker");
      config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
      config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
++    if (auto value = FindConfigValue<bool>(document, "input", "touch_controls")) {
++        config.touchControls = *value ? "true" : "false";
++    } else if (auto text = FindConfigValue<std::string>(document, "input", "touch_controls")) {
++        config.touchControls = *text;
++    }
 +    if (auto value = FindConfigValue<std::string>(document, "console", "language")) {
 +        if (IsSupportedLanguage(*value)) {
 +            config.language = *value;
@@ -776,7 +865,7 @@ index ea5a12b..74add26 100644
      config.textureReplacements = FindConfigValue<bool>(document, "video", "texture_replacements");
      config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
      if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-@@ -665,6 +731,14 @@ inline bool SetDisplayMode(std::string value) {
+@@ -665,6 +746,14 @@ inline bool SetDisplayMode(std::string value) {
      return WriteSetting("video", "display_mode", FormatString(value));
  }
  
@@ -791,7 +880,7 @@ index ea5a12b..74add26 100644
  inline bool SetSkipUnreadyPipelines(bool value) {
      Mutable().skipUnreadyPipelines = value;
      return WriteSetting("video", "skip_unready_pipelines", value ? "true" : "false");
-@@ -680,6 +754,34 @@ inline bool SetDisableCopyFilter(bool value) {
+@@ -680,6 +769,34 @@ inline bool SetDisableCopyFilter(bool value) {
      return WriteSetting("video", "disable_copy_filter", value ? "true" : "false");
  }
  
@@ -826,7 +915,7 @@ index ea5a12b..74add26 100644
  inline bool SetShowFps(bool value) {
      Mutable().showFps = value;
      return WriteSetting("video", "show_fps", value ? "true" : "false");
-@@ -979,6 +1081,64 @@ inline bool DisableCopyFilter(bool fallback = true) {
+@@ -979,10 +1096,73 @@ inline bool DisableCopyFilter(bool fallback = true) {
      return Get().disableCopyFilter.value_or(fallback);
  }
  
@@ -890,6 +979,15 @@ index ea5a12b..74add26 100644
 +
  inline bool ShowFps(bool fallback = true) {
      return Get().showFps.value_or(fallback);
+ }
+ 
++// "true", "false" or "auto" (see RuntimeConfig::touchControls).
++inline std::string TouchControls(std::string fallback = "auto") {
++    return Get().touchControls.value_or(std::move(fallback));
++}
++
+ inline bool TextureReplacements(bool fallback = false) {
+     return Get().textureReplacements.value_or(fallback);
  }
 diff --git a/runtime/src/abi_bridge.cpp b/runtime/src/abi_bridge.cpp
 index 55fe416..99fc9ef 100644
@@ -1692,10 +1790,10 @@ index 0000000..1d2a9f9
 +} // namespace Bluetooth
 diff --git a/runtime/src/hle/bluetooth/emulated_remote_host.cpp b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
 new file mode 100644
-index 0000000..b0f07c3
+index 0000000..1e327e0
 --- /dev/null
 +++ b/runtime/src/hle/bluetooth/emulated_remote_host.cpp
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,233 @@
 +// Routes the first remote slot to the emulated Wii Remote (emulated_remote.h) for a foreign game while
 +// no real remote is attached there, and feeds it the PC's controls: every GameCube pad as the runtime's
 +// input bindings map it (F10), the keyboard and any controller together, and the mouse as the pointer,
@@ -1706,6 +1804,7 @@ index 0000000..b0f07c3
 +#include "bluetooth/emulated_remote.h"
 +#include "game_mods.h"
 +#include "guest_abi/guest_region.h"
++#include "hle/input/touch_controls.h"
 +#include "input_bindings.h"
 +#include "runtime_log.h"
 +#include "wiimote_host.h"
@@ -1760,6 +1859,14 @@ index 0000000..b0f07c3
 +        pad.triggerL = std::max(pad.triggerL, status.triggerL);
 +        pad.triggerR = std::max(pad.triggerR, status.triggerR);
 +    }
++    // The on-screen controller on a touch screen is one more pad (hle/input/touch_controls.h).
++    if (TouchControls::Enabled()) {
++        const TouchControls::State touch = TouchControls::Read();
++        pad.connected = true;
++        pad.buttons |= static_cast<uint16_t>(touch.buttons);
++        further(pad.stickX, pad.stickY, touch.stickX, touch.stickY);
++        further(pad.substickX, pad.substickY, touch.substickX, touch.substickY);
++    }
 +    // A game mod that uses the right stick itself (hle/game_mods/game_mods.h) keeps it from the game.
 +    if (GameMods::RightStickTaken()) {
 +        pad.substickX = 0;
@@ -1774,6 +1881,19 @@ index 0000000..b0f07c3
 +        return {};
 +    }
 +    EmulatedInput input = MapGameCubePad(ReadGameCubePads());
++
++    // On a touch screen the pointer is the finger off the controls, and the mouse is left alone
++    // (SDL also makes the fingers into a mouse, for the settings).
++    if (TouchControls::Enabled()) {
++        const TouchControls::State touch = TouchControls::Read();
++        if (touch.pointerValid) {
++            input.pointerValid = true;
++            input.pointerX = touch.pointerX;
++            input.pointerY = touch.pointerY;
++        }
++        if (touch.pointerPressed) input.buttons |= RemoteButton::kA;
++        return input;
++    }
 +
 +    float x = 0.0f;
 +    float y = 0.0f;
@@ -2175,10 +2295,10 @@ index 0000000..bbd9a1f
 +bool AnimalParadePlayerPosition(float feet[3]);
 diff --git a/runtime/src/hle/game_mods/free_camera.cpp b/runtime/src/hle/game_mods/free_camera.cpp
 new file mode 100644
-index 0000000..84a5a98
+index 0000000..73b5232
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/free_camera.cpp
-@@ -0,0 +1,652 @@
+@@ -0,0 +1,663 @@
 +// Harvest Moon: Animal Parade mod "free_camera": the camera turns around the player with the right
 +// stick, as in today's games, while the left stick walks as always. Off unless Config.toml says
 +//   [mods]
@@ -2270,6 +2390,7 @@ index 0000000..84a5a98
 +#include "animal_parade_player.h"
 +#include "controller_button_names.h"
 +#include "game_mods.h"
++#include "hle/input/touch_controls.h"
 +#include "guest_abi/cpu_context.h"
 +#include "guest_function_imports.h"
 +#include "hle_stubs.h"
@@ -2456,6 +2577,16 @@ index 0000000..84a5a98
 +        keep(in.turn, held(kRight) - held(kLeft));
 +        keep(in.tilt, held(kDown) - held(kUp));
 +        in.reset |= held(kReset) > 0.0f;
++    }
++    // The on-screen controller's right stick (hle/input/touch_controls.h).
++    if (TouchControls::Enabled()) {
++        const TouchControls::State touch = TouchControls::Read();
++        auto push = [](int8_t value) {
++            const float pushed = value / 127.0f;
++            return std::fabs(pushed) < kDeadZone ? 0.0f : pushed;
++        };
++        keep(in.turn, push(touch.substickX));
++        keep(in.tilt, -push(touch.substickY));
 +    }
 +    return in;
 +}
@@ -6586,6 +6717,530 @@ index 3a8c43b..1df0c2c 100644
      ApplyAuroraVtxStateForBegin(static_cast<GXVtxFmt>(vf));
      g_hleGxState.currentVtxFmt=(GXVtxFmt)vf; g_hleGxState.currentPrim=(GXPrimitive)t;
      g_hleGxState.vertsRemaining=nv; g_hleGxState.inBegin=nv!=0; g_hleGxState.auroraBeginCalled=false;
+diff --git a/runtime/src/hle/input/touch_controls.cpp b/runtime/src/hle/input/touch_controls.cpp
+new file mode 100644
+index 0000000..a48e988
+--- /dev/null
++++ b/runtime/src/hle/input/touch_controls.cpp
+@@ -0,0 +1,460 @@
++// The on-screen controller (touch_controls.h).
++//
++// Every finger that comes down is given to the control under it and stays with that control until
++// it is lifted: a stick follows the finger even past its edge, the D-pad reads the direction the
++// finger is from its middle, a button is held. A finger that lands on no control is the Wii
++// Remote's pointer: the pointer goes where it is and A is pressed a moment later (so the game sees
++// the pointer arrive before the press), and let go when the finger is lifted.
++//
++// The controls are placed from the screen's short side (`unit`), so they keep their size and stay
++// in the corners on a phone, a tablet or a window of any shape:
++//
++//      [L]                    ≡                    [R]
++//
++//       ✚  D-pad                              x       a b x y
++//                                           y   a
++//           ( )  left stick                   b
++//                                ( )  right stick
++//                      -   HOME   +
++//
++// El control en pantalla. Cada dedo se queda con el control donde cayó hasta que se levanta; un
++// dedo fuera de los controles es el puntero del Wii Remote y presiona A.
++
++#include "hle/input/touch_controls.h"
++
++#include "runtime_config.h"
++
++#include <SDL3/SDL_gamepad.h>
++#include <SDL3/SDL_hints.h>
++#include <SDL3/SDL_timer.h>
++#include <imgui.h>
++
++#include <algorithm>
++#include <cctype>
++#include <cfloat>
++#include <cstring>
++#include <cmath>
++#include <map>
++#include <mutex>
++#include <string>
++
++namespace TouchControls {
++namespace {
++
++// PAD_BUTTON_* of dolphin/pad.h.
++constexpr uint32_t kPadLeft = 0x0001, kPadRight = 0x0002, kPadDown = 0x0004, kPadUp = 0x0008;
++constexpr uint32_t kPadZ = 0x0010, kPadR = 0x0020, kPadL = 0x0040;
++constexpr uint32_t kPadA = 0x0100, kPadB = 0x0200, kPadX = 0x0400, kPadY = 0x0800;
++constexpr uint32_t kPadStart = 0x1000;
++
++// The pointer's A: pressed this long after the finger lands, and held at least this long.
++constexpr uint64_t kPointerPressDelayMs = 50;
++constexpr uint64_t kPointerShortestPressMs = 80;
++// The pointer stays where the finger left it this long (as a remote held still), then goes away.
++constexpr uint64_t kPointerLingerMs = 1500;
++// With a controller connected, the drawing hides when the screen has not been touched this long.
++constexpr uint64_t kHideWithControllerMs = 10000;
++
++enum class Kind { Stick, DPad, Button, Pointer, Menu };
++
++struct Control {
++    Kind kind;
++    bool rightStick = false;   // for a stick: the C-stick
++    uint32_t buttons = 0;      // for a button: what it holds (HOME is + and - together)
++    const char* label = "";
++    // Where it is: its middle as a fraction of the screen's width and height, moved by some units
++    // (the short side) towards the middle, and its size (a radius) in units.
++    float fx, fy, ux, uy, radius;
++    float hitRadius;           // how far from the middle a finger still lands on it, in units
++    bool wide = false;         // drawn as a rounded box twice as wide (L, R)
++};
++
++// a b x y as on a Classic Controller: a on the right, b at the bottom, x at the top, y on the left.
++const Control kControls[] = {
++    {Kind::Menu, false, 0, "", 0.5f, 0.0f, 0.0f, 0.065f, 0.045f, 0.075f},
++    {Kind::Button, false, kPadL, "L", 0.0f, 0.0f, 0.14f, 0.075f, 0.055f, 0.09f, true},
++    {Kind::Button, false, kPadR, "R", 1.0f, 0.0f, -0.14f, 0.075f, 0.055f, 0.09f, true},
++    {Kind::Button, false, kPadZ, "-", 0.5f, 1.0f, -0.13f, -0.07f, 0.042f, 0.06f},
++    {Kind::Button, false, kPadStart | kPadZ, "HOME", 0.5f, 1.0f, 0.0f, -0.07f, 0.042f, 0.06f},
++    {Kind::Button, false, kPadStart, "+", 0.5f, 1.0f, 0.13f, -0.07f, 0.042f, 0.06f},
++    {Kind::Button, false, kPadA, "a", 1.0f, 1.0f, -0.09f, -0.62f, 0.062f, 0.085f},
++    {Kind::Button, false, kPadB, "b", 1.0f, 1.0f, -0.20f, -0.51f, 0.062f, 0.085f},
++    {Kind::Button, false, kPadX, "x", 1.0f, 1.0f, -0.20f, -0.73f, 0.062f, 0.085f},
++    {Kind::Button, false, kPadY, "y", 1.0f, 1.0f, -0.31f, -0.62f, 0.062f, 0.085f},
++    {Kind::DPad, false, 0, "", 0.0f, 1.0f, 0.21f, -0.62f, 0.13f, 0.18f},
++    {Kind::Stick, false, 0, "", 0.0f, 1.0f, 0.45f, -0.22f, 0.13f, 0.21f},
++    {Kind::Stick, true, 0, "", 1.0f, 1.0f, -0.45f, -0.22f, 0.13f, 0.21f},
++};
++constexpr int kControlCount = static_cast<int>(sizeof(kControls) / sizeof(kControls[0]));
++constexpr int kPointer = -1;
++
++struct Finger {
++    int control = kPointer;
++    float startX = 0, startY = 0;   // where it landed, in screen points
++    float x = 0, y = 0;             // where it is
++    uint64_t downMs = 0;
++};
++
++struct Screen {
++    float width = 0, height = 0, unit = 0;
++};
++
++std::mutex g_mutex;
++std::map<SDL_FingerID, Finger> g_fingers;
++Screen g_screen;
++bool g_menuRequest = false;
++bool g_menuOpen = false;
++uint64_t g_lastTouchMs = 0;
++// The pointer once its finger is gone: where it was, and how long A is still held / it stays.
++struct Pointer {
++    bool known = false;
++    float x = 0, y = 0;
++    uint64_t pressUntilMs = 0;
++    uint64_t visibleUntilMs = 0;
++} g_pointer;
++
++uint64_t NowMs() {
++    return SDL_GetTicks();
++}
++
++float CenterX(const Control& c, const Screen& s) {
++    return c.fx * s.width + c.ux * s.unit;
++}
++float CenterY(const Control& c, const Screen& s) {
++    return c.fy * s.height + c.uy * s.unit;
++}
++
++// The control a finger landing at (x, y) belongs to: the nearest one it is within reach of.
++int ControlAt(float x, float y, const Screen& s) {
++    int best = kPointer;
++    float bestDistance = 0;
++    for (int i = 0; i < kControlCount; ++i) {
++        const Control& c = kControls[i];
++        const float dx = x - CenterX(c, s);
++        const float dy = y - CenterY(c, s);
++        // L and R are wide: measure across them as if they were round.
++        const float distance = std::sqrt((c.wide ? dx * dx / 4 : dx * dx) + dy * dy) / s.unit;
++        if (distance <= c.hitRadius && (best == kPointer || distance < bestDistance)) {
++            best = i;
++            bestDistance = distance;
++        }
++    }
++    return best;
++}
++
++// A stick's push from -1 to 1 on each side (up is positive), as far as the finger is from the
++// stick's middle, at most a full push.
++void StickPush(const Finger& f, const Control& c, const Screen& s, float& x, float& y) {
++    const float range = c.radius * s.unit;
++    x = (f.x - CenterX(c, s)) / range;
++    y = -(f.y - CenterY(c, s)) / range;
++    const float length = std::sqrt(x * x + y * y);
++    if (length > 1.0f) {
++        x /= length;
++        y /= length;
++    }
++}
++
++uint32_t DPadButtons(const Finger& f, const Control& c, const Screen& s) {
++    const float dx = (f.x - CenterX(c, s)) / (c.radius * s.unit);
++    const float dy = (f.y - CenterY(c, s)) / (c.radius * s.unit);
++    // A direction counts once the finger is a third of the way out on that side, so the diagonals
++    // are between two arms.
++    constexpr float kThreshold = 0.33f;
++    uint32_t buttons = 0;
++    if (dx < -kThreshold) buttons |= kPadLeft;
++    if (dx > kThreshold) buttons |= kPadRight;
++    if (dy < -kThreshold) buttons |= kPadUp;
++    if (dy > kThreshold) buttons |= kPadDown;
++    return buttons;
++}
++
++int8_t ToPad(float value) {
++    return static_cast<int8_t>(std::clamp(std::lround(value * 127.0f), -127L, 127L));
++}
++
++void ReleaseAll() {
++    g_fingers.clear();
++    g_pointer.pressUntilMs = 0;
++}
++
++void Press(SDL_FingerID id, float x, float y) {
++    if (g_screen.unit <= 0) {
++        return;
++    }
++    Finger f;
++    f.control = ControlAt(x, y, g_screen);
++    f.startX = f.x = x;
++    f.startY = f.y = y;
++    f.downMs = NowMs();
++    if (g_menuOpen && (f.control == kPointer || kControls[f.control].kind != Kind::Menu)) {
++        // With the settings open only the settings button is the controller's; the rest is the
++        // menu's (SDL turns the finger into the mouse for it).
++        return;
++    }
++    if (f.control != kPointer && kControls[f.control].kind == Kind::Menu) {
++        g_menuRequest = true;
++        return;
++    }
++    if (f.control == kPointer) {
++        // One pointer: a second finger off the controls takes it over.
++        for (auto it = g_fingers.begin(); it != g_fingers.end();) {
++            it = it->second.control == kPointer ? g_fingers.erase(it) : std::next(it);
++        }
++        g_pointer.known = true;
++        g_pointer.x = x;
++        g_pointer.y = y;
++    }
++    g_fingers[id] = f;
++}
++
++void Lift(SDL_FingerID id) {
++    auto it = g_fingers.find(id);
++    if (it == g_fingers.end()) {
++        return;
++    }
++    if (it->second.control == kPointer) {
++        const uint64_t now = NowMs();
++        g_pointer.pressUntilMs = std::max(now, it->second.downMs + kPointerPressDelayMs + kPointerShortestPressMs);
++        g_pointer.visibleUntilMs = now + kPointerLingerMs;
++    }
++    g_fingers.erase(it);
++}
++
++} // namespace
++
++bool Enabled() {
++    static const bool enabled = [] {
++        std::string setting = RuntimeConfigFile::TouchControls("auto");
++        std::transform(setting.begin(), setting.end(), setting.begin(),
++                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
++        if (setting == "true" || setting == "on" || setting == "1") {
++#if !defined(__ANDROID__)
++            // On a computer the mouse plays the finger, to try the controller out.
++            SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "1");
++#endif
++            return true;
++        }
++        if (setting == "false" || setting == "off" || setting == "0") {
++            return false;
++        }
++#if defined(__ANDROID__)
++        return true;
++#else
++        return false;
++#endif
++    }();
++    return enabled;
++}
++
++State Read() {
++    State state;
++    if (!Enabled()) {
++        return state;
++    }
++    std::lock_guard lock(g_mutex);
++    const uint64_t now = NowMs();
++    bool pointerHeld = false;
++    for (const auto& [id, f] : g_fingers) {
++        if (f.control == kPointer) {
++            pointerHeld = true;
++            if (now >= f.downMs + kPointerPressDelayMs) {
++                state.pointerPressed = true;
++            }
++            continue;
++        }
++        const Control& c = kControls[f.control];
++        switch (c.kind) {
++        case Kind::Button:
++            state.buttons |= c.buttons;
++            break;
++        case Kind::DPad:
++            state.buttons |= DPadButtons(f, c, g_screen);
++            break;
++        case Kind::Stick: {
++            float x = 0, y = 0;
++            StickPush(f, c, g_screen, x, y);
++            if (c.rightStick) {
++                state.substickX = ToPad(x);
++                state.substickY = ToPad(y);
++            } else {
++                state.stickX = ToPad(x);
++                state.stickY = ToPad(y);
++            }
++            break;
++        }
++        default:
++            break;
++        }
++    }
++    if (!pointerHeld && now < g_pointer.pressUntilMs) {
++        state.pointerPressed = true;
++    }
++    if (g_pointer.known && (pointerHeld || now < g_pointer.visibleUntilMs) && g_screen.width > 0 &&
++        g_screen.height > 0) {
++        state.pointerValid = true;
++        state.pointerX = g_pointer.x / g_screen.width * 2.0f - 1.0f;
++        state.pointerY = g_pointer.y / g_screen.height * 2.0f - 1.0f;
++    }
++    return state;
++}
++
++void HandleSdlEvent(const SDL_Event& event) {
++    if (!Enabled()) {
++        return;
++    }
++    std::lock_guard lock(g_mutex);
++    switch (event.type) {
++    case SDL_EVENT_FINGER_DOWN:
++        g_lastTouchMs = NowMs();
++        Press(event.tfinger.fingerID, event.tfinger.x * g_screen.width, event.tfinger.y * g_screen.height);
++        break;
++    case SDL_EVENT_FINGER_MOTION: {
++        g_lastTouchMs = NowMs();
++        auto it = g_fingers.find(event.tfinger.fingerID);
++        if (it != g_fingers.end()) {
++            it->second.x = event.tfinger.x * g_screen.width;
++            it->second.y = event.tfinger.y * g_screen.height;
++            if (it->second.control == kPointer) {
++                g_pointer.x = it->second.x;
++                g_pointer.y = it->second.y;
++            }
++        }
++        break;
++    }
++    case SDL_EVENT_FINGER_UP:
++    case SDL_EVENT_FINGER_CANCELED:
++        Lift(event.tfinger.fingerID);
++        break;
++    case SDL_EVENT_KEY_DOWN:
++        // Android's back button (or gesture) opens and closes the settings.
++        if (!event.key.repeat && event.key.scancode == SDL_SCANCODE_AC_BACK) {
++            g_menuRequest = true;
++        }
++        break;
++    case SDL_EVENT_WINDOW_FOCUS_LOST:
++    case SDL_EVENT_WILL_ENTER_BACKGROUND:
++        ReleaseAll();
++        break;
++    default:
++        break;
++    }
++}
++
++void Draw(bool menuOpen) {
++    if (!Enabled()) {
++        return;
++    }
++    const ImGuiIO& io = ImGui::GetIO();
++    std::unique_lock lock(g_mutex);
++    g_screen.width = io.DisplaySize.x;
++    g_screen.height = io.DisplaySize.y;
++    g_screen.unit = std::min(g_screen.width, g_screen.height);
++    if (menuOpen && !g_menuOpen) {
++        ReleaseAll();
++    }
++    g_menuOpen = menuOpen;
++    if (g_screen.unit <= 0) {
++        return;
++    }
++    const uint64_t now = NowMs();
++    if (SDL_HasGamepad() && now - g_lastTouchMs > kHideWithControllerMs && !menuOpen) {
++        return;
++    }
++
++    // What is held now, to light it up.
++    bool held[kControlCount] = {};
++    for (const auto& [id, f] : g_fingers) {
++        if (f.control != kPointer) {
++            held[f.control] = true;
++        }
++    }
++    const Screen s = g_screen;
++    std::map<int, Finger> fingerOf;
++    for (const auto& [id, f] : g_fingers) {
++        if (f.control != kPointer) fingerOf[f.control] = f;
++    }
++    lock.unlock();
++
++    ImDrawList* draw = ImGui::GetForegroundDrawList();
++    ImFont* font = ImGui::GetFont();
++    const ImU32 fill = IM_COL32(20, 20, 20, 70);
++    const ImU32 fillHeld = IM_COL32(255, 255, 255, 110);
++    const ImU32 edge = IM_COL32(255, 255, 255, 130);
++    const ImU32 ink = IM_COL32(255, 255, 255, 200);
++    const float line = std::max(1.5f, s.unit * 0.004f);
++
++    auto text = [&](ImVec2 middle, const char* label, float size) {
++        const ImVec2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.0f, label);
++        draw->AddText(font, size, ImVec2(middle.x - extent.x / 2, middle.y - extent.y / 2), ink, label);
++    };
++
++    for (int i = 0; i < kControlCount; ++i) {
++        const Control& c = kControls[i];
++        if (menuOpen && c.kind != Kind::Menu) {
++            continue;
++        }
++        const ImVec2 middle(CenterX(c, s), CenterY(c, s));
++        const float r = c.radius * s.unit;
++        switch (c.kind) {
++        case Kind::Menu: {
++            draw->AddCircleFilled(middle, r, held[i] ? fillHeld : fill);
++            draw->AddCircle(middle, r, edge, 0, line);
++            for (int bar = -1; bar <= 1; ++bar) {
++                const float y = middle.y + bar * r * 0.35f;
++                draw->AddLine(ImVec2(middle.x - r * 0.45f, y), ImVec2(middle.x + r * 0.45f, y), ink, line * 1.5f);
++            }
++            break;
++        }
++        case Kind::Button:
++            if (c.wide) {
++                const ImVec2 from(middle.x - r * 2, middle.y - r), to(middle.x + r * 2, middle.y + r);
++                draw->AddRectFilled(from, to, held[i] ? fillHeld : fill, r);
++                draw->AddRect(from, to, edge, r, 0, line);
++            } else {
++                draw->AddCircleFilled(middle, r, held[i] ? fillHeld : fill);
++                draw->AddCircle(middle, r, edge, 0, line);
++            }
++            text(middle, c.label, std::strlen(c.label) > 1 ? r * 0.55f : r * 1.1f);
++            break;
++        case Kind::DPad: {
++            uint32_t pressed = 0;
++            if (held[i]) pressed = DPadButtons(fingerOf[i], c, s);
++            const float arm = r * 0.36f;
++            struct Arm { uint32_t bit; float dx, dy; };
++            const Arm arms[] = {{kPadUp, 0, -1}, {kPadDown, 0, 1}, {kPadLeft, -1, 0}, {kPadRight, 1, 0}};
++            for (const Arm& a : arms) {
++                const ImVec2 armMiddle(middle.x + a.dx * r * 0.62f, middle.y + a.dy * r * 0.62f);
++                const ImVec2 from(armMiddle.x - arm, armMiddle.y - arm), to(armMiddle.x + arm, armMiddle.y + arm);
++                draw->AddRectFilled(from, to, (pressed & a.bit) ? fillHeld : fill, arm * 0.3f);
++                draw->AddRect(from, to, edge, arm * 0.3f, 0, line);
++            }
++            break;
++        }
++        case Kind::Stick: {
++            draw->AddCircleFilled(middle, r, fill);
++            draw->AddCircle(middle, r, edge, 0, line);
++            ImVec2 knob = middle;
++            if (held[i]) {
++                float x = 0, y = 0;
++                StickPush(fingerOf[i], c, s, x, y);
++                knob = ImVec2(middle.x + x * r, middle.y - y * r);
++            }
++            draw->AddCircleFilled(knob, r * 0.45f, held[i] ? fillHeld : IM_COL32(255, 255, 255, 60));
++            draw->AddCircle(knob, r * 0.45f, edge, 0, line);
++            break;
++        }
++        default:
++            break;
++        }
++    }
++}
++
++bool TakeMenuRequest() {
++    std::lock_guard lock(g_mutex);
++    const bool request = g_menuRequest;
++    g_menuRequest = false;
++    return request;
++}
++
++} // namespace TouchControls
+diff --git a/runtime/src/hle/input/touch_controls.h b/runtime/src/hle/input/touch_controls.h
+new file mode 100644
+index 0000000..3840c1e
+--- /dev/null
++++ b/runtime/src/hle/input/touch_controls.h
+@@ -0,0 +1,52 @@
++// The on-screen controller for touch screens (a phone or a tablet with Android): drawn over the
++// game in the layout of a Wii Classic Controller, and read like one more GameCube pad, which the
++// game gets as its Wii Remote and Nunchuk (hle/bluetooth/emulated_remote_host.cpp):
++//
++//   left stick   the Nunchuk's stick           right stick  the C-stick (the D-pad, or the free camera)
++//   D-pad        the D-pad                     a b x y      A, B, 1, 2
++//   L  R         the Nunchuk's Z and C         -  +  HOME   -, +, and HOME
++//   ≡            the settings (as F10)         anywhere else   points there and presses A
++//
++// It is on with [input] touch_controls = true, off with false, and with "auto" (or no line) only
++// where the screen is a touch screen (Android). On a computer it can be tried with the mouse:
++// SDL then turns the mouse into a finger (touch_controls = true).
++//
++// El control en pantalla para pantallas táctiles: se dibuja sobre el juego con la forma de un
++// control Classic de Wii y se lee como un control de GameCube más, que el juego recibe como su Wii
++// Remote y Nunchuk.
++
++#pragma once
++
++#include <SDL3/SDL_events.h>
++
++#include <cstdint>
++
++namespace TouchControls {
++
++// Whether the on-screen controller is in use ([input] touch_controls).
++bool Enabled();
++
++// The controller as the game sees it: GameCube buttons (PAD_BUTTON_*), sticks from -127 to 127,
++// and a finger elsewhere on the screen as the Wii Remote's pointer (from -1 to 1, as the window).
++struct State {
++    uint32_t buttons = 0;
++    int8_t stickX = 0, stickY = 0;
++    int8_t substickX = 0, substickY = 0;
++    bool pointerValid = false;
++    float pointerX = 0.0f, pointerY = 0.0f;
++    bool pointerPressed = false;
++};
++State Read();
++
++// The fingers, from SDL's events (on the thread that runs the window).
++void HandleSdlEvent(const SDL_Event& event);
++
++// Draws the controller over the picture (ImGui, on the thread that runs the window). `menuOpen`
++// says whether the settings are showing: then only the settings button is drawn and fingers work
++// the menu instead.
++void Draw(bool menuOpen);
++
++// The settings button was touched since the last call.
++bool TakeMenuRequest();
++
++} // namespace TouchControls
 diff --git a/runtime/src/hle/os/os_thread.cpp b/runtime/src/hle/os/os_thread.cpp
 index d2423e6..e764565 100644
 --- a/runtime/src/hle/os/os_thread.cpp
@@ -7269,7 +7924,7 @@ index cd236a9..5831036 100644
  PPC_NATIVE_OVERRIDE_VOID(801BABAC, VIGetNextField_HLE_801babac, (CpuContext* ctx), (ctx));
  
 diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
-index 56bec9f..75414c0 100644
+index 56bec9f..ab43f13 100644
 --- a/runtime/src/main.cpp
 +++ b/runtime/src/main.cpp
 @@ -16,6 +16,7 @@
@@ -7419,6 +8074,21 @@ index 56bec9f..75414c0 100644
          for (const auto& entry : kGraphicsBackends) {
              if (backend == entry.configName) {
                  auroraConfig.desiredBackend = entry.backend;
+@@ -1587,4 +1678,14 @@ int RuntimeMain(int argc, char** argv) {
+ int main(int argc, char** argv) {
+     return RuntimeMain(argc, argv);
+ }
++
++#if defined(__ANDROID__)
++#include <SDL3/SDL_main.h>
++
++// Android: SDL's Java activity loads libmain.so and calls this on its own thread.
++extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** argv) {
++    SDL_SetMainReady();
++    return RuntimeMain(argc, argv);
++}
++#endif
+ extern "C" bool g_dynamicAspectRatioEnabled = false;
 diff --git a/runtime/src/music_attenuation.cpp b/runtime/src/music_attenuation.cpp
 index ad031c1..18bf15f 100644
 --- a/runtime/src/music_attenuation.cpp
@@ -7443,18 +8113,19 @@ index ad031c1..18bf15f 100644
      uint32_t archivePlayer = 0;
      uint32_t soundPlayers = 0;
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..222404b 100644
+index 6c2083a..26f91c9 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
-@@ -1,4 +1,7 @@
+@@ -1,4 +1,8 @@
  #include "settings_overlay.h"
 +
 +#include "hle/gx/gx_frame_trace.h"
++#include "hle/input/touch_controls.h"
 +#include "guest_abi/guest_region.h"
  #include "gx_worker.h"
  #include "audio_backend.h"
  #include "aurora_events.h"
-@@ -9,6 +12,8 @@
+@@ -9,6 +13,8 @@
  #include "game_graphics_options.h"
  #include "music_attenuation.h"
  #include "runtime_config.h"
@@ -7463,7 +8134,7 @@ index 6c2083a..222404b 100644
  #include "runtime_log.h"
  #include "wiimote_host.h"
  
-@@ -92,10 +97,12 @@ bool g_audioMixWorker = RuntimeConfigFile::AudioMixWorkerEnabled(true);
+@@ -92,10 +98,12 @@ bool g_audioMixWorker = RuntimeConfigFile::AudioMixWorkerEnabled(true);
  bool g_attenuateMusicWhenMediaPlays = RuntimeConfigFile::AttenuateMusicWhenMediaPlays(false);
  int g_frameInterpolationMode = [] {
      switch (RuntimeConfigFile::FrameInterpolationFps(0)) {
@@ -7478,7 +8149,7 @@ index 6c2083a..222404b 100644
      default:
          return 0;
      }
-@@ -115,7 +122,7 @@ bool g_vsync = RuntimeConfigFile::Vsync();
+@@ -115,7 +123,7 @@ bool g_vsync = RuntimeConfigFile::Vsync();
  bool g_disableCopyFilter = RuntimeConfigFile::DisableCopyFilter(true);
  bool g_showFps = RuntimeConfigFile::ShowFps(true);
  bool g_forceAspect = RuntimeConfigFile::ForceAspectEnabled();
@@ -7487,7 +8158,7 @@ index 6c2083a..222404b 100644
  #if defined(__APPLE__)
  bool g_metalFxSpatialUpscaling = RuntimeConfigFile::MetalFxSpatialUpscaling(false);
  #endif
-@@ -182,7 +189,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
+@@ -182,7 +190,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
      {"3x", 3.0f}, {"4x", 4.0f}, {"6x", 6.0f}, {"8x", 8.0f},
  }};
  
@@ -7496,7 +8167,7 @@ index 6c2083a..222404b 100644
  
  bool IsHighResolutionScale(float scale) {
      return std::fabs(scale - 6.0f) < 0.001f || std::fabs(scale - 8.0f) < 0.001f;
-@@ -435,7 +442,19 @@ const char* KeyBindingName(int scancode) {
+@@ -435,7 +443,19 @@ const char* KeyBindingName(int scancode) {
      }
  }
  
@@ -7517,7 +8188,7 @@ index 6c2083a..222404b 100644
  struct RebindState {
      bool active = false;
      bool openPopup = false;
-@@ -467,7 +486,7 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
+@@ -467,7 +487,7 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
      std::copy_n(keys, std::min(count, static_cast<int>(g_rebind.keys.size())), g_rebind.keys.begin());
      g_rebind.mouse = SDL_GetMouseState(nullptr, nullptr);
      const int index = PADGetIndexForPort(g_rebind.port);
@@ -7526,7 +8197,7 @@ index 6c2083a..222404b 100644
          if (auto* pad = PADGetSDLGamepadForIndex(index)) {
              g_rebind.instance = SDL_GetGamepadID(pad);
              for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
-@@ -480,6 +499,18 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
+@@ -480,6 +500,18 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
  
  void CompleteRebind(uint32_t value) {
      const auto& capture = g_rebind;
@@ -7545,7 +8216,7 @@ index 6c2083a..222404b 100644
      if (capture.kind == RebindKind::Controller) {
          const int index = PADGetIndexForPort(capture.port);
          auto* pad = index >= 0 ? PADGetSDLGamepadForIndex(index) : nullptr;
-@@ -526,9 +557,9 @@ void DrawRebindPrompt() {
+@@ -526,9 +558,9 @@ void DrawRebindPrompt() {
      }
      if (g_rebind.active) {
          ImGui::Text("Rebind: %s", g_rebind.label.c_str());
@@ -7557,7 +8228,7 @@ index 6c2083a..222404b 100644
                  ? "Press a keyboard key."
                  : "Press a keyboard key or click a mouse button.");
          ImGui::TextUnformatted("Release any held input first. Backspace or Delete clears the mapping.");
-@@ -541,9 +572,9 @@ void DrawRebindPrompt() {
+@@ -541,9 +573,9 @@ void DrawRebindPrompt() {
          // UI clicks must not become mouse bindings (buttons activate on release).
          const bool overControl = ImGui::IsAnyItemHovered();
          if (g_rebind.active && (clear || remaining <= 0.0f)) {
@@ -7569,7 +8240,7 @@ index 6c2083a..222404b 100644
              int count = 0;
              const bool* keys = SDL_GetKeyboardState(&count);
              for (int i = 1; i < std::min(count, static_cast<int>(SDL_SCANCODE_COUNT)) && g_rebind.active; ++i) {
-@@ -553,9 +584,10 @@ void DrawRebindPrompt() {
+@@ -553,9 +585,10 @@ void DrawRebindPrompt() {
              const uint32_t mouse = SDL_GetMouseState(nullptr, nullptr);
              for (int i = 1; i <= 5 && g_rebind.active; ++i)
                  if (!overControl && g_rebind.kind != RebindKind::MuteHotkey &&
@@ -7581,7 +8252,7 @@ index 6c2083a..222404b 100644
              auto* pad = SDL_GetGamepadFromID(g_rebind.instance);
              if (pad != nullptr) {
                  for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && g_rebind.active; ++i) {
-@@ -586,17 +618,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
+@@ -586,17 +619,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
  }
  
  void ApplyKeyboardPreset(uint32_t port) {
@@ -7614,7 +8285,7 @@ index 6c2083a..222404b 100644
      };
      uint32_t axisCount = 0;
      auto* mappings = PADGetKeyAxisBindings(port, &axisCount);
-@@ -625,11 +666,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
+@@ -625,11 +667,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
  
  void DrawKeyboardSettings(uint32_t port) {
      PushMenuTextWrap();
@@ -7633,7 +8304,7 @@ index 6c2083a..222404b 100644
      uint32_t count = 0;
      auto* buttons = PADGetKeyButtonBindings(port, &count);
      ImGui::SeparatorText("Buttons");
-@@ -727,6 +773,37 @@ void DrawExpressionSettings() {
+@@ -727,6 +774,37 @@ void DrawExpressionSettings() {
      }
  }
  
@@ -7671,7 +8342,7 @@ index 6c2083a..222404b 100644
  void DrawRumbleSettings() {
      ImGui::Separator();
      if (ImGui::Checkbox("Controller vibration", &g_rumbleEnabled)) {
-@@ -1064,6 +1141,7 @@ void DrawControllerSettings() {
+@@ -1064,6 +1142,7 @@ void DrawControllerSettings() {
      ImGui::Spacing();
      controller_mapping_wizard::DrawSetupList();
      DrawWiiRemoteSetup();
@@ -7679,7 +8350,7 @@ index 6c2083a..222404b 100644
      DrawRumbleSettings();
  }
  
-@@ -1074,22 +1152,25 @@ void DrawAudioSettings() {
+@@ -1074,22 +1153,25 @@ void DrawAudioSettings() {
          AudioBackend::Instance().SetMasterVolume(volume);
          RuntimeConfigFile::SetAudioVolume(volume);
      }
@@ -7709,7 +8380,7 @@ index 6c2083a..222404b 100644
          const float volume = static_cast<float>(g_voicesVolumePercent) / 100.0f;
          MusicAttenuation::SetVoicesVolume(volume);
          RuntimeConfigFile::SetVoicesVolume(volume);
-@@ -1114,6 +1195,9 @@ void DrawAudioSettings() {
+@@ -1114,6 +1196,9 @@ void DrawAudioSettings() {
              "Runs the AX/DSP voice mix off the game thread. Turn this off if you "
              "suspect an audio problem; the mix then runs inline as it used to.");
      }
@@ -7719,7 +8390,7 @@ index 6c2083a..222404b 100644
      ImGui::Separator();
      if (ImGui::Checkbox("Mute game music while external media is playing",
                          &g_attenuateMusicWhenMediaPlays)) {
-@@ -1144,24 +1228,145 @@ void DrawAudioSettings() {
+@@ -1144,24 +1229,145 @@ void DrawAudioSettings() {
      }
  }
  
@@ -7761,10 +8432,7 @@ index 6c2083a..222404b 100644
 +            if (saved == kChoices[i].configName) {
 +                return static_cast<int>(i);
 +            }
-         }
--        if (ImGui::Selectable("4:3", !g_widescreen)) {
--            g_widescreen = false;
--            RuntimeConfigFile::SetWidescreen(false);
++        }
 +        return 0;
 +    }();
 +    static const int atLaunch = selected;
@@ -7780,7 +8448,10 @@ index 6c2083a..222404b 100644
 +            if (isSelected) {
 +                ImGui::SetItemDefaultFocus();
 +            }
-+        }
+         }
+-        if (ImGui::Selectable("4:3", !g_widescreen)) {
+-            g_widescreen = false;
+-            RuntimeConfigFile::SetWidescreen(false);
 +        ImGui::EndCombo();
 +    }
 +    if (selected != atLaunch) {
@@ -7878,7 +8549,7 @@ index 6c2083a..222404b 100644
      ImGui::Separator();
      struct EffectFlag {
          const char* label;
-@@ -1172,6 +1377,9 @@ void DrawGraphicsSettings() {
+@@ -1172,6 +1378,9 @@ void DrawGraphicsSettings() {
      }};
  
      for (const auto& effect : kEffectFlags) {
@@ -7888,7 +8559,7 @@ index 6c2083a..222404b 100644
          bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
          if (ImGui::Checkbox(effect.label, &disabled)) {
              if (disabled) {
-@@ -1183,8 +1391,10 @@ void DrawGraphicsSettings() {
+@@ -1183,8 +1392,10 @@ void DrawGraphicsSettings() {
              RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
          }
      }
@@ -7901,7 +8572,7 @@ index 6c2083a..222404b 100644
      static constexpr const char* kDisplayModes[] = {
          "Windowed",
          "Borderless fullscreen",
-@@ -1205,13 +1415,13 @@ void DrawGraphicsSettings() {
+@@ -1205,13 +1416,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -7918,7 +8589,7 @@ index 6c2083a..222404b 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1285,8 +1495,13 @@ void DrawGraphicsSettings() {
+@@ -1285,8 +1496,13 @@ void DrawGraphicsSettings() {
      if (ImGui::Checkbox("Show FPS", &g_showFps)) {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
@@ -7933,7 +8604,7 @@ index 6c2083a..222404b 100644
  }
  
  void DrawFpsOverlay() {
-@@ -1533,6 +1748,18 @@ void DrawTopBar() {
+@@ -1533,6 +1749,18 @@ void DrawTopBar() {
          ImGui::EndMenu();
      }
  
@@ -7952,8 +8623,12 @@ index 6c2083a..222404b 100644
      const ImGuiStyle& style = ImGui::GetStyle();
      const float hideWidth = ImGui::CalcTextSize("Hide (F10)").x + style.FramePadding.x * 2.0f;
      const float exitWidth = ImGui::CalcTextSize("X").x + style.FramePadding.x * 2.0f;
-@@ -1660,9 +1887,13 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1658,11 +1886,17 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+             continue;
+         }
          controller_mapping_wizard::HandleSdlEvent(ev->sdl);
++        // The on-screen controller's fingers (a touch screen; hle/input/touch_controls.h).
++        TouchControls::HandleSdlEvent(ev->sdl);
          if (g_rebind.active && (IsToggleKey(ev->sdl, SDL_SCANCODE_BACKSPACE) ||
                                  IsToggleKey(ev->sdl, SDL_SCANCODE_DELETE))) {
 -            CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED
@@ -7967,7 +8642,20 @@ index 6c2083a..222404b 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1732,6 +1963,12 @@ void Draw() noexcept {
+@@ -1727,11 +1961,25 @@ void Draw() noexcept {
+     DrawExitPrompt();
+     DrawRestartPrompt();
+     controller_mapping_wizard::Draw();
++    // The on-screen controller, over everything but the startup screen; its settings button works
++    // as F10.
++    if (!StartupScreenVisible()) {
++        TouchControls::Draw(g_topBarVisible);
++    }
++    if (TouchControls::TakeMenuRequest()) {
++        SetTopBarVisible(!g_topBarVisible);
++    }
+     ApplyInputBlockState();
+     DrawStartupScreen();
  }
  
  bool StartupScreenVisible() noexcept {
