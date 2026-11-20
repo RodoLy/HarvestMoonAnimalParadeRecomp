@@ -1,0 +1,162 @@
+name: macOS package
+
+# Builds the package that lets a player build and run the game natively on a Mac with Apple
+# Silicon: WiiCompiled's runtime with this game's layer, its translator, CMake and Ninja, the disc
+# tool, the launcher and packaging/unix/play.sh. The compiler is Apple's own (the command line
+# tools); aurora is compiled on the player's Mac the first time, with its libraries downloaded then.
+# No game data is involved here.
+#
+# Arma el paquete para compilar y correr el juego de forma nativa en una Mac con Apple Silicon. El
+# compilador es el de Apple; aurora se compila en la Mac del jugador la primera vez. Aquí no hay
+# datos del juego.
+#
+# It only runs when asked for: Actions tab > macOS package > Run workflow. The runner is free for
+# a public repository. The tools' versions and hashes are the ones WiiCompiled's own macOS job pins.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: macOS arm64
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      WIICOMPILED_URL: https://github.com/patchzyy/wiicompiled.git
+      WIICOMPILED_COMMIT: 27ff3b03fd5c88e783a8b6f4d821b38e3b091297
+      WIICOMPILED: ${{ github.workspace }}/../wc
+      LAYER: ${{ github.workspace }}/../layer
+      PUBLISH: ${{ github.workspace }}/../publish
+      PACKAGE: ${{ github.workspace }}/../HarvestMoonAnimalParade-macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Download WiiCompiled at the commit the project is pinned to
+        run: |
+          git init "$WIICOMPILED"
+          git -C "$WIICOMPILED" remote add origin "$WIICOMPILED_URL"
+          git -C "$WIICOMPILED" fetch --depth 1 origin "$WIICOMPILED_COMMIT"
+          git -C "$WIICOMPILED" checkout --detach FETCH_HEAD
+          git -C "$WIICOMPILED" submodule update --init --recursive
+
+      - name: Apply this project's patches to WiiCompiled
+        run: |
+          for patch in skip-calls-outside-ram foreign-game-addresses foreign-game-translator; do
+            git -C "$WIICOMPILED" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
+          done
+          for patch in aurora-storage-buffer aurora-overrun-layout aurora-interpolation-30fps aurora-wide-picture; do
+            git -C "$WIICOMPILED/aurora-main" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
+          done
+
+      - name: Place WiiCompiled's natives at this game's addresses
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python tools/export_wiicompiled_layer.py --wiicompiled "$WIICOMPILED" --out "$LAYER"
+          project="$WIICOMPILED/projects/animal-parade"
+          mkdir -p "$project/native"
+          cp wiicompiled/RBIEE9.yml "$project/recomp.yml"
+          cp wiicompiled/RBIEE9-MAP.txt "$project/MAP.txt"
+          cp "$LAYER/native/natives.cpp" "$project/native/"
+          cp "$LAYER"/guest_abi/*.inc "$WIICOMPILED/runtime/include/guest_abi/"
+
+      - name: Download the disc tool, Ninja and CMake
+        run: |
+          mkdir -p "$PUBLISH"
+          curl -fsSL --retry 3 https://github.com/encounter/nod/releases/download/v2.0.0-alpha.10/nodtool-macos-arm64 -o "$PUBLISH/nodtool"
+          printf '%s  %s\n' e23ca466999b720c55e6d29c9683fce8cc74451ba64ead2e543d50129f24528a "$PUBLISH/nodtool" | shasum -a 256 -c -
+          chmod +x "$PUBLISH/nodtool"
+          curl -fsSL --retry 3 https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip -o ninja-mac.zip
+          printf '%s  %s\n' c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b ninja-mac.zip | shasum -a 256 -c -
+          unzip -q ninja-mac.zip -d "$PUBLISH/ninja"
+          archive=cmake-4.4.3-macos-universal.tar.gz
+          curl -fsSL --retry 3 "https://github.com/Kitware/CMake/releases/download/v4.4.3/$archive" -o "$archive"
+          printf '%s  %s\n' 0c5d65251c14cc884bfa16bdbed3c263ce5bffe2e21c0d0d00962cb0610464fa "$archive" | shasum -a 256 -c -
+          tar -xzf "$archive"
+          mv cmake-4.4.3-macos-universal/CMake.app/Contents "$PUBLISH/cmake"
+
+      - name: Publish the translator as one program
+        run: |
+          dotnet publish "$WIICOMPILED/translator/src/Translator.Cli/Translator.Cli.csproj" \
+            -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o "$PUBLISH/translator"
+
+      - name: Assemble the package
+        run: |
+          wc="$WIICOMPILED"
+          toolkit="$PACKAGE/Toolkit"
+          workspace="$PACKAGE/BuildWorkspace"
+          rm -rf "$PACKAGE"
+          mkdir -p "$toolkit/translator" "$toolkit/toolchain/bin" "$workspace/projects"
+
+          cp "$PUBLISH/translator/Translator.Cli" "$toolkit/translator/"
+          cp "$PUBLISH/nodtool" "$toolkit/nodtool"
+          cp "$PUBLISH/ninja/ninja" "$toolkit/toolchain/bin/ninja"
+          chmod +x "$toolkit/toolchain/bin/ninja"
+          cp -R "$PUBLISH/cmake" "$toolkit/toolchain/cmake"
+
+          cp -R "$wc/runtime" "$workspace/runtime"
+          rm -rf "$workspace/runtime/build"
+          cp -R "$wc/aurora-main" "$workspace/aurora-main"
+          rm -rf "$workspace/aurora-main/.git"
+          cp -R "$wc/projects/animal-parade" "$workspace/projects/animal-parade"
+
+          cp packaging/unix/play.sh packaging/unix/README.txt "$PACKAGE/"
+          cp "packaging/macos/Animal Parade.command" "$PACKAGE/"
+          chmod +x "$PACKAGE/play.sh" "$PACKAGE/Animal Parade.command"
+          CXX=clang++ bash launcher/build.sh "$PACKAGE"
+          echo "v$(cat VERSION | tr -d '[:space:]')" > "$PACKAGE/version.txt"
+          echo 'Harvest Moon: Animal Parade keeps its user data in UserData.' > "$PACKAGE/portable.txt"
+          mkdir -p "$PACKAGE/licenses"
+          cp LICENSE "$PACKAGE/licenses/harvest-moon-animal-parade-recomp.txt"
+          cp "$wc/LICENSE" "$PACKAGE/licenses/wiicompiled.txt"
+          cp "$wc/THIRD-PARTY-NOTICES.md" "$PACKAGE/licenses/wiicompiled-third-party.md"
+
+      - name: Check the package
+        run: |
+          "$PACKAGE/Toolkit/nodtool" --help > /dev/null
+          "$PACKAGE/Toolkit/toolchain/cmake/bin/cmake" --version
+          "$PACKAGE/Toolkit/toolchain/bin/ninja" --version
+          fake="$RUNNER_TEMP/fake-disc"
+          mkdir -p "$fake/sys" "$fake/files"
+          printf 'RMCP01' > "$fake/sys/boot.bin"
+          echo 'not a game' > "$fake/sys/main.dol"
+          echo 'not a game' > "$fake/sys/fst.bin"
+          if output=$("$PACKAGE/play.sh" --disc "$fake" --no-start 2>&1); then
+            echo "$output"; echo 'play.sh did not stop at the disc check.'; exit 1
+          fi
+          echo "$output"
+          grep -q 'This disc is RMCP01' <<<"$output"
+          rm -rf "$PACKAGE/UserData"
+
+      # A zip keeps the programs' execute permission when the Finder unpacks it.
+      - name: Pack the package
+        run: |
+          archive="$RUNNER_TEMP/HarvestMoonAnimalParade-macos-arm64.zip"
+          (cd "$(dirname "$PACKAGE")" && ditto -c -k --keepParent "$(basename "$PACKAGE")" "$archive")
+          ls -la "$archive"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Keep the package
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.ARCHIVE }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14

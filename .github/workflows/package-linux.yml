@@ -1,0 +1,209 @@
+name: Linux packages
+
+# Builds the packages that let a player build and run the game natively on Linux, for x86-64 and
+# for ARM64 (a Raspberry Pi 5, a Nintendo Switch with switchroot Linux): WiiCompiled's runtime with
+# this game's layer, its translator, a portable compiler (clang), CMake and Ninja, the precompiled
+# aurora archives, the launcher and packaging/unix/play.sh. The player's own computer translates
+# their disc and compiles the game; no game data is involved here.
+#
+# Arma los paquetes para compilar y correr el juego de forma nativa en Linux, para x86-64 y para
+# ARM64 (una Raspberry Pi 5, una Nintendo Switch con switchroot Linux). La computadora del jugador
+# traduce su disco y compila el juego; aquí no hay datos del juego.
+#
+# It only runs when asked for: Actions tab > Linux packages > Run workflow. The first run builds
+# the tools and precompiled archives (about an hour); they are cached, keyed by everything they are
+# built from. The runners are free for a public repository.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 22.04: the compiled game and archives then run on any distribution from about
+          # 2022 on (glibc 2.35).
+          - runner: ubuntu-22.04
+            arch: x86_64
+            dotnet_rid: linux-x64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+            dotnet_rid: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    env:
+      WIICOMPILED_URL: https://github.com/patchzyy/wiicompiled.git
+      WIICOMPILED_COMMIT: 27ff3b03fd5c88e783a8b6f4d821b38e3b091297
+      WIICOMPILED: ${{ github.workspace }}/../wc
+      LAYER: ${{ github.workspace }}/../layer
+      PUBLISH: ${{ github.workspace }}/../publish
+      PACKAGE: ${{ github.workspace }}/../HarvestMoonAnimalParade-linux-${{ matrix.arch }}
+      # Part of the cache key. Change it when the preparation steps in this file change.
+      PREPARATION_VERSION: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # The libraries SDL3 and aurora are compiled against (the same list as WiiCompiled's own Linux
+      # job). Players need none of them: what the game links is in the precompiled archives.
+      - name: Install the build's system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git pkg-config libasound2-dev libpulse-dev \
+            libaudio-dev libfribidi-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+            libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev libusb-1.0-0-dev \
+            libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
+
+      - name: Download WiiCompiled at the commit the project is pinned to
+        run: |
+          git init "$WIICOMPILED"
+          git -C "$WIICOMPILED" remote add origin "$WIICOMPILED_URL"
+          git -C "$WIICOMPILED" fetch --depth 1 origin "$WIICOMPILED_COMMIT"
+          git -C "$WIICOMPILED" checkout --detach FETCH_HEAD
+          git -C "$WIICOMPILED" submodule update --init --recursive
+
+      - name: Apply this project's patches to WiiCompiled
+        run: |
+          for patch in skip-calls-outside-ram foreign-game-addresses foreign-game-translator; do
+            git -C "$WIICOMPILED" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
+          done
+          # aurora is a submodule, so its patches apply inside it.
+          for patch in aurora-storage-buffer aurora-overrun-layout aurora-interpolation-30fps aurora-wide-picture; do
+            git -C "$WIICOMPILED/aurora-main" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
+          done
+
+      # The layer has to be in runtime/include before the precompiled archives are built.
+      - name: Place WiiCompiled's natives at this game's addresses
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python tools/export_wiicompiled_layer.py --wiicompiled "$WIICOMPILED" --out "$LAYER"
+          project="$WIICOMPILED/projects/animal-parade"
+          mkdir -p "$project/native"
+          cp wiicompiled/RBIEE9.yml "$project/recomp.yml"
+          cp wiicompiled/RBIEE9-MAP.txt "$project/MAP.txt"
+          cp "$LAYER/native/natives.cpp" "$project/native/"
+          cp "$LAYER"/guest_abi/*.inc "$WIICOMPILED/runtime/include/guest_abi/"
+
+      - name: Look for tools and archives prepared earlier from the same sources
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.WIICOMPILED }}/Launcher/artifacts
+          key: linux-${{ matrix.arch }}-artifacts-${{ env.PREPARATION_VERSION }}-${{ env.WIICOMPILED_COMMIT }}-${{ hashFiles('patches/wiicompiled/*.patch', 'config/RBIEE9/symbols.txt', 'tools/export_wiicompiled_layer.py', 'tools/wiicompiled_coverage.py', 'wiicompiled/RBIEE9-*-addresses.txt') }}
+          restore-keys: |
+            linux-${{ matrix.arch }}-artifacts-${{ env.PREPARATION_VERSION }}-${{ env.WIICOMPILED_COMMIT }}-
+
+      # clang, lld, CMake and Ninja, pruned from their official releases (WiiCompiled's script).
+      - name: Prepare the portable compiler, CMake and Ninja
+        run: bash "$WIICOMPILED/Launcher/prepare-portable-tools.sh" --arch ${{ matrix.arch }}
+
+      - name: Build the precompiled aurora and third-party archives
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          rm -rf "$WIICOMPILED/Launcher/artifacts/native-prebuilt-${{ matrix.arch }}"
+          bash "$WIICOMPILED/Launcher/Prepare-NativePrebuilt.sh" --arch ${{ matrix.arch }}
+
+      - name: Publish the translator as one program
+        run: |
+          dotnet publish "$WIICOMPILED/translator/src/Translator.Cli/Translator.Cli.csproj" \
+            -c Release -r ${{ matrix.dotnet_rid }} --self-contained true -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true \
+            -p:DebugType=None -o "$PUBLISH/translator"
+
+      # nodtool, at the version WiiCompiled pins, for this processor.
+      - name: Download the disc tool (nodtool)
+        run: |
+          nodtool=$(dotnet run --project "$WIICOMPILED/Launcher/WiiCompiled.Setup.Common.Cli" -c Release -- --workspace "$WIICOMPILED" | tail -n 1)
+          test -x "$nodtool"
+          cp "$nodtool" "$PUBLISH/nodtool"
+
+      - name: Assemble the package
+        run: |
+          wc="$WIICOMPILED"
+          artifacts="$wc/Launcher/artifacts"
+          toolkit="$PACKAGE/Toolkit"
+          workspace="$PACKAGE/BuildWorkspace"
+          rm -rf "$PACKAGE"
+          mkdir -p "$toolkit/translator" "$workspace/projects"
+
+          cp -a "$artifacts/portable-tools/toolchain-${{ matrix.arch }}" "$toolkit/toolchain"
+          cp "$PUBLISH/translator/Translator.Cli" "$toolkit/translator/"
+          cp "$PUBLISH/nodtool" "$toolkit/nodtool"
+
+          cp -a "$wc/runtime" "$workspace/runtime"
+          rm -rf "$workspace/runtime/build"
+          cp -a "$wc/aurora-main" "$workspace/aurora-main"
+          rm -rf "$workspace/aurora-main/.git"
+          find "$workspace/aurora-main/extern" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+          cp -a "$wc/projects/animal-parade" "$workspace/projects/animal-parade"
+          cp -a "$artifacts/native-prebuilt-${{ matrix.arch }}" "$workspace/NativePrebuilt"
+
+          cp packaging/unix/play.sh packaging/unix/README.txt "$PACKAGE/"
+          chmod +x "$PACKAGE/play.sh"
+          # The launcher (launcher/README.md): AnimalParadeLauncher and its page.
+          bash launcher/build.sh "$PACKAGE"
+          echo "v$(cat VERSION | tr -d '[:space:]')" > "$PACKAGE/version.txt"
+          # Makes the runtime keep its settings, saves and logs in UserData next to play.sh.
+          echo 'Harvest Moon: Animal Parade keeps its user data in UserData.' > "$PACKAGE/portable.txt"
+          mkdir -p "$PACKAGE/licenses"
+          cp LICENSE "$PACKAGE/licenses/harvest-moon-animal-parade-recomp.txt"
+          cp "$wc/LICENSE" "$PACKAGE/licenses/wiicompiled.txt"
+          cp "$wc/THIRD-PARTY-NOTICES.md" "$PACKAGE/licenses/wiicompiled-third-party.md"
+
+      # The package is accepted (or not) here the way it will be on players' computers.
+      - name: Check the package
+        run: |
+          "$PACKAGE/Toolkit/nodtool" --help > /dev/null
+          "$PACKAGE/Toolkit/translator/Translator.Cli" --help > /dev/null || true
+          "$PACKAGE/Toolkit/toolchain/bin/clang" --version
+          "$PACKAGE/Toolkit/toolchain/bin/cmake" --version
+          test -f "$PACKAGE/BuildWorkspace/NativePrebuilt/native_prebuilt.cmake"
+          # A made-up disc of another game: the script must find the disc and stop at the disc
+          # check, before anything is translated.
+          fake="$RUNNER_TEMP/fake-disc"
+          mkdir -p "$fake/sys" "$fake/files"
+          printf 'RMCP01' > "$fake/sys/boot.bin"
+          echo 'not a game' > "$fake/sys/main.dol"
+          echo 'not a game' > "$fake/sys/fst.bin"
+          if output=$("$PACKAGE/play.sh" --disc "$fake" --no-start 2>&1); then
+            echo "$output"; echo 'play.sh did not stop at the disc check.'; exit 1
+          fi
+          echo "$output"
+          grep -q 'This disc is RMCP01' <<<"$output"
+          rm -rf "$PACKAGE/UserData"
+
+      - name: Pack the package
+        run: |
+          archive="$RUNNER_TEMP/HarvestMoonAnimalParade-linux-${{ matrix.arch }}.tar.gz"
+          tar -C "$(dirname "$PACKAGE")" -czf "$archive" "$(basename "$PACKAGE")"
+          ls -la "$archive"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Keep the package
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.ARCHIVE }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
