@@ -28,9 +28,9 @@ concurrency:
 env:
   WIICOMPILED_URL: https://github.com/patchzyy/wiicompiled.git
   WIICOMPILED_COMMIT: 27ff3b03fd5c88e783a8b6f4d821b38e3b091297
-  # The NDK (r27c), the build tools and the platform the app is made with, as the SDK manager
+  # The NDK (r29, whose C++ library has std::jthread, which aurora uses), the build tools and the platform the app is made with, as the SDK manager
   # installs and checks them.
-  NDK_VERSION: 27.2.12479018
+  NDK_VERSION: 29.0.14206865
   BUILD_TOOLS_VERSION: 34.0.0
   ANDROID_PLATFORM: android-34
 
