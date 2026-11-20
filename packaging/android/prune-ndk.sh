@@ -24,12 +24,16 @@ cp -a "$ndk/sources/android/cpufeatures" "$out/sources/android/"
 cp -a "$ndk/toolchains/llvm/prebuilt/$host" "$out/toolchains/llvm/prebuilt/"
 prebuilt=$out/toolchains/llvm/prebuilt/$host
 
-# Tools that are not the compiler, the linker or the binary utilities.
+# Of the programs, only the compiler, the linker and the binary utilities CMake and
+# build-android use (and, on Windows, the libraries they load).
 rm -rf "$prebuilt/python3" "$prebuilt/share" "$prebuilt/musl" "$prebuilt/lib/python3"* "$prebuilt/lib64/python3"*
-find "$prebuilt/bin" -maxdepth 1 \( -name 'lldb*' -o -name 'clang-tidy*' -o -name 'clangd*' -o -name 'clang-format*' \
-    -o -name 'clang-check*' -o -name 'clang-apply-replacements*' -o -name 'clang-include-*' -o -name 'run-clang-tidy*' \
-    -o -name 'git-clang-format*' -o -name 'scan-*' -o -name 'llvm-bolt*' -o -name 'perf2bolt*' -o -name 'bolt*' \
-    -o -name 'i686-*' -o -name 'x86_64-linux-android*' -o -name 'armv7a-*' -o -name 'riscv64-*' \) -exec rm -rf {} +
+find "$prebuilt/bin" -mindepth 1 -maxdepth 1 ! \( -name 'clang' -o -name 'clang++' -o -name 'clang-[0-9]*' \
+    -o -name 'clang.exe' -o -name 'clang++.exe' -o -name 'ld.lld*' -o -name 'lld' -o -name 'lld.exe' -o -name 'ld' \
+    -o -name 'ld.exe' -o -name 'llvm-ar*' -o -name 'llvm-ranlib*' -o -name 'llvm-strip*' -o -name 'llvm-objcopy*' \
+    -o -name 'llvm-nm*' -o -name 'llvm-readelf*' -o -name 'llvm-readobj*' -o -name 'llvm-objdump*' \
+    -o -name 'aarch64-linux-android*' -o -name '*.dll' \) -exec rm -rf {} +
+# Link-time optimization plugins: nothing here uses them.
+rm -f "$prebuilt/lib/LLVMgold.so" "$prebuilt/lib/libLTO.so"* "$prebuilt/lib64/LLVMgold.so" "$prebuilt/lib64/libLTO.so"*
 
 # Runtime libraries of the compiler: only 64-bit ARM, and no sanitizers.
 find "$prebuilt/lib/clang" -path '*/lib/linux/*' \( -name '*i686*' -o -name '*x86_64*' -o -name '*arm-*' \
@@ -44,3 +48,4 @@ done
 find "$sysroot/aarch64-linux-android" -mindepth 1 -maxdepth 1 -type d -regex '.*/[0-9]+' ! -name "$api" -exec rm -rf {} +
 
 du -sh "$out"
+du -sh "$prebuilt"/* "$prebuilt/bin" "$prebuilt/lib"/* "$prebuilt/sysroot/usr"/* 2>/dev/null | sort -h | tail -n 20
