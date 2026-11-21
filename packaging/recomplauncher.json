@@ -3,9 +3,39 @@
   "format": 1,
   "repo": "RodoLy/HarvestMoonAnimalParadeRecomp",
   "name": "Harvest Moon: Animal Parade",
+  "game": {
+    "kind": "iso_or_folder",
+    "label": "Your disc image of Harvest Moon: Animal Parade, USA release (RBIEE9): .rvz, .iso, .wbfs, .wia, .gcz or .ciso, or a folder Dolphin extracted.",
+    "check": {
+      "ids": [
+        "RBIEE9"
+      ]
+    }
+  },
+  "prepare": {
+    "program": [
+      "recomplauncher-setup.cmd",
+      "play.sh"
+    ],
+    "args": [
+      "--disc",
+      "{game}",
+      "--no-start",
+      "--progress"
+    ],
+    "label": "Building the game from your disc (the first time takes a while)",
+    "timeout": 10800,
+    "done": [
+      "{install}/Game/dsp_coef.bin"
+    ],
+    "version": "0.2.0"
+  },
   "start": {
     "program": [
-      "Launcher.exe"
+      "Game/AnimalParade.exe",
+      "Game/AnimalParade",
+      "Launcher.exe",
+      "AnimalParadeLauncher"
     ]
   },
   "config": [
@@ -69,7 +99,7 @@
     {
       "id": "faster_actions",
       "label": "Faster actions",
-      "help": "Tools, picking things up and putting them down, at the speed you choose. Only your character.",
+      "help": "Tools, picking things up and putting them down, and looking after the animals, at the speed you choose. Only your character.",
       "group": "Mods",
       "choices": [
         {
