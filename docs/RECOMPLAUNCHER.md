@@ -3,18 +3,31 @@
 [Español abajo](#español)
 
 [RecompLauncher](https://recomplauncher.com) installs and starts PC ports from their GitHub
-releases. The package carries a `recomplauncher.json` (from `packaging/windows/`), the file
-RecompLauncher reads to know how to start the game and which settings to show on its page. Its
-format is RecompLauncher's own: `docs/DEVELOPERS.md` and `docs/recomplauncher.schema.json` in
-[its repository](https://github.com/elripalda/RecompLauncher).
+releases. Every desktop package (Windows, Linux, macOS) carries a `recomplauncher.json`, the file
+RecompLauncher reads to set the game up and to know which settings to show on its page. Its source
+is `packaging/recomplauncher.json`; `tools/stamp_recomplauncher.py` copies it into each package with
+the release's version in it. The format is RecompLauncher's own:
+[its guide](https://recomplauncher.com/sdk) and
+[its schema](https://recomplauncher.com/schema/recomplauncher.json).
 
 What it says:
 
-- **Start:** Play opens `Launcher.exe`. The game is built on the player's PC from their disc, so the
-  launcher has to run first: it asks for the disc, prepares the game (and builds again after an
-  update) and starts it. There is no `game` part: the launcher finds the disc itself.
-- **Waiting for the game:** RecompLauncher sets `RECOMPLAUNCHER=1` for the program it starts. Then
-  the launcher hides after starting the game and closes when the game does, because RecompLauncher
+- **The disc (`game`):** the player's own disc image (.rvz, .iso, .wbfs, .wia, .gcz or .ciso) or a
+  folder Dolphin extracted. RecompLauncher checks its disc ID, `RBIEE9` (the USA release), and refuses
+  another game's disc. There are no `dumps`: the checksums of a known good copy have not been taken
+  from Redump yet, so the "verified" badge is left out rather than guessed.
+- **The setup step (`prepare`):** the same build the launcher's Prepare button does, with no window:
+  `recomplauncher-setup.cmd` on Windows (it runs `play.ps1 -Disc <copy> -NoStart -Progress`) and
+  `play.sh --disc <copy> --no-start --progress` on Linux and macOS. It unpacks the disc to `Disc\`,
+  translates `main.dol`, compiles the game into `Game\` and writes the disc's folder to
+  `UserData\Config.toml`. `--progress` only adds `progress 0.3 Compiling…` lines, which RecompLauncher
+  shows under the step; without it the scripts work exactly as before. The step is done when
+  `Game\dsp_coef.bin` is there (the build copies it next to the game). Its `version` is the release's
+  (`VERSION`), so after an update RecompLauncher builds the game again, as the launcher does.
+- **Play (`start`):** the game itself, `Game\AnimalParade.exe` (`Game/AnimalParade` on Linux and
+  macOS). Before the game is built, the first of them that exists is the launcher (`Launcher.exe`,
+  `AnimalParadeLauncher`), as before. RecompLauncher sets `RECOMPLAUNCHER=1` for what it starts; the
+  launcher then hides after starting the game and closes when the game does, because RecompLauncher
   takes the end of the program for the end of the game and backs up the saves at that moment.
 - **Settings:** the mods and the cheats, in two groups (Mods and Cheats), each one a line of
   `[mods]` in `UserData\Config.toml` (`mods/<name>` in the file). The speed mods are Off, ×1.25 …
@@ -24,30 +37,43 @@ What it says:
 - **Saves:** `UserData\NAND\title\00010000\52424945\data`, the game's save. Logs: `UserData\Logs`,
   with a button to open them.
 
-Checked against RecompLauncher's code (0.90.0-beta.57): the file passes its schema, has no field
-its check does not know, and its settings were read and written the way RecompLauncher's
-`profile.rs` does it, on a real `Config.toml` and on a missing one. It has not been tried in
-RecompLauncher itself yet: its Developer tools (Settings > Developers, then "Add a build" with the
-package folder) show the same check.
+Checked against RecompLauncher's schema and code (0.90.0-beta.67): the file passes the schema, and
+the developer check finds the setup program and the launcher in a fresh package. It has not been
+tried in RecompLauncher itself yet: its Developer tools (Settings > Developers, then "Add a build"
+with the package folder) show the same check.
 
 ---
 
 ## Español
 
 [RecompLauncher](https://recomplauncher.com) instala y abre ports de PC desde sus releases de
-GitHub. El paquete trae un `recomplauncher.json` (de `packaging/windows/`), el archivo que
-RecompLauncher lee para saber cómo abrir el juego y qué ajustes mostrar en su página. El formato es
-el de RecompLauncher: `docs/DEVELOPERS.md` y `docs/recomplauncher.schema.json` en
-[su repositorio](https://github.com/elripalda/RecompLauncher).
+GitHub. Cada paquete de computadora (Windows, Linux, macOS) trae un `recomplauncher.json`, el
+archivo que RecompLauncher lee para preparar el juego y saber qué ajustes mostrar en su página. Su
+fuente es `packaging/recomplauncher.json`; `tools/stamp_recomplauncher.py` lo copia a cada paquete con
+la versión del release. El formato es el de RecompLauncher:
+[su guía](https://recomplauncher.com/sdk) y
+[su esquema](https://recomplauncher.com/schema/recomplauncher.json).
 
 Lo que dice:
 
-- **Abrir:** Jugar abre `Launcher.exe`. El juego se compila en la PC de cada quien desde su disco,
-  así que primero tiene que correr el launcher: pide el disco, prepara el juego (y lo vuelve a
-  compilar después de una actualización) y lo abre. No tiene la parte `game`: el launcher encuentra
-  el disco solo.
-- **Esperar al juego:** RecompLauncher pone `RECOMPLAUNCHER=1` al programa que abre. Entonces el
-  launcher se oculta al abrir el juego y se cierra cuando el juego se cierra, porque RecompLauncher
+- **El disco (`game`):** la imagen del disco de cada quien (.rvz, .iso, .wbfs, .wia, .gcz o .ciso) o
+  una carpeta extraída con Dolphin. RecompLauncher revisa su ID, `RBIEE9` (la versión de Estados
+  Unidos), y rechaza el disco de otro juego. No tiene `dumps`: las sumas de una copia buena conocida
+  todavía no se tomaron de Redump, así que la insignia de "verificado" se deja fuera en vez de
+  inventarla.
+- **El paso de preparación (`prepare`):** la misma compilación que hace el botón Preparar del
+  launcher, sin ventana: `recomplauncher-setup.cmd` en Windows (corre
+  `play.ps1 -Disc <copia> -NoStart -Progress`) y `play.sh --disc <copia> --no-start --progress` en Linux
+  y macOS. Desempaca el disco en `Disc\`, traduce `main.dol`, compila el juego en `Game\` y escribe la
+  carpeta del disco en `UserData\Config.toml`. `--progress` solo agrega líneas
+  `progress 0.3 Compiling…`, que RecompLauncher muestra bajo el paso; sin él los scripts funcionan
+  igual que antes. El paso está hecho cuando existe `Game\dsp_coef.bin` (la compilación lo copia junto
+  al juego). Su `version` es la del release (`VERSION`), así que después de una actualización
+  RecompLauncher vuelve a compilar el juego, como hace el launcher.
+- **Jugar (`start`):** el juego mismo, `Game\AnimalParade.exe` (`Game/AnimalParade` en Linux y
+  macOS). Antes de compilar el juego, el primero que existe es el launcher (`Launcher.exe`,
+  `AnimalParadeLauncher`), como antes. RecompLauncher pone `RECOMPLAUNCHER=1` a lo que abre; entonces
+  el launcher se oculta al abrir el juego y se cierra cuando el juego se cierra, porque RecompLauncher
   toma el final del programa como el final del juego y en ese momento respalda las partidas.
 - **Ajustes:** los mods y los trucos, en dos grupos (Mods y Cheats), cada uno una línea de `[mods]`
   en `UserData\Config.toml` (`mods/<nombre>` en el archivo). Los de velocidad son Off, ×1.25 … ×3,
@@ -57,8 +83,8 @@ Lo que dice:
 - **Partidas:** `UserData\NAND\title\00010000\52424945\data`, la partida del juego. Registros:
   `UserData\Logs`, con un botón para abrirlos.
 
-Revisado contra el código de RecompLauncher (0.90.0-beta.57): el archivo pasa su esquema, no tiene
-campos que su revisión no conozca, y sus ajustes se leyeron y escribieron como lo hace `profile.rs`
-de RecompLauncher, en un `Config.toml` real y en uno que no existe. Todavía no se probó dentro de
-RecompLauncher: sus herramientas de desarrollador (Settings > Developers, luego "Add a build" con la
-carpeta del paquete) muestran la misma revisión.
+Revisado contra el esquema y el código de RecompLauncher (0.90.0-beta.67): el archivo pasa el
+esquema, y la revisión de desarrollador encuentra el programa de preparación y el launcher en un
+paquete recién descomprimido. Todavía no se probó dentro de RecompLauncher: sus herramientas de
+desarrollador (Settings > Developers, luego "Add a build" con la carpeta del paquete) muestran la
+misma revisión.
