@@ -161,6 +161,8 @@ jobs:
 
           cp packaging/unix/play.sh packaging/unix/README.txt "$PACKAGE/"
           chmod +x "$PACKAGE/play.sh"
+          # RecompLauncher's file (docs/RECOMPLAUNCHER.md), with this release's version in its setup step.
+          python3 tools/stamp_recomplauncher.py "$PACKAGE"
           # The launcher (launcher/README.md): AnimalParadeLauncher and its page.
           bash launcher/build.sh "$PACKAGE"
           echo "v$(cat VERSION | tr -d '[:space:]')" > "$PACKAGE/version.txt"

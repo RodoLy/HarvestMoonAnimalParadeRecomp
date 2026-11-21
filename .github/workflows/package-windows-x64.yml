@@ -188,9 +188,12 @@ jobs:
           Copy-Item (Join-Path $wc 'Launcher\NativeBuildFlags.ps1') $workspace
           Copy-Item (Join-Path $artifacts 'dependencies') (Join-Path $workspace 'Dependencies') -Recurse
 
-          foreach ($file in 'play.ps1', 'play.cmd', 'README.txt', 'recomplauncher.json') {
+          foreach ($file in 'play.ps1', 'play.cmd', 'README.txt', 'recomplauncher-setup.cmd') {
             Copy-Item "packaging\windows\$file" $env:PACKAGE
           }
+          # RecompLauncher's file (docs/RECOMPLAUNCHER.md), with this release's version in its setup step.
+          python tools/stamp_recomplauncher.py $env:PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'recomplauncher.json could not be written.' }
           # The launcher (launcher\README.md): Launcher.exe, built with the package's own compiler,
           # and its page. play.cmd opens it. version.txt is the version it shows.
           & launcher\build.ps1 -Package $env:PACKAGE
