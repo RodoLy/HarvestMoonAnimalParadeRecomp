@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+<a href="https://recomplauncher.com"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 Port nativo para PC de *Harvest Moon: Animal Parade* (Wii) por recompilación estática: el
 código PowerPC del juego se traduce a C++ y se compila para tu computadora, y la Wii que el
 juego espera la pone el runtime de [WiiCompiled](https://github.com/patchzyy/wiicompiled). No
@@ -216,8 +218,9 @@ infinita, alimento infinito (heno y pienso) y detener el tiempo (dormir sí llev
 siguiente). Cómo funcionan: [docs/MODS.md](docs/MODS.md). Los códigos que cambian
 las instrucciones del juego (Gecko, Action Replay) no pueden funcionar en un juego recompilado.
 
-**¿Funciona con RecompLauncher?** El paquete trae un `recomplauncher.json`: RecompLauncher abre el
-launcher y muestra los mods y los trucos en la página del juego. Ver
+**¿Funciona con RecompLauncher?** Sí. Cada paquete de computadora trae un `recomplauncher.json`:
+RecompLauncher pide tu disco, lo revisa, compila el juego sin ventana, y su botón Jugar abre el
+juego; los mods y los trucos salen en la página del juego. Ver
 [docs/RECOMPLAUNCHER.md](docs/RECOMPLAUNCHER.md).
 
 ## Para desarrolladores
