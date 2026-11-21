@@ -35,12 +35,18 @@ Traducir y compilar otra vez aunque nada haya cambiado.
 .PARAMETER NoStart
 Build the game but do not start it.
 Compilar el juego pero no iniciarlo.
+
+.PARAMETER Progress
+Also print each step as a "progress <0..1> <step>" line, the way RecompLauncher's setup step reads
+them (recomplauncher.json, prepare). Nothing else changes.
+Además escribe cada paso como una línea "progress <0..1> <paso>", como las lee RecompLauncher.
 #>
 [CmdletBinding()]
 param(
     [string]$Disc,
     [switch]$Rebuild,
-    [switch]$NoStart
+    [switch]$NoStart,
+    [switch]$Progress
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,7 +65,21 @@ $gameId = 'RBIEE9'
 # WiiCompiled's own helpers: Invoke-Checked, the configure flags, the precompiled package check.
 . (Join-Path $workspace 'NativeBuildFlags.ps1')
 
+# How far along each step starts, for -Progress. Compiling is most of the time the first time.
+$stepShares = @{
+    'Extracting the disc image (once; a few minutes)' = 0.02
+    'Translating your main.dol into C++' = 0.10
+    'The translation is current' = 0.20
+    'Configuring the build' = 0.25
+    'Compiling (the first time takes a while)' = 0.30
+    'Copying the game to Game\' = 0.97
+}
+
 function Write-Step([string]$English, [string]$Spanish) {
+    if ($Progress -and $stepShares.ContainsKey($English)) {
+        # Straight to the output, so that it is a line of its own however the host colours the rest.
+        [Console]::Out.WriteLine(('progress {0} {1}' -f $stepShares[$English].ToString([Globalization.CultureInfo]::InvariantCulture), $English))
+    }
     Write-Host ''
     Write-Host "== $English" -ForegroundColor Cyan
     Write-Host "   $Spanish" -ForegroundColor DarkCyan

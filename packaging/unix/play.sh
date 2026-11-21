@@ -18,7 +18,7 @@
 # UserData/Config.toml. La siguiente vez solo se compila lo que cambió.
 #
 # Usage / Uso:
-#   ./play.sh [--disc IMAGE_OR_FOLDER] [--rebuild] [--no-start]
+#   ./play.sh [--disc IMAGE_OR_FOLDER] [--rebuild] [--no-start] [--progress]
 #
 #   --disc       Your disc image (.rvz, .iso, .wbfs, .wia or .ciso), or a folder Dolphin extracted
 #                (with sys/main.dol, sys/fst.bin and files/). Asked for if left out, and remembered
@@ -27,6 +27,8 @@
 #                recuerda en UserData/disc.txt.
 #   --rebuild    Translate and compile again even if nothing changed. / Traducir y compilar otra vez.
 #   --no-start   Build the game but do not start it. / Compilar el juego pero no iniciarlo.
+#   --progress   Also print each step as a "progress <0..1> <step>" line, as RecompLauncher's setup
+#                step reads them. / Además escribe cada paso como una línea "progress <0..1> <paso>".
 #
 # What the computer needs / Lo que necesita la computadora:
 #   Linux: the C library's headers (Debian, Ubuntu: sudo apt install libc6-dev; Fedora:
@@ -48,18 +50,33 @@ game_id=RBIEE9
 disc=""
 rebuild=0
 no_start=0
+progress=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --disc) disc=${2:-}; shift 2 ;;
         --rebuild) rebuild=1; shift ;;
         --no-start) no_start=1; shift ;;
-        -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --progress) progress=1; shift ;;
+        -h|--help) sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "play.sh: unknown option / opción desconocida: $1" >&2; exit 2 ;;
     esac
 done
 
 # The launcher reads these lines to show the steps (launcher/host): keep their beginnings.
 step() {
+    if [[ "$progress" -eq 1 ]]; then
+        # How far along each step starts; compiling is most of the time the first time.
+        local share=""
+        case "$1" in
+            'Extracting the disc image'*) share=0.02 ;;
+            'Translating your main.dol'*) share=0.10 ;;
+            'The translation is current') share=0.20 ;;
+            'Configuring the build') share=0.25 ;;
+            'Compiling'*) share=0.30 ;;
+            'Copying the game'*) share=0.97 ;;
+        esac
+        [[ -n "$share" ]] && printf 'progress %s %s\n' "$share" "$1"
+    fi
     printf '\n== %s\n   %s\n' "$1" "$2"
 }
 
