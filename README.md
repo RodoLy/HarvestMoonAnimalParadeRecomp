@@ -91,7 +91,7 @@ adoption: a baby from the Harvest Goddess. Details: [docs/MODS.md](docs/MODS.md)
 | | |
 |---|---|
 | ![Two brides at the altar](docs/images/romance-altar.jpg) | ![The wedding photo with two brides and the whole town](docs/images/romance-wedding-photo.jpg) |
-| ![Marrying the Harvest Goddess](docs/images/romance-harvest-goddess.jpg) | ![Married to the Harvest King, the baby he asked the Harvest Goddess for](docs/images/romance-adoption.jpg) |
+| ![Marrying the Harvest Goddess](docs/images/romance-harvest-goddess.jpg) | ![Married to the Harvest King: "I asked the Harvest Goddess for a baby for us two."](docs/images/romance-adoption.jpg) |
 | ![The Harvest King with the baby: "Now we have two children. That which happens twice cannot be called a miracle."](docs/images/romance-adoption-king.jpg) | |
 
 ### Languages, and why the US disc has them
