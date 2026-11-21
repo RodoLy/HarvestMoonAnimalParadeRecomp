@@ -171,6 +171,18 @@ try {
         Write-Step 'The translation is current' 'La traducción está al día'
     }
 
+    # The translator writes the game data's assembly for the computer it runs on, and on Windows
+    # that is the PE/COFF spelling of a read-only section (.rdata,"dr"), which the Android (ELF)
+    # assembler refuses. The same section in ELF spelling: .rodata.
+    # El traductor escribe el ensamblador de los datos del juego para la computadora donde corre; en
+    # Windows es la forma PE/COFF (.rdata,"dr"), que el ensamblador de Android (ELF) no acepta.
+    $dataBlobs = Join-Path $generated 'data_sections_init_blobs.S'
+    if (Test-Path -LiteralPath $dataBlobs -PathType Leaf) {
+        $assembly = [IO.File]::ReadAllText($dataBlobs)
+        $elf = $assembly.Replace('.section .rdata,"dr"', '.section .rodata,"a",@progbits')
+        if ($elf -ne $assembly) { [IO.File]::WriteAllText($dataBlobs, $elf) }
+    }
+
     if ($Rebuild -and (Test-Path -LiteralPath $build)) { Remove-Item -LiteralPath $build -Recurse -Force }
     if (-not (Test-Path -LiteralPath (Join-Path $build 'CMakeCache.txt') -PathType Leaf)) {
         Write-Step 'Configuring the Android build' 'Configurando la compilación de Android'
