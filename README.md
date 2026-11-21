@@ -143,9 +143,7 @@ touch, and `touch_controls = false` under `[input]` in `UserData/Config.toml` tu
 
 ![The on-screen Classic Controller](docs/images/android-touch-controls.jpg)
 
-To make the APK yourself instead, with the Android add-on
-(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` or `-linux-x86_64.tar.gz`) next to the
-Windows x64 or Linux x86-64 package, see
+How the APK is made from a disc is in
 [packaging/android/README-Android.txt](packaging/android/README-Android.txt) and
 [android/README.md](android/README.md). The Android version has not been tried on many devices
 yet.

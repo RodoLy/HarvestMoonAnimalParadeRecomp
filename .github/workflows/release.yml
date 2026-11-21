@@ -1,10 +1,12 @@
 name: Release
 
 # Makes a release (as a draft, to look over before publishing) from the packages that the
-# package runs (Windows, Linux, macOS, Android add-on) kept as artifacts. Its notes are docs/releases/<tag>.md.
+# package runs (Windows, Linux, macOS) kept as artifacts. Android goes out only as the APK, which
+# is made from a disc and uploaded by hand, so the Android add-on runs' artifacts are left out. Its notes are docs/releases/<tag>.md.
 #
 # Crea un release (como borrador, para revisarlo antes de publicarlo) con los paquetes que las
-# corridas de los paquetes (Windows, Linux, macOS, complemento de Android) guardaron como artefactos. Sus notas son docs/releases/<tag>.md.
+# corridas de los paquetes (Windows, Linux, macOS) guardaron como artefactos. Android sale solo como
+# el APK, que se hace con un disco y se sube a mano: los artefactos del complemento quedan fuera. Sus notas son docs/releases/<tag>.md.
 #
 # Actions tab > Release > Run workflow, with the tag (e.g. v0.1.0) and the numbers of the package
 # runs separated by spaces.
@@ -37,12 +39,12 @@ jobs:
 
       - name: Download the packages of those runs
         # Each artifact's download is the package itself, .zip or .tar.gz (it is uploaded unzipped).
-        # android-common is only the hand-over between the Android jobs, so it is left out.
+        # The Android add-on (and android-common, the hand-over between its jobs) is left out.
         run: |
           mkdir -p package
           for run in $RUN_IDS; do
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" \
-              --jq '.artifacts[] | select(.name != "android-common") | "\(.id) \(.name)"' |
+              --jq '.artifacts[] | select((.name | startswith("android-common") or contains("android-addon")) | not) | "\(.id) \(.name)"' |
               while read -r id name; do
               gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "package/$name"
             done

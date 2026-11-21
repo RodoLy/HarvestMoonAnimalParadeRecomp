@@ -144,9 +144,7 @@ pantalla, y `touch_controls = false` en `[input]` de `UserData/Config.toml` lo a
 
 ![El control Classic en pantalla](docs/images/android-touch-controls.jpg)
 
-Para hacer el APK tú mismo, con el complemento de Android
-(`HarvestMoonAnimalParade-android-addon-windows-x64.zip` o `-linux-x86_64.tar.gz`) junto al paquete
-de Windows x64 o de Linux x86-64, ver
+Cómo se hace el APK a partir de un disco está en
 [packaging/android/README-Android.txt](packaging/android/README-Android.txt) y
 [android/README.md](android/README.md). La versión de Android todavía no se ha probado en muchos
 dispositivos.
