@@ -132,7 +132,7 @@ driver; macOS needs Apple's command line tools (`xcode-select --install`). The s
 ## Play on Android
 
 1. From [Releases](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/releases), download
-   the APK (`HarvestMoonAnimalParade-v0.2.0.apk`) and install it. Android 11 or newer, 64-bit,
+   the APK (`HarvestMoonAnimalParade-Android.apk`) and install it. Android 11 or newer, 64-bit,
    with Vulkan; a Nintendo Switch with switchroot Android counts.
 2. Open it and choose your disc image (.iso, .rvz, .wbfs, .wia or .ciso). The app unpacks it once,
    which takes a few minutes and about 5 GB, and starts the game. The APK carries the game's code

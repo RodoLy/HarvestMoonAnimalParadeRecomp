@@ -133,7 +133,7 @@ navegador y funciona como en Windows. Linux necesita los encabezados de la bibli
 ## Jugar en Android
 
 1. En [Releases](https://github.com/RodoLy/HarvestMoonAnimalParadeRecomp/releases), descarga el
-   APK (`HarvestMoonAnimalParade-v0.2.0.apk`) e instálalo. Android 11 o más nuevo, de 64 bits, con
+   APK (`HarvestMoonAnimalParade-Android.apk`) e instálalo. Android 11 o más nuevo, de 64 bits, con
    Vulkan; una Nintendo Switch con switchroot Android cuenta.
 2. Ábrelo y elige la imagen de tu disco (.iso, .rvz, .wbfs, .wia o .ciso). La app la desempaca una
    sola vez, lo que tarda unos minutos y ocupa unos 5 GB, y arranca el juego. El APK trae el código
