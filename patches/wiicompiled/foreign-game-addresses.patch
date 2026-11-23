@@ -3174,10 +3174,10 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..af4033f
+index 0000000..93ca39b
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,179 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -3208,14 +3208,15 @@ index 0000000..af4033f
 +//   90 then 87   taking out a tool
 +//   95, 96 then 98 or 99   the hoe
 +//   88           putting something down
-+//   119          filling the watering can; 115, 116 then 118 watering
++//   119          filling the watering can; 115, 116 then 118 watering (120 instead of 118 with
++//                the bronze watering can: 3 s)
 +//   91, 92       the other tools tried (the sickle, the hammer)
 +//   101, 102 then 106   one more tool
 +// And with the animals (a game with cows and chickens, read the same way):
 +//   77           petting a big animal (a cow): 3.4 s
 +//   78, 79       petting other animals (79 a duck): 2.1 to 2.7 s
 +//   89           picking an animal up to carry it (88 puts it down)
-+//   129          brushing
++//   129, 130     brushing (130 a cow: 3.6 s)
 +//   135          an animal's product into the rucksack (then 86 and 87)
 +//   211, 212, 216 then 213   and   203, 208 then 205   the two longer animal care actions (about
 +//                4 s each, in three steps)
@@ -3249,9 +3250,9 @@ index 0000000..af4033f
 +const std::set<uint32_t> kWalking = {39, 40, 41, 21, 22, 23};
 +// Picking things up and putting them down, taking things out of the rucksack, and the tools.
 +const std::set<uint32_t> kQuickActions = {94,  86,  90,  81,  69,  72,  88,  87,  95,  96,  98,  99,  119, 115,
-+                                          116, 118, 91,  92,  101, 102, 106,
++                                          116, 118, 120, 91,  92,  101, 102, 106,
 +                                          // the animals
-+                                          77, 78, 79, 89, 129, 135, 203, 205, 208, 211, 212, 213, 216};
++                                          77, 78, 79, 89, 129, 130, 135, 203, 205, 208, 211, 212, 213, 216};
 +
 +// A mod's speed as a factor: its percentage (150 when it has none) over 100, or 1 (the original)
 +// when it is off.
