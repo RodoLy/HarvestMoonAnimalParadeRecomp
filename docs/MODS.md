@@ -211,11 +211,16 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
 - The mods wrap the update and act only while the player's action (+0x5EC) is in one of two lists:
   walking (39, 40, 41, and 21, 22, 23 for the stop after it; 24, 27 and 30 for stepping back, left
   and right with L2 held near the crops) or the quick actions (picking up 94
-  and 86, carrying 90 and 81, putting down 69, 72 and 88, taking out a tool 90 and 87, the hoe 95,
-  96, 98 and 99, the watering can 119, 115, 116 and 118 (120 instead of 118 with the bronze one), other tools 91, 92, and 101, 102 and 106;
-  the animals: petting 77, 78 and 79, picking one up 89, brushing 129 and 130 (a cow), a product into the rucksack
-  135, and the two longer care actions 211, 212, 216, 213 and 203, 208, 205). A scene, a talk or
-  anything not listed plays as in the original game.
+  and 86, carrying 90 and 81, putting down 69, 72 and 88, taking out a tool 90 and 87, 91 and 92;
+  the tools, with the charged swings of the better ones: the hoe 95 to 100, the sickle 101 to 107,
+  the axe 108 to 114, the watering can 115 to 120 and 139, the hammer 95 to 100 and 138;
+  the animals: petting 77, 78 and 79, picking one up 89, brushing 129 to 131, a product into the
+  rucksack 135, and the two longer care actions 211, 212, 216, 213 and 203, 208, 205). The fishing
+  rod (121 to 128), a scene, a talk or anything not listed plays as in the original game.
+- The tools' numbers were read from the log while playing with the first tools, and the rest (the
+  charged swings, the axe) from the game itself: the functions that start each tool's actions
+  (0x800BE79C to 0x800BF3E8, each calling the change of action 0x800BB038) and the game's table of
+  the player's actions by tool (`param/chara/ActLstH.alh`).
 - Walking advances by the time step, so `faster_walking` hands the player a longer one. The actions'
   animations move one step per update whatever the time, so `faster_actions` runs the player's update
   more than once in the frame instead (twice at 200%, four times at 400%, and in between twice in
@@ -482,11 +487,16 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
 - Los mods envuelven la actualización y actúan solo mientras la acción de quien juega (+0x5EC) está
   en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al frenar; 24, 27 y 30 al ir hacia atrás,
   a la izquierda y a la derecha con L2 cerca de los cultivos) o las acciones rápidas (recoger
-  94 y 86, cargar 90 y 81, soltar 69, 72 y 88, sacar una herramienta 90 y 87, la azada 95, 96, 98 y
-  99, la regadera 119, 115, 116 y 118 (120 en vez de 118 con la de bronce), otras herramientas 91, 92, y 101, 102 y 106; los animales:
-  acariciar 77, 78 y 79, levantar uno 89, cepillar 129 y 130 (una vaca), un producto a la mochila 135, y los dos
-  cuidados más largos 211, 212, 216, 213 y 203, 208, 205). Una escena, una plática o cualquier cosa
-  fuera de las listas va como en el juego original.
+  94 y 86, cargar 90 y 81, soltar 69, 72 y 88, sacar una herramienta 90 y 87, 91 y 92; las
+  herramientas, con los golpes cargados de las mejores: la azada 95 a 100, la hoz 101 a 107, el
+  hacha 108 a 114, la regadera 115 a 120 y 139, el martillo 95 a 100 y 138; los animales: acariciar
+  77, 78 y 79, levantar uno 89, cepillar 129 a 131, un producto a la mochila 135, y los dos cuidados
+  más largos 211, 212, 216, 213 y 203, 208, 205). La caña de pescar (121 a 128), una escena, una
+  plática o cualquier cosa fuera de las listas va como en el juego original.
+- Los números de las herramientas salieron del log jugando con las primeras herramientas, y los
+  demás (los golpes cargados, el hacha) del juego mismo: las funciones que empiezan las acciones de
+  cada herramienta (0x800BE79C a 0x800BF3E8, que llaman todas al cambio de acción 0x800BB038) y la
+  tabla del juego con las acciones de quien juega por herramienta (`param/chara/ActLstH.alh`).
 - Caminar avanza con el paso de tiempo, así que `faster_walking` le da uno más largo. Las animaciones
   de las acciones avanzan un paso por actualización sin importar el tiempo, así que `faster_actions`
   corre la actualización de quien juega más de una vez en el cuadro (dos veces a 200%, cuatro a 400%,

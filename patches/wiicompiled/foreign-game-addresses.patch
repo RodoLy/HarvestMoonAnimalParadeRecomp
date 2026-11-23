@@ -3174,10 +3174,10 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..18aa5ed
+index 0000000..e132b76
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,195 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -3214,6 +3214,17 @@ index 0000000..18aa5ed
 +//                the bronze watering can: 3 s)
 +//   91, 92       the other tools tried (the sickle, the hammer)
 +//   101, 102 then 106   one more tool
++// The better tools (iron to the Goddess's) add a charged swing, held longer, which ends in other
++// actions. Those were read from the game itself instead: the functions that start each tool's
++// actions (0x800BE79C to 0x800BF3E8, each calling the change of action 0x800BB038) and the game's
++// table of the player's actions by tool (param/chara/ActLstH.alh):
++//   95 to 100    the hoe, and the end of the hammer's and the axe's swing (100 charged)
++//   138          the hammer's charged swing
++//   101 to 107   the sickle (104 and 107 charged)
++//   108 to 114   the axe
++//   115 to 120, and 139   the watering can (120 from the second level of charge on)
++//   129 to 131   the brush on the three kinds of animal
++// 121 to 128 are the fishing rod: not sped up, so a bite comes as in the original game.
 +// And with the animals (a game with cows and chickens, read the same way):
 +//   77           petting a big animal (a cow): 3.4 s
 +//   78, 79       petting other animals (79 a duck): 2.1 to 2.7 s
@@ -3252,10 +3263,12 @@ index 0000000..18aa5ed
 +// the sides with L2 held.
 +const std::set<uint32_t> kWalking = {39, 40, 41, 21, 22, 23, 24, 27, 30};
 +// Picking things up and putting them down, taking things out of the rucksack, and the tools.
-+const std::set<uint32_t> kQuickActions = {94,  86,  90,  81,  69,  72,  88,  87,  95,  96,  98,  99,  119, 115,
-+                                          116, 118, 120, 91,  92,  101, 102, 106,
++const std::set<uint32_t> kQuickActions = {94, 86, 90, 81, 69, 72, 88, 87, 91, 92,
++                                          // the tools: the hoe, the sickle, the axe, the watering can, the hammer
++                                          95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
++                                          111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 138, 139,
 +                                          // the animals
-+                                          77, 78, 79, 89, 129, 130, 135, 203, 205, 208, 211, 212, 213, 216};
++                                          77, 78, 79, 89, 129, 130, 131, 135, 203, 205, 208, 211, 212, 213, 216};
 +
 +// A mod's speed as a factor: its percentage (150 when it has none, or when it is past the mod's
 +// highest) over 100, or 1 (the original) when it is off.
