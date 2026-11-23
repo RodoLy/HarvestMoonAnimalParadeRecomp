@@ -3174,10 +3174,10 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..2caa75d
+index 0000000..a6ff5ee
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,205 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -3228,6 +3228,11 @@ index 0000000..2caa75d
 +//   115 to 120, and 139   the watering can (120 from the second level of charge on)
 +//   129 to 131   the brush on the three kinds of animal
 +// 121 to 128 are the fishing rod: not sped up, so a bite comes as in the original game.
++// And two more, found while playing (issue #3) and checked in the game:
++//   44           cooking at a bonfire: 3.7 s
++//   190, 191, 192   the player's reaction to a gas from a rock in the mines (1.5 s), empty-handed,
++//                with a tool or carrying something (the game picks it from a table of three at
++//                0x803DCF0C). Falling into a hole (165, 166, 250) keeps its time.
 +// And with the animals (a game with cows and chickens, read the same way):
 +//   77           petting a big animal (a cow): 3.4 s
 +//   78, 79       petting other animals (79 a duck): 2.1 to 2.7 s
@@ -3270,6 +3275,8 @@ index 0000000..2caa75d
 +                                          // the tools: the hoe, the sickle, the axe, the watering can, the hammer
 +                                          95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
 +                                          111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 138, 139,
++                                          // cooking at a bonfire, and a gas in the mines
++                                          44, 190, 191, 192,
 +                                          // the animals
 +                                          77, 78, 79, 89, 129, 130, 131, 135, 203, 205, 208, 211, 212, 213, 216};
 +

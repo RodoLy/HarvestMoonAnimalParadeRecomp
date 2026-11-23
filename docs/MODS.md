@@ -214,8 +214,8 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
   actions (picking up 94
   and 86, carrying 90 and 81, putting down 69, 72 and 88, taking out a tool 90 and 87, 91 and 92;
   the tools, with the charged swings of the better ones: the hoe 95 to 100, the sickle 101 to 107,
-  the axe 108 to 114, the watering can 115 to 120 and 139, the hammer 95 to 100 and 138;
-  the animals: petting 77, 78 and 79, picking one up 89, brushing 129 to 131, a product into the
+  the axe 108 to 114, the watering can 115 to 120 and 139, the hammer 95 to 100 and 138; cooking
+  at a bonfire 44; the reaction to a gas in the mines 190, 191 and 192; the animals: petting 77, 78 and 79, picking one up 89, brushing 129 to 131, a product into the
   rucksack 135, and the two longer care actions 211, 212, 216, 213 and 203, 208, 205). The fishing
   rod (121 to 128), a scene, a talk or anything not listed plays as in the original game.
 - The tools' numbers were read from the log while playing with the first tools, and the rest (the
@@ -491,7 +491,8 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
   herramienta o cargando algo) o las acciones rápidas (recoger
   94 y 86, cargar 90 y 81, soltar 69, 72 y 88, sacar una herramienta 90 y 87, 91 y 92; las
   herramientas, con los golpes cargados de las mejores: la azada 95 a 100, la hoz 101 a 107, el
-  hacha 108 a 114, la regadera 115 a 120 y 139, el martillo 95 a 100 y 138; los animales: acariciar
+  hacha 108 a 114, la regadera 115 a 120 y 139, el martillo 95 a 100 y 138; cocinar en una fogata
+  44; la reacción a un gas en las minas 190, 191 y 192; los animales: acariciar
   77, 78 y 79, levantar uno 89, cepillar 129 a 131, un producto a la mochila 135, y los dos cuidados
   más largos 211, 212, 216, 213 y 203, 208, 205). La caña de pescar (121 a 128), una escena, una
   plática o cualquier cosa fuera de las listas va como en el juego original.
