@@ -3174,7 +3174,7 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..0e41c21
+index 0000000..18aa5ed
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
 @@ -0,0 +1,182 @@
@@ -3183,9 +3183,9 @@ index 0000000..0e41c21
 +// Config.toml says, for instance,
 +//   [mods]
 +//   faster_actions = true
-+//   faster_actions_percent = 200     (twice as fast; from 100, the original game, to 300)
++//   faster_actions_percent = 200     (twice as fast; from 100, the original game, to 400)
 +//   faster_walking = true
-+//   faster_walking_percent = 150
++//   faster_walking_percent = 150     (from 100 to 300)
 +// The launcher's Mods tab writes these lines. A mod turned on without its percentage runs at 150%.
 +//
 +// How the game moves the player: the player is a BB_CCharaObjePc (vtable 0x80482454), and every frame
@@ -3194,7 +3194,7 @@ index 0000000..0e41c21
 +//   covers more ground in one frame, and nothing else in the world changes speed.
 +// - The actions do not: their animations move on one step per update, whatever the time (tried: a
 +//   longer step left them as slow as before). So faster_actions runs the player's update more than
-+//   once in the frame while the action lasts: twice at 200%, three times at 300%, and in between
++//   once in the frame while the action lasts: twice at 200%, four times at 400%, and in between
 +//   twice in some frames and once in others (at 150%, twice every other frame). It stops repeating as soon as the action is over, and only the player is
 +//   updated again: the clock, the villagers and the animals keep their speed.
 +
@@ -3257,23 +3257,23 @@ index 0000000..0e41c21
 +                                          // the animals
 +                                          77, 78, 79, 89, 129, 130, 135, 203, 205, 208, 211, 212, 213, 216};
 +
-+// A mod's speed as a factor: its percentage (150 when it has none) over 100, or 1 (the original)
-+// when it is off.
-+double Speed(const char* mod, const char* percent) {
++// A mod's speed as a factor: its percentage (150 when it has none, or when it is past the mod's
++// highest) over 100, or 1 (the original) when it is off.
++double Speed(const char* mod, const char* percent, double highest) {
 +    if (!RuntimeConfigFile::ModEnabled(mod)) {
 +        return 1.0;
 +    }
 +    const double value = RuntimeConfigFile::ModNumber(percent, 150.0);
-+    return value >= 100.0 && value <= 300.0 ? value / 100.0 : 1.5;
++    return value >= 100.0 && value <= highest ? value / 100.0 : 1.5;
 +}
 +
 +double WalkingSpeed() {
-+    static const double speed = Speed("faster_walking", "faster_walking_percent");
++    static const double speed = Speed("faster_walking", "faster_walking_percent", 300.0);
 +    return speed;
 +}
 +
 +double ActionSpeed() {
-+    static const double speed = Speed("faster_actions", "faster_actions_percent");
++    static const double speed = Speed("faster_actions", "faster_actions_percent", 400.0);
 +    return speed;
 +}
 +

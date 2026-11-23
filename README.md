@@ -38,7 +38,7 @@ second, English. Everything below except fast loading is a choice in the launche
 | **Fast loading** | Always on: the change of area (the fade to black, the loading and the place sign) runs up to eight times faster, as fast as the PC allows, and so do the other black screens. While the screen is black the 3D world behind it is not drawn, so even a slow PC gets through it quickly. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
 | **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera all the way around the player and tilts it, R3 puts it back. [See below](#free-camera). |
 | **Romance for everyone** | A mod: any of the twenty marriage candidates, the Harvest Goddess and the Harvest King included, can be courted and married whatever the player's sex. [See below](#romance-for-everyone). |
-| **Quality of life** | Mods for no area sign when loading ([see below](#shorter-loading-screens)) and for faster walking and faster actions (×1.25 to ×3). See [docs/MODS.md](docs/MODS.md). |
+| **Quality of life** | Mods for no area sign when loading ([see below](#shorter-loading-screens)) and for faster walking (×1.25 to ×3) and faster actions (×1.25 to ×4). See [docs/MODS.md](docs/MODS.md). |
 | **Cheats** | Infinite stamina, money, lumber, stone and feed, and stop time, in the launcher and in F10 (see the questions below). |
 | **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
 | **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
@@ -164,7 +164,7 @@ too. It speaks English or Spanish, and is driven with the mouse, the keyboard or
 | ![The launcher's Game tab](docs/images/launcher-game.png) | ![The launcher's Options tab](docs/images/launcher-options.png) | ![The launcher's Controls tab](docs/images/launcher-controls.png) |
 
 In **Mods** each mod is a switch, all off until you turn them on, so out of the box the game is
-the original; the speed mods have a bar from ×1.25 to ×3.
+the original; the speed mods have a bar from ×1.25 to ×3 (×4 for the actions).
 
 ![The launcher's Mods tab](docs/images/launcher-mods.png)
 

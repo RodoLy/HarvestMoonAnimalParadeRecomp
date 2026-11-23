@@ -38,7 +38,7 @@ menú **F10** dentro del juego.
 | **Carga rápida** | Siempre activa: el cambio de zona (el fundido a negro, la carga y el letrero del lugar) va hasta ocho veces más rápido, lo que permita la PC, igual que las demás pantallas negras. Mientras la pantalla está en negro no se dibuja el mundo 3D de detrás, así que hasta una PC lenta pasa rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
 | **Cámara libre** | Un mod, apagado de inicio (launcher > Mods): al aire libre el stick derecho gira la cámara alrededor del personaje por completo y la inclina, R3 la regresa. [Ver abajo](#cámara-libre). |
 | **Amor para todos** | Un mod: cualquiera de los veinte candidatos, con la Diosa y el Rey de la Cosecha, se puede enamorar y casar sin importar el sexo del jugador. [Ver abajo](#amor-para-todos). |
-| **Calidad de vida** | Mods para quitar el letrero de la zona al cargar ([ver abajo](#pantallas-de-carga-más-cortas)) y para caminar y actuar más rápido (×1.25 a ×3). Ver [docs/MODS.md](docs/MODS.md). |
+| **Calidad de vida** | Mods para quitar el letrero de la zona al cargar ([ver abajo](#pantallas-de-carga-más-cortas)) y para caminar más rápido (×1.25 a ×3) y actuar más rápido (×1.25 a ×4). Ver [docs/MODS.md](docs/MODS.md). |
 | **Trucos** | Estamina, dinero, madera, piedra y alimento infinitos, y detener el tiempo, en el launcher y en F10 (ver las preguntas abajo). |
 | **Cinco idiomas** | Inglés, español, francés, alemán e italiano desde el mismo disco de EE. UU. (ver abajo). |
 | **Direct3D 12 o Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* elige Direct3D 12. |
@@ -165,7 +165,7 @@ los Wii Remotes reales. Está en inglés o en español, y se usa con el mouse, e
 | ![La pestaña Juego del launcher](docs/images/launcher-game.png) | ![La pestaña Opciones del launcher](docs/images/launcher-options.png) | ![La pestaña Controles del launcher](docs/images/launcher-controls.png) |
 
 En **Mods** cada mod es un interruptor, todos apagados hasta que los actives, así que recién
-instalado el juego es el original; los mods de velocidad tienen una barra de ×1.25 a ×3.
+instalado el juego es el original; los mods de velocidad tienen una barra de ×1.25 a ×3 (×4 para las acciones).
 
 ![La pestaña Mods del launcher](docs/images/launcher-mods.png)
 

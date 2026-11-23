@@ -242,7 +242,7 @@ const MODS = [
     summary: { es: 'Herramientas, animales, recoger y soltar cosas.', en: 'Tools, animals, picking up and putting down.' },
     hint: { es: 'Recoger y soltar cosas, sacarlas de la mochila, usar las herramientas (la azada, la regadera, la hoz…) y cuidar a los animales (acariciarlos, cepillarlos, cargarlos, ordeñarlos) van a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. ×1 es la velocidad del juego original.',
       en: 'Picking things up and putting them down, taking them out of the rucksack, using the tools (the hoe, the watering can, the sickle…) and looking after the animals (petting, brushing, carrying, milking) go at the speed you choose. Only your character: the clock, the villagers and the animals are unchanged. ×1 is the original game\'s speed.' },
-    setting: { key: 'faster_actions_percent', es: 'Velocidad de las acciones', en: 'Speed of the actions', min: 100, max: 300, step: 25, fallback: 150 } },
+    setting: { key: 'faster_actions_percent', es: 'Velocidad de las acciones', en: 'Speed of the actions', min: 100, max: 400, step: 25, fallback: 150 } },
   { id: 'faster_walking', group: 'qol', es: 'Caminar más rápido', en: 'Faster walking',
     summary: { es: 'Tu personaje camina y corre más rápido.', en: 'Your character walks and runs faster.' },
     hint: { es: 'Tu personaje camina y corre a la velocidad que elijas. Solo tu personaje: el reloj, los aldeanos y los animales van igual. ×1 es la velocidad del juego original.',

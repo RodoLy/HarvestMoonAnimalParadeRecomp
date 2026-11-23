@@ -163,6 +163,34 @@
             "mods/faster_actions": "true",
             "mods/faster_actions_percent": "300"
           }
+        },
+        {
+          "label": "×3.25",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "325"
+          }
+        },
+        {
+          "label": "×3.5",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "350"
+          }
+        },
+        {
+          "label": "×3.75",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "375"
+          }
+        },
+        {
+          "label": "×4",
+          "set": {
+            "mods/faster_actions": "true",
+            "mods/faster_actions_percent": "400"
+          }
         }
       ],
       "defaults": {

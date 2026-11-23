@@ -195,7 +195,8 @@ Tried: on a Windows ARM PC, crossing several areas.
 ### Faster actions and faster walking (`faster_actions`, `faster_walking`)
 
 Quality of life. Each is turned on or off and has a speed, a percentage from 100 (the original
-game) to 300, chosen with a bar in the launcher that shows it as ×1, ×1.25, ×1.5… up to ×3. In `[mods]` they are two lines each, for instance
+game) to 400 for the actions and 300 for walking, chosen with a bar in the launcher that shows it as
+×1, ×1.25, ×1.5… up to ×4 (×3 for walking). In `[mods]` they are two lines each, for instance
 `faster_walking = true` and `faster_walking_percent = 150` (150 when the percentage is missing).
 `faster_actions` speeds up picking things up
 and putting them down, taking them out of the rucksack, using the tools and looking after the
@@ -217,7 +218,7 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
   anything not listed plays as in the original game.
 - Walking advances by the time step, so `faster_walking` hands the player a longer one. The actions'
   animations move one step per update whatever the time, so `faster_actions` runs the player's update
-  more than once in the frame instead (twice at 200%, three times at 300%, and in between twice in
+  more than once in the frame instead (twice at 200%, four times at 400%, and in between twice in
   some frames and once in others: at 150%, twice every other frame) and stops as soon as the action
   is over.
 - The numbers were read from the log while playing: with either mod on, every change of action goes
@@ -465,8 +466,8 @@ Probado: en una PC Windows ARM, cruzando varias zonas.
 ### Acciones más rápidas y caminar más rápido (`faster_actions`, `faster_walking`)
 
 Calidad de vida. Cada uno se activa o desactiva y tiene una velocidad, un porcentaje de 100 (el
-juego original) a 300, que se elige con una barra en el launcher que lo muestra como ×1, ×1.25,
-×1.5… hasta ×3. En `[mods]` son dos líneas cada
+juego original) a 400 para las acciones y 300 para caminar, que se elige con una barra en el launcher
+que lo muestra como ×1, ×1.25, ×1.5… hasta ×4 (×3 para caminar). En `[mods]` son dos líneas cada
 uno, por ejemplo `faster_walking = true` y `faster_walking_percent = 150` (150 si falta el
 porcentaje). `faster_actions` acelera
 recoger y soltar cosas, sacarlas de la mochila, usar las herramientas y cuidar a los animales
@@ -488,7 +489,7 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
   fuera de las listas va como en el juego original.
 - Caminar avanza con el paso de tiempo, así que `faster_walking` le da uno más largo. Las animaciones
   de las acciones avanzan un paso por actualización sin importar el tiempo, así que `faster_actions`
-  corre la actualización de quien juega más de una vez en el cuadro (dos veces a 200%, tres a 300%,
+  corre la actualización de quien juega más de una vez en el cuadro (dos veces a 200%, cuatro a 400%,
   y en medio dos veces en unos cuadros y una en otros: a 150%, dos veces cada dos cuadros) y para en
   cuanto la acción termina.
 - Los números salieron del log jugando: con cualquiera de los dos mods activo, cada cambio de acción

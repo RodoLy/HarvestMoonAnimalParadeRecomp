@@ -31,7 +31,7 @@ What it says:
   takes the end of the program for the end of the game and backs up the saves at that moment.
 - **Settings:** the mods and the cheats, in two groups (Mods and Cheats), each one a line of
   `[mods]` in `UserData\Config.toml` (`mods/<name>` in the file). The speed mods are Off, ×1.25 …
-  ×3, written as the launcher writes them (`faster_actions = true` and
+  ×4 for the actions and … ×3 for walking, written as the launcher writes them (`faster_actions = true` and
   `faster_actions_percent = 150`). The launcher, the F10 menu and RecompLauncher read and write the
   same lines, so each one shows what the others changed.
 - **Saves:** `UserData\NAND\title\00010000\52424945\data`, the game's save. Logs: `UserData\Logs`,
@@ -76,8 +76,8 @@ Lo que dice:
   el launcher se oculta al abrir el juego y se cierra cuando el juego se cierra, porque RecompLauncher
   toma el final del programa como el final del juego y en ese momento respalda las partidas.
 - **Ajustes:** los mods y los trucos, en dos grupos (Mods y Cheats), cada uno una línea de `[mods]`
-  en `UserData\Config.toml` (`mods/<nombre>` en el archivo). Los de velocidad son Off, ×1.25 … ×3,
-  escritos como los escribe el launcher (`faster_actions = true` y `faster_actions_percent = 150`).
+  en `UserData\Config.toml` (`mods/<nombre>` en el archivo). Los de velocidad son Off, ×1.25 … ×4 para
+  las acciones y … ×3 para caminar, escritos como los escribe el launcher (`faster_actions = true` y `faster_actions_percent = 150`).
   El launcher, el menú F10 y RecompLauncher leen y escriben las mismas líneas, así que cada uno
   muestra lo que cambiaron los otros.
 - **Partidas:** `UserData\NAND\title\00010000\52424945\data`, la partida del juego. Registros:

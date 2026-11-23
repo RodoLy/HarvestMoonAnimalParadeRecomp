@@ -505,7 +505,8 @@ void ResetControls() {
 
 // The game's mods (runtime/src/hle/game_mods in WiiCompiled's patch): each is a line in [mods] of
 // Config.toml, off unless it says true. Some have a setting, a percentage in a line of its own in
-// [mods] (from 100, the original game, to 300). The page has their names, descriptions and limits.
+// [mods] (from 100, the original game, to 400 for the actions and 300 for walking). The page has
+// their names, descriptions and limits.
 const char* const kMods[] = {"romance_any_gender",     "no_place_sign",        "faster_actions",  "faster_walking", "free_camera",
                               "cheat_infinite_stamina", "cheat_infinite_money", "cheat_infinite_lumber",
                               "cheat_infinite_stone", "cheat_infinite_feed", "cheat_stop_time"};
@@ -651,10 +652,11 @@ bool HandleSettingsMessage(const std::map<std::string, std::string>& message, bo
             config.Save();
         }
     } else if (cmd == "setModSetting") {
-        // A mod's percentage, from 100 to 300, or a yes or no.
+        // A mod's percentage, from 100 to 400 for the actions and to 300 for walking, or a yes or no.
         const std::string name = Field(message, "name");
         const std::string value = Field(message, "value");
-        if (OneOf(kModSettings, name) && IsPercent(value) && std::stoi(value) >= 100 && std::stoi(value) <= 300) {
+        const int highest = name == "faster_actions_percent" ? 400 : 300;
+        if (OneOf(kModSettings, name) && IsPercent(value) && std::stoi(value) >= 100 && std::stoi(value) <= highest) {
             ConfigFile config = ConfigFile::Load();
             config.Set("mods", name, value);
             config.Save();
