@@ -3174,10 +3174,10 @@ index 0000000..e8ab5aa
 +FOREIGN_GAME_WRAPPER(RBIEE9, 80126B84, AnimalParadeOtherAreaChangeStep);
 diff --git a/runtime/src/hle/game_mods/player_speed.cpp b/runtime/src/hle/game_mods/player_speed.cpp
 new file mode 100644
-index 0000000..93ca39b
+index 0000000..0e41c21
 --- /dev/null
 +++ b/runtime/src/hle/game_mods/player_speed.cpp
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,182 @@
 +// Harvest Moon: Animal Parade mods "faster_actions" and "faster_walking": the player's own actions
 +// (picking things up, using tools) and the player's walking, at a chosen speed. Off unless
 +// Config.toml says, for instance,
@@ -3203,6 +3203,8 @@ index 0000000..93ca39b
 +//   0, 1, 2      standing still: empty-handed, with a tool, carrying something
 +//   39, 40, 41   walking or running, the same three ways
 +//   21, 22, 23   stopping or turning, the same three ways
++//   24, 27, 30   with L2 held near the crops (the square in front of the player): stepping back,
++//                left and right (21 forward)
 +//   94 then 86   picking something up from the ground into the rucksack
 +//   90 then 81   taking something out to carry it; 69 then 72 putting it down
 +//   90 then 87   taking out a tool
@@ -3246,8 +3248,9 @@ index 0000000..93ca39b
 +
 +constexpr uint32_t kAction = 0x5EC;
 +
-+// The player's walking (and running), and the short stop or turn after it.
-+const std::set<uint32_t> kWalking = {39, 40, 41, 21, 22, 23};
++// The player's walking (and running), the short stop or turn after it, and the steps back and to
++// the sides with L2 held.
++const std::set<uint32_t> kWalking = {39, 40, 41, 21, 22, 23, 24, 27, 30};
 +// Picking things up and putting them down, taking things out of the rucksack, and the tools.
 +const std::set<uint32_t> kQuickActions = {94,  86,  90,  81,  69,  72,  88,  87,  95,  96,  98,  99,  119, 115,
 +                                          116, 118, 120, 91,  92,  101, 102, 106,
