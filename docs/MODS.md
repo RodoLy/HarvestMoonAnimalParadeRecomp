@@ -209,8 +209,9 @@ What the game does, and what the mods change (`runtime/src/hle/game_mods/player_
   0x800CFB30, with the time since the last frame in f1, in seconds; walking, the animations and the
   actions all advance by that time.
 - The mods wrap the update and act only while the player's action (+0x5EC) is in one of two lists:
-  walking (39, 40, 41, and 21, 22, 23 for the stop after it; 24, 27 and 30 for stepping back, left
-  and right with L2 held near the crops) or the quick actions (picking up 94
+  walking (39, 40, 41, and 21, 22, 23 for the stop after it; 24 to 32 for stepping back, left and
+  right with L2 held near the crops, empty-handed, with a tool or carrying something) or the quick
+  actions (picking up 94
   and 86, carrying 90 and 81, putting down 69, 72 and 88, taking out a tool 90 and 87, 91 and 92;
   the tools, with the charged swings of the better ones: the hoe 95 to 100, the sickle 101 to 107,
   the axe 108 to 114, the watering can 115 to 120 and 139, the hammer 95 to 100 and 138;
@@ -485,8 +486,9 @@ Qué hace el juego y qué cambian los mods (`runtime/src/hle/game_mods/player_sp
   actualización, 0x800CFB30, con el tiempo desde el cuadro anterior en f1, en segundos; la caminata,
   las animaciones y las acciones avanzan todas con ese tiempo.
 - Los mods envuelven la actualización y actúan solo mientras la acción de quien juega (+0x5EC) está
-  en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al frenar; 24, 27 y 30 al ir hacia atrás,
-  a la izquierda y a la derecha con L2 cerca de los cultivos) o las acciones rápidas (recoger
+  en una de dos listas: caminar (39, 40, 41, y 21, 22, 23 al frenar; 24 a 32 al ir hacia atrás, a
+  la izquierda y a la derecha con L2 cerca de los cultivos, con las manos vacías, con una
+  herramienta o cargando algo) o las acciones rápidas (recoger
   94 y 86, cargar 90 y 81, soltar 69, 72 y 88, sacar una herramienta 90 y 87, 91 y 92; las
   herramientas, con los golpes cargados de las mejores: la azada 95 a 100, la hoz 101 a 107, el
   hacha 108 a 114, la regadera 115 a 120 y 139, el martillo 95 a 100 y 138; los animales: acariciar
