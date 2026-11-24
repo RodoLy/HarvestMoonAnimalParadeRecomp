@@ -322,6 +322,79 @@ index 0000000..12f6789
 +RemoteHost& RemoteHostForThisGame();
 +
 +} // namespace Bluetooth
+diff --git a/runtime/include/controller_button_names.h b/runtime/include/controller_button_names.h
+index ab61c03..c3e8f09 100644
+--- a/runtime/include/controller_button_names.h
++++ b/runtime/include/controller_button_names.h
+@@ -98,11 +98,64 @@ inline std::string TrimToken(std::string_view token) {
+     return std::string(token.substr(begin, end - begin + 1));
+ }
+ 
++// The names other programs write for a button (RecompLauncher's chips: "A", "LB", "D-Pad Up"; the
++// PlayStation ones: "Cross", "L1"), each with the name above it stands for. They are read
++// without regard to case, spaces, dashes or underscores; the game writes the names above.
++struct ButtonAlias {
++    const char* alias;
++    const char* configName;
++};
++
++inline constexpr ButtonAlias kButtonAliases[] = {
++    {"a", "south"},           {"cross", "south"},          {"b", "east"},
++    {"circle", "east"},       {"x", "west"},               {"square", "west"},
++    {"y", "north"},           {"triangle", "north"},       {"lb", "left_shoulder"},
++    {"l1", "left_shoulder"},  {"rb", "right_shoulder"},    {"r1", "right_shoulder"},
++    {"lt", "left_trigger"},   {"l2", "left_trigger"},      {"rt", "right_trigger"},
++    {"r2", "right_trigger"},  {"ls", "left_stick"},        {"l3", "left_stick"},
++    {"rs", "right_stick"},    {"r3", "right_stick"},       {"select", "back"},
++    {"view", "back"},         {"share", "back"},           {"create", "back"},
++    {"options", "start"},     {"menu", "start"},           {"home", "guide"},
++    {"dpadup", "dpad_up"},    {"dpaddown", "dpad_down"},   {"dpadleft", "dpad_left"},
++    {"dpadright", "dpad_right"},
++};
++
++// "D-Pad Up" -> "dpadup": lower case, letters and digits only.
++inline std::string AliasKey(std::string_view name) {
++    std::string key;
++    for (const char c : name) {
++        if (c >= 'A' && c <= 'Z') {
++            key += static_cast<char>(c - 'A' + 'a');
++        } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
++            key += c;
++        }
++    }
++    return key;
++}
++
+ inline const NativeButtonItem* FindNativeButton(std::string_view configName) {
+-    const std::string name = TrimToken(configName.substr(0, configName.find('@')));
+-    const auto it = std::find_if(kNativeButtons.begin(), kNativeButtons.end(),
+-                                 [&](const NativeButtonItem& item) { return name == item.configName; });
+-    return it == kNativeButtons.end() ? nullptr : &*it;
++    std::string name = TrimToken(configName.substr(0, configName.find('@')));
++    auto find = [&](const std::string& wanted) {
++        const auto it = std::find_if(kNativeButtons.begin(), kNativeButtons.end(),
++                                     [&](const NativeButtonItem& item) { return wanted == item.configName; });
++        return it == kNativeButtons.end() ? nullptr : &*it;
++    };
++    if (const NativeButtonItem* item = find(name)) {
++        return item;
++    }
++    const std::string key = AliasKey(name);
++    for (const ButtonAlias& alias : kButtonAliases) {
++        if (key == alias.alias) {
++            return find(alias.configName);
++        }
++    }
++    // The game's own names written another way ("Left Shoulder", "DPAD_UP").
++    for (const NativeButtonItem& item : kNativeButtons) {
++        if (key == AliasKey(item.configName)) {
++            return &item;
++        }
++    }
++    return nullptr;
+ }
+ 
+ // Falls back to the "unmapped" entry so callers always have a label to draw.
 diff --git a/runtime/include/game_mods.h b/runtime/include/game_mods.h
 new file mode 100644
 index 0000000..34af5c1
