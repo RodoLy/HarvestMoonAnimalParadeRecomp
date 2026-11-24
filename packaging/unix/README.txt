@@ -12,9 +12,9 @@ What you need
   script extracts it once to Disc/. A folder you already extracted with Dolphin (the one
   with sys/main.dol, sys/fst.bin and files/) works too.
 - About 9 GB free: 5 for the extracted disc and 4 for the build.
-- Linux: the C library's headers (Debian, Ubuntu, switchroot: sudo apt install libc6-dev;
-  Fedora: sudo dnf install glibc-devel) and a Vulkan driver (Mesa's is fine). The package
-  brings its own compiler, CMake and Ninja.
+- Linux: a Vulkan driver (Mesa's is fine). The package brings its own compiler, CMake,
+  Ninja and the C and C++ libraries' files to compile against (Toolkit/sysroot), so
+  nothing has to be installed: a Steam Deck works as it is, in desktop mode.
 - macOS (Apple Silicon): Apple's command line tools (run xcode-select --install once). The
   first build downloads aurora's libraries, so it needs the internet.
 
@@ -60,9 +60,9 @@ Lo que necesitas
   script la extrae una vez a Disc/. También sirve una carpeta que ya extrajiste con Dolphin
   (la que tiene sys/main.dol, sys/fst.bin y files/).
 - Unos 9 GB libres: 5 para el disco extraído y 4 para la compilación.
-- Linux: los encabezados de la biblioteca de C (Debian, Ubuntu, switchroot:
-  sudo apt install libc6-dev; Fedora: sudo dnf install glibc-devel) y un controlador Vulkan
-  (el de Mesa sirve). El paquete trae su propio compilador, CMake y Ninja.
+- Linux: un controlador Vulkan (el de Mesa sirve). El paquete trae su propio compilador,
+  CMake, Ninja y los archivos de las bibliotecas de C y C++ para compilar (Toolkit/sysroot),
+  así que no hay que instalar nada: una Steam Deck funciona tal cual, en modo escritorio.
 - macOS (Apple Silicon): las herramientas de línea de comandos de Apple (corre
   xcode-select --install una vez). La primera compilación descarga las bibliotecas de aurora,
   así que necesita internet.

@@ -126,8 +126,9 @@ saves and logs are in `UserData\`.
 The packages are `HarvestMoonAnimalParade-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` (a
 Raspberry Pi 5, a Nintendo Switch with switchroot Linux) and `-macos-arm64.zip` (Apple Silicon).
 Unpack one, start `AnimalParadeLauncher` (on a Mac, `Animal Parade.command`); it opens in the
-browser and works as on Windows. Linux needs the C library's headers (`libc6-dev`) and a Vulkan
-driver; macOS needs Apple's command line tools (`xcode-select --install`). The steps are in
+browser and works as on Windows. Linux needs only a Vulkan driver: the package brings its compiler
+and the C and C++ libraries to build with, so nothing has to be installed (a Steam Deck works as
+it is, in desktop mode). macOS needs Apple's command line tools (`xcode-select --install`). The steps are in
 [packaging/unix/README.txt](packaging/unix/README.txt).
 
 ## Play on Android
