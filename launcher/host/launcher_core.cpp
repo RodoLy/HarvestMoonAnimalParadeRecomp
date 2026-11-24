@@ -412,10 +412,53 @@ int ToInt(const std::string& text, int fallback) {
     return end == text.c_str() ? fallback : static_cast<int>(value);
 }
 
+// The controller buttons are written in Config.toml by the names RecompLauncher shows ("A", "LB",
+// "D-Pad Up"), which the game reads as well as its own ("south", "left_shoulder"): then RecompLauncher's
+// Controls list shows them as they are on the controller. The page goes by the game's own names.
+struct PadAlias {
+    const char* name;  // the game's own
+    const char* shown; // the one written
+};
+const PadAlias kPadAliases[] = {
+    {"south", "A"},           {"east", "B"},           {"west", "X"},          {"north", "Y"},
+    {"left_shoulder", "LB"},  {"right_shoulder", "RB"}, {"left_trigger", "LT"}, {"right_trigger", "RT"},
+    {"left_stick", "LS"},     {"right_stick", "RS"},   {"back", "Back"},       {"start", "Start"},
+    {"dpad_up", "D-Pad Up"},  {"dpad_down", "D-Pad Down"}, {"dpad_left", "D-Pad Left"}, {"dpad_right", "D-Pad Right"},
+};
+
+// "D-Pad Up" and "dpad_up" alike: lower case, letters and digits only.
+std::string PadKey(const std::string& name) {
+    std::string key;
+    for (const char c : name) {
+        if (std::isalnum(static_cast<unsigned char>(c))) key += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return key;
+}
+
+// The name a controller button is written under.
+std::string PadFileName(const std::string& name) {
+    for (const auto& alias : kPadAliases) if (name == alias.name) return alias.shown;
+    return name;
+}
+
+// The game's own name for one written in Config.toml: RecompLauncher's, a PlayStation one ("Cross"),
+// or already the game's.
+std::string PadOwnName(const std::string& written) {
+    static const std::pair<const char*, const char*> kPlayStation[] = {
+        {"cross", "south"}, {"circle", "east"}, {"square", "west"}, {"triangle", "north"}, {"l1", "left_shoulder"},
+        {"r1", "right_shoulder"}, {"l2", "left_trigger"}, {"r2", "right_trigger"}, {"l3", "left_stick"},
+        {"r3", "right_stick"}, {"select", "back"}, {"share", "back"}, {"view", "back"}, {"create", "back"},
+        {"options", "start"}, {"menu", "start"}};
+    const std::string key = PadKey(written);
+    for (const auto& alias : kPadAliases) if (key == PadKey(alias.shown) || key == PadKey(alias.name)) return alias.name;
+    for (const auto& [ps, name] : kPlayStation) if (key == ps) return name;
+    return written;
+}
+
 // A [controller] line is "name" or "name,second name"; a name may end in "@threshold".
 std::string PadPrimary(const std::string& value) {
     std::string name = ConfigFile::Strip(value.substr(0, value.find(',')));
-    return name.substr(0, name.find('@'));
+    return PadOwnName(Trim(name.substr(0, name.find('@'))));
 }
 
 // What the page shows for the controller button of game button i.
@@ -491,13 +534,13 @@ void SetKey(const std::string& action, int32_t key) {
 void SetPad(const std::string& action, const std::string& value) {
     ConfigFile config = ConfigFile::Load();
     if (const CameraControl* control = FindCameraControl(action)) {
-        config.Set("mods", CameraButtonLine(*control), "\"" + value + "\"");
+        config.Set("mods", CameraButtonLine(*control), "\"" + PadFileName(value) + "\"");
     } else if (action == "fastForward") {
-        config.Set("speed", "fast_forward_button", "\"" + value + "\"");
+        config.Set("speed", "fast_forward_button", "\"" + PadFileName(value) + "\"");
     } else if (const int i = ButtonIndex(action); i >= 0) {
         const std::string old = config.Get("controller", kButtonNames[i]).value_or("");
         const auto comma = old.find(',');
-        config.Set("controller", kButtonNames[i], "\"" + value + (comma == std::string::npos ? "" : old.substr(comma)) + "\"");
+        config.Set("controller", kButtonNames[i], "\"" + PadFileName(value) + (comma == std::string::npos ? "" : old.substr(comma)) + "\"");
     } else {
         return;
     }
@@ -518,7 +561,7 @@ void ResetControls() {
     keyboard.SetDefaults(keyboard.players[0]);
     keyboard.Save();
     ConfigFile config = ConfigFile::Load();
-    for (int i = 0; i < 12; ++i) config.Set("controller", kButtonNames[i], std::string("\"") + kDefaultPad[i] + "\"");
+    for (int i = 0; i < 12; ++i) config.Set("controller", kButtonNames[i], "\"" + PadFileName(kDefaultPad[i]) + "\"");
     config.Set("speed", "fast_forward_key", std::to_string(kDefaultFastForwardKey));
     config.Set("speed", "fast_forward_button", "\"disabled\"");
     for (const auto& control : kCameraControls) {
