@@ -29,6 +29,10 @@ works on its own, in a console window: play.cmd -Rebuild, for example, runs it.
 Settings, saves and logs are in UserData\. The disc image is remembered in
 UserData\disc.txt.
 
+When a new version is out, the launcher's Game tab shows "Update to vX" at the top: it
+downloads it, puts it over this folder (UserData stays) and opens again. Options >
+Look for new versions turns that off.
+
 This is early work. If the game stops, the window says why (often an address the native
 code does not know yet in this game). Please report that message and the newest file in
 UserData\Logs.
@@ -85,6 +89,10 @@ ejemplo, lo corre.
 
 La configuración, las partidas y los registros están en UserData\. La imagen del disco
 se recuerda en UserData\disc.txt.
+
+Cuando sale una versión nueva, la pestaña Juego del launcher muestra arriba "Actualizar
+a la vX": la baja, la pone encima de esta carpeta (UserData se queda) y se abre otra vez.
+Opciones > Buscar versiones nuevas lo apaga.
 
 Esto va empezando. Si el juego se detiene, la ventana dice por qué (muchas veces una
 dirección que el código nativo todavía no conoce en este juego). Reporta ese mensaje y el

@@ -37,6 +37,10 @@ Without the launcher, in a terminal:
 
 Settings, saves and logs are in UserData/. The game is Game/AnimalParade.
 
+When a new version is out, the launcher's Game tab shows "Update to vX" at the top: it
+downloads it (update.sh), puts it over this folder (UserData stays) and opens again.
+Options > Look for new versions turns that off.
+
 Nintendo Switch (switchroot Linux) and other ARM boards: use the aarch64 package. The first
 build takes long on these (an hour or more); later ones are quick. Use 1x resolution.
 
@@ -82,6 +86,10 @@ Sin el launcher, en una terminal:
 
 La configuración, las partidas y los registros están en UserData/. El juego es
 Game/AnimalParade.
+
+Cuando sale una versión nueva, la pestaña Juego del launcher muestra arriba "Actualizar
+a la vX": la baja (update.sh), la pone encima de esta carpeta (UserData se queda) y se
+abre otra vez. Opciones > Buscar versiones nuevas lo apaga.
 
 Nintendo Switch (switchroot Linux) y otras placas ARM: usa el paquete aarch64. La primera
 compilación tarda mucho en ellas (una hora o más); las siguientes son rápidas. Usa la

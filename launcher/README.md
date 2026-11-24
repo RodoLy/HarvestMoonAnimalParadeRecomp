@@ -18,6 +18,7 @@ launcher/
   third_party/        OpenWebView2Loader (ISC) and the WebView2 headers (Microsoft, BSD-style)
   build.ps1           compiles Launcher.exe with the package's compiler and copies the page
   build.sh            compiles AnimalParadeLauncher (Linux, macOS) and copies the page
+                      (update.ps1 and update.sh, which put a new version in place, are in packaging/)
   tools/              make_animals_js.py
 ```
 
@@ -34,6 +35,19 @@ address), takes the page's messages at `message` and sends its own at `events` a
 runs `play.sh --no-start` instead of `play.ps1`, asks for the disc with zenity or kdialog (the
 Finder on macOS), and ends when the page says exit, when the game starts, or a minute after the
 page was closed. What it does with the messages is `host/launcher_core.cpp`, the same as on Windows.
+
+**New versions.** When the launcher opens, the page asks GitHub for the newest release
+(`api.github.com/.../releases/latest`). If it is newer than `version.txt`, the Game tab starts with
+*Update to vX*. Choosing it runs `update.ps1` (Windows) or `update.sh` (Linux, macOS) from the
+package: the script downloads that release's package for this computer (the same one: x64 or arm64,
+x86_64 or aarch64) to `.update`, unpacks it and checks its `version.txt`, and the page shows how far
+it is. Then the launcher closes, the script copies the new package over the folder and opens the
+launcher again. `UserData` is not in the package, so saves, settings and controls stay; what happened
+is in `UserData/Logs/update.log`. The first time the new version opens, a window shows the *What's
+new* list of its release notes (once: `notes_seen` in `[launcher]`), and closing it prepares the
+game again. Without internet, or with GitHub out of reach, nothing shows and nothing changes.
+*Look for new versions* on the Options tab (`check_updates` in `[launcher]`) turns this off, and
+it is off when RecompLauncher opened the launcher, since RecompLauncher updates the game itself.
 
 **Mods and Cheats tabs.** Both list switches from `[mods]` in `Config.toml` (the list is `MODS` in
 `web/launcher.js` and `kMods` in `host/launcher_core.cpp`): a mod in the `cheats` group shows on the
@@ -94,6 +108,20 @@ solo a esa dirección), recibe los mensajes de la página en `message` y le mand
 zenity o kdialog (el Finder en macOS) y termina cuando la página dice salir, cuando abre el juego o
 un minuto después de cerrar la página. Lo que hace con los mensajes está en
 `host/launcher_core.cpp`, igual que en Windows.
+
+**Versiones nuevas.** Al abrirse, la página le pregunta a GitHub por el release más nuevo
+(`api.github.com/.../releases/latest`). Si es más nuevo que `version.txt`, la pestaña Juego empieza
+con *Actualizar a la vX*. Elegirlo corre `update.ps1` (Windows) o `update.sh` (Linux, macOS) del
+paquete: el script baja el paquete de ese release para esta computadora (el mismo: x64 o arm64,
+x86_64 o aarch64) a `.update`, lo desempaca y revisa su `version.txt`, y la página muestra cuánto
+lleva. Luego el launcher se cierra, el script copia el paquete nuevo encima de la carpeta y vuelve a
+abrir el launcher. `UserData` no viene en el paquete, así que las partidas, los ajustes y los
+controles se quedan; lo que pasó queda en `UserData/Logs/update.log`. La primera vez que se abre la
+versión nueva, una ventana muestra la lista *Qué hay de nuevo* de sus notas (una vez: `notes_seen`
+en `[launcher]`), y al cerrarla el juego se prepara otra vez. Sin internet, o si GitHub no
+responde, no aparece nada y nada cambia. *Buscar versiones nuevas* en la pestaña Opciones
+(`check_updates` en `[launcher]`) lo apaga, y está apagado cuando RecompLauncher abrió el launcher,
+porque RecompLauncher actualiza el juego por su cuenta.
 
 **Pestañas Mods y Trucos.** Las dos muestran interruptores de `[mods]` en `Config.toml` (la lista
 es `MODS` en `web/launcher.js` y `kMods` en `host/launcher_core.cpp`): un mod del grupo `cheats` sale en
