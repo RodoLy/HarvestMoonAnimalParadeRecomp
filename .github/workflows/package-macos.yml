@@ -117,9 +117,9 @@ jobs:
           rm -rf "$workspace/aurora-main/.git"
           cp -R "$wc/projects/animal-parade" "$workspace/projects/animal-parade"
 
-          cp packaging/unix/play.sh packaging/unix/README.txt "$PACKAGE/"
+          cp packaging/unix/play.sh packaging/unix/update.sh packaging/unix/README.txt "$PACKAGE/"
           cp "packaging/macos/Animal Parade.command" "$PACKAGE/"
-          chmod +x "$PACKAGE/play.sh" "$PACKAGE/Animal Parade.command"
+          chmod +x "$PACKAGE/play.sh" "$PACKAGE/update.sh" "$PACKAGE/Animal Parade.command"
           # RecompLauncher's file (docs/RECOMPLAUNCHER.md), with this release's version in its setup step.
           python3 tools/stamp_recomplauncher.py "$PACKAGE"
           CXX=clang++ bash launcher/build.sh "$PACKAGE"

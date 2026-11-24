@@ -188,7 +188,7 @@ jobs:
           Copy-Item (Join-Path $wc 'Launcher\NativeBuildFlags.ps1') $workspace
           Copy-Item (Join-Path $artifacts 'dependencies') (Join-Path $workspace 'Dependencies') -Recurse
 
-          foreach ($file in 'play.ps1', 'play.cmd', 'README.txt', 'recomplauncher-setup.cmd') {
+          foreach ($file in 'play.ps1', 'update.ps1', 'play.cmd', 'README.txt', 'recomplauncher-setup.cmd') {
             Copy-Item "packaging\windows\$file" $env:PACKAGE
           }
           # RecompLauncher's file (docs/RECOMPLAUNCHER.md), with this release's version in its setup step.
@@ -223,8 +223,10 @@ jobs:
           if (-not $prebuilt) { throw 'The precompiled archives are not accepted by this toolkit.' }
 
           $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:PACKAGE 'play.ps1'), [ref]$null, [ref]$errors)
-          if ($errors) { throw "play.ps1 does not parse: $($errors -join '; ')" }
+          foreach ($script in 'play.ps1', 'update.ps1') {
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:PACKAGE $script), [ref]$null, [ref]$errors)
+            if ($errors) { throw "$script does not parse: $($errors -join '; ')" }
+          }
 
           # A made-up disc of another game: the script must load its helpers, find the disc and
           # stop at the disc check, before anything is translated.

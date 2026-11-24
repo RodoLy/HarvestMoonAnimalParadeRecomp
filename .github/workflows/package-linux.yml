@@ -159,8 +159,8 @@ jobs:
           cp -a "$wc/projects/animal-parade" "$workspace/projects/animal-parade"
           cp -a "$artifacts/native-prebuilt-${{ matrix.arch }}" "$workspace/NativePrebuilt"
 
-          cp packaging/unix/play.sh packaging/unix/README.txt "$PACKAGE/"
-          chmod +x "$PACKAGE/play.sh"
+          cp packaging/unix/play.sh packaging/unix/update.sh packaging/unix/README.txt "$PACKAGE/"
+          chmod +x "$PACKAGE/play.sh" "$PACKAGE/update.sh"
           # RecompLauncher's file (docs/RECOMPLAUNCHER.md), with this release's version in its setup step.
           python3 tools/stamp_recomplauncher.py "$PACKAGE"
           # The launcher (launcher/README.md): AnimalParadeLauncher and its page.
