@@ -753,7 +753,7 @@ index e3ba175..46585bb 100644
 +        ::GuestRegion::ForeignGameAddress(#game_id, 0x##addr_hex##u), #name, name, FunctionKind::Native, \
 +        false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&name>::Invoke)
 diff --git a/runtime/include/runtime_config.h b/runtime/include/runtime_config.h
-index ea5a12b..e3f615b 100644
+index ea5a12b..44efd6a 100644
 --- a/runtime/include/runtime_config.h
 +++ b/runtime/include/runtime_config.h
 @@ -51,6 +51,14 @@ struct RuntimeUserConfig {
@@ -784,7 +784,14 @@ index ea5a12b..e3f615b 100644
      // Controller mappings use Wii/GameCube button names as keys and up to two
      // comma-separated SDL-style physical button names ("south", or
      // "dpad_up,left_shoulder") as values; pressing either bound button counts.
-@@ -146,6 +160,22 @@ inline bool IsSupportedResolutionMultiplier(float value) {
+@@ -140,12 +154,28 @@ inline std::string Trim(std::string_view text) {
+ }
+ 
+ inline bool IsSupportedResolutionMultiplier(float value) {
+-    static constexpr std::array values{0.0f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f, 8.0f};
++    static constexpr std::array values{0.0f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 8.0f};
+     return std::find(values.begin(), values.end(), value) != values.end();
+ }
  
  // Must stay in step with the backend table in main.cpp, which is what actually
  // maps these to AuroraBackend.
@@ -8660,7 +8667,7 @@ index 0000000..478973a
 +
 +#endif // __ANDROID__ && MKW_HAVE_NOD
 diff --git a/runtime/src/settings_overlay.cpp b/runtime/src/settings_overlay.cpp
-index 6c2083a..26f91c9 100644
+index 6c2083a..c32fcea 100644
 --- a/runtime/src/settings_overlay.cpp
 +++ b/runtime/src/settings_overlay.cpp
 @@ -1,4 +1,8 @@
@@ -8705,8 +8712,17 @@ index 6c2083a..26f91c9 100644
  #if defined(__APPLE__)
  bool g_metalFxSpatialUpscaling = RuntimeConfigFile::MetalFxSpatialUpscaling(false);
  #endif
-@@ -182,7 +190,7 @@ constexpr std::array<ResolutionItem, 8> kResolutions = {{
-     {"3x", 3.0f}, {"4x", 4.0f}, {"6x", 6.0f}, {"8x", 8.0f},
+@@ -177,12 +185,14 @@ Clock::time_point g_bootShaderWaitStart{};
+ constexpr uint32_t kBootShaderNoticeThreshold = 100;
+ constexpr auto kBootShaderWaitLimit = std::chrono::minutes(3);
+ 
+-constexpr std::array<ResolutionItem, 8> kResolutions = {{
++// The game draws 448 lines of its 528-line frame, so 5x is the first that fills a 4K screen
++// (2240 lines for 2160).
++constexpr std::array<ResolutionItem, 9> kResolutions = {{
+     {"Auto (window size)", 0.0f}, {"Native (1x)", 1.0f}, {"1.5x", 1.5f}, {"2x", 2.0f},
+-    {"3x", 3.0f}, {"4x", 4.0f}, {"6x", 6.0f}, {"8x", 8.0f},
++    {"3x", 3.0f}, {"4x", 4.0f}, {"5x (4K)", 5.0f}, {"6x", 6.0f}, {"8x", 8.0f},
  }};
  
 -constexpr std::array<uint32_t, 3> kFrameInterpolationTargetFps{0, 120, 180};
@@ -8714,7 +8730,7 @@ index 6c2083a..26f91c9 100644
  
  bool IsHighResolutionScale(float scale) {
      return std::fabs(scale - 6.0f) < 0.001f || std::fabs(scale - 8.0f) < 0.001f;
-@@ -435,7 +443,19 @@ const char* KeyBindingName(int scancode) {
+@@ -435,7 +445,19 @@ const char* KeyBindingName(int scancode) {
      }
  }
  
@@ -8735,7 +8751,7 @@ index 6c2083a..26f91c9 100644
  struct RebindState {
      bool active = false;
      bool openPopup = false;
-@@ -467,7 +487,7 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
+@@ -467,7 +489,7 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
      std::copy_n(keys, std::min(count, static_cast<int>(g_rebind.keys.size())), g_rebind.keys.begin());
      g_rebind.mouse = SDL_GetMouseState(nullptr, nullptr);
      const int index = PADGetIndexForPort(g_rebind.port);
@@ -8744,7 +8760,7 @@ index 6c2083a..26f91c9 100644
          if (auto* pad = PADGetSDLGamepadForIndex(index)) {
              g_rebind.instance = SDL_GetGamepadID(pad);
              for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
-@@ -480,6 +500,18 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
+@@ -480,6 +502,18 @@ void BeginRebind(RebindKind kind, uint16_t target, const char* label, bool secon
  
  void CompleteRebind(uint32_t value) {
      const auto& capture = g_rebind;
@@ -8763,7 +8779,7 @@ index 6c2083a..26f91c9 100644
      if (capture.kind == RebindKind::Controller) {
          const int index = PADGetIndexForPort(capture.port);
          auto* pad = index >= 0 ? PADGetSDLGamepadForIndex(index) : nullptr;
-@@ -526,9 +558,9 @@ void DrawRebindPrompt() {
+@@ -526,9 +560,9 @@ void DrawRebindPrompt() {
      }
      if (g_rebind.active) {
          ImGui::Text("Rebind: %s", g_rebind.label.c_str());
@@ -8775,7 +8791,7 @@ index 6c2083a..26f91c9 100644
                  ? "Press a keyboard key."
                  : "Press a keyboard key or click a mouse button.");
          ImGui::TextUnformatted("Release any held input first. Backspace or Delete clears the mapping.");
-@@ -541,9 +573,9 @@ void DrawRebindPrompt() {
+@@ -541,9 +575,9 @@ void DrawRebindPrompt() {
          // UI clicks must not become mouse bindings (buttons activate on release).
          const bool overControl = ImGui::IsAnyItemHovered();
          if (g_rebind.active && (clear || remaining <= 0.0f)) {
@@ -8787,7 +8803,7 @@ index 6c2083a..26f91c9 100644
              int count = 0;
              const bool* keys = SDL_GetKeyboardState(&count);
              for (int i = 1; i < std::min(count, static_cast<int>(SDL_SCANCODE_COUNT)) && g_rebind.active; ++i) {
-@@ -553,9 +585,10 @@ void DrawRebindPrompt() {
+@@ -553,9 +587,10 @@ void DrawRebindPrompt() {
              const uint32_t mouse = SDL_GetMouseState(nullptr, nullptr);
              for (int i = 1; i <= 5 && g_rebind.active; ++i)
                  if (!overControl && g_rebind.kind != RebindKind::MuteHotkey &&
@@ -8799,7 +8815,7 @@ index 6c2083a..26f91c9 100644
              auto* pad = SDL_GetGamepadFromID(g_rebind.instance);
              if (pad != nullptr) {
                  for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && g_rebind.active; ++i) {
-@@ -586,17 +619,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
+@@ -586,17 +621,26 @@ void DrawKeyBinding(const char* label, int scancode, RebindKind kind, uint16_t t
  }
  
  void ApplyKeyboardPreset(uint32_t port) {
@@ -8832,7 +8848,7 @@ index 6c2083a..26f91c9 100644
      };
      uint32_t axisCount = 0;
      auto* mappings = PADGetKeyAxisBindings(port, &axisCount);
-@@ -625,11 +667,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
+@@ -625,11 +669,16 @@ void SetKeyboardActive(uint32_t port, bool active) {
  
  void DrawKeyboardSettings(uint32_t port) {
      PushMenuTextWrap();
@@ -8851,7 +8867,7 @@ index 6c2083a..26f91c9 100644
      uint32_t count = 0;
      auto* buttons = PADGetKeyButtonBindings(port, &count);
      ImGui::SeparatorText("Buttons");
-@@ -727,6 +774,37 @@ void DrawExpressionSettings() {
+@@ -727,6 +776,37 @@ void DrawExpressionSettings() {
      }
  }
  
@@ -8889,7 +8905,7 @@ index 6c2083a..26f91c9 100644
  void DrawRumbleSettings() {
      ImGui::Separator();
      if (ImGui::Checkbox("Controller vibration", &g_rumbleEnabled)) {
-@@ -1064,6 +1142,7 @@ void DrawControllerSettings() {
+@@ -1064,6 +1144,7 @@ void DrawControllerSettings() {
      ImGui::Spacing();
      controller_mapping_wizard::DrawSetupList();
      DrawWiiRemoteSetup();
@@ -8897,7 +8913,7 @@ index 6c2083a..26f91c9 100644
      DrawRumbleSettings();
  }
  
-@@ -1074,22 +1153,25 @@ void DrawAudioSettings() {
+@@ -1074,22 +1155,25 @@ void DrawAudioSettings() {
          AudioBackend::Instance().SetMasterVolume(volume);
          RuntimeConfigFile::SetAudioVolume(volume);
      }
@@ -8927,7 +8943,7 @@ index 6c2083a..26f91c9 100644
          const float volume = static_cast<float>(g_voicesVolumePercent) / 100.0f;
          MusicAttenuation::SetVoicesVolume(volume);
          RuntimeConfigFile::SetVoicesVolume(volume);
-@@ -1114,6 +1196,9 @@ void DrawAudioSettings() {
+@@ -1114,6 +1198,9 @@ void DrawAudioSettings() {
              "Runs the AX/DSP voice mix off the game thread. Turn this off if you "
              "suspect an audio problem; the mix then runs inline as it used to.");
      }
@@ -8937,7 +8953,7 @@ index 6c2083a..26f91c9 100644
      ImGui::Separator();
      if (ImGui::Checkbox("Mute game music while external media is playing",
                          &g_attenuateMusicWhenMediaPlays)) {
-@@ -1144,24 +1229,145 @@ void DrawAudioSettings() {
+@@ -1144,24 +1231,145 @@ void DrawAudioSettings() {
      }
  }
  
@@ -9096,7 +9112,7 @@ index 6c2083a..26f91c9 100644
      ImGui::Separator();
      struct EffectFlag {
          const char* label;
-@@ -1172,6 +1378,9 @@ void DrawGraphicsSettings() {
+@@ -1172,6 +1380,9 @@ void DrawGraphicsSettings() {
      }};
  
      for (const auto& effect : kEffectFlags) {
@@ -9106,7 +9122,7 @@ index 6c2083a..26f91c9 100644
          bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
          if (ImGui::Checkbox(effect.label, &disabled)) {
              if (disabled) {
-@@ -1183,8 +1392,10 @@ void DrawGraphicsSettings() {
+@@ -1183,8 +1394,10 @@ void DrawGraphicsSettings() {
              RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
          }
      }
@@ -9119,7 +9135,7 @@ index 6c2083a..26f91c9 100644
      static constexpr const char* kDisplayModes[] = {
          "Windowed",
          "Borderless fullscreen",
-@@ -1205,13 +1416,13 @@ void DrawGraphicsSettings() {
+@@ -1205,13 +1418,13 @@ void DrawGraphicsSettings() {
              "Requests the closest native-resolution display mode to the output frame "
              "rate (60 Hz, or the frame interpolation target).");
      }
@@ -9136,7 +9152,7 @@ index 6c2083a..26f91c9 100644
          for (int mode = 0; mode < static_cast<int>(kFrameInterpolationModes.size()); ++mode) {
              const bool selected = g_frameInterpolationMode == mode;
              if (ImGui::Selectable(kFrameInterpolationModes[static_cast<size_t>(mode)], selected)) {
-@@ -1285,8 +1496,13 @@ void DrawGraphicsSettings() {
+@@ -1285,8 +1498,13 @@ void DrawGraphicsSettings() {
      if (ImGui::Checkbox("Show FPS", &g_showFps)) {
          RuntimeConfigFile::SetShowFps(g_showFps);
      }
@@ -9151,7 +9167,7 @@ index 6c2083a..26f91c9 100644
  }
  
  void DrawFpsOverlay() {
-@@ -1533,6 +1749,18 @@ void DrawTopBar() {
+@@ -1533,6 +1751,18 @@ void DrawTopBar() {
          ImGui::EndMenu();
      }
  
@@ -9170,7 +9186,7 @@ index 6c2083a..26f91c9 100644
      const ImGuiStyle& style = ImGui::GetStyle();
      const float hideWidth = ImGui::CalcTextSize("Hide (F10)").x + style.FramePadding.x * 2.0f;
      const float exitWidth = ImGui::CalcTextSize("X").x + style.FramePadding.x * 2.0f;
-@@ -1658,11 +1886,17 @@ void HandleEvents(const AuroraEvent* events) noexcept {
+@@ -1658,11 +1888,17 @@ void HandleEvents(const AuroraEvent* events) noexcept {
              continue;
          }
          controller_mapping_wizard::HandleSdlEvent(ev->sdl);
@@ -9189,7 +9205,7 @@ index 6c2083a..26f91c9 100644
          if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F10)) {
              SetTopBarVisible(!g_topBarVisible);
              ApplyInputBlockState();
-@@ -1727,11 +1961,25 @@ void Draw() noexcept {
+@@ -1727,11 +1963,25 @@ void Draw() noexcept {
      DrawExitPrompt();
      DrawRestartPrompt();
      controller_mapping_wizard::Draw();

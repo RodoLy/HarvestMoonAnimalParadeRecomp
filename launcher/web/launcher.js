@@ -130,7 +130,7 @@ const OPTS = [
     values: { es: ['Desactivada', '60 FPS', '120 FPS', '180 FPS'], en: ['Off', '60 FPS', '120 FPS', '180 FPS'] }, settings: [0, 60, 120, 180],
     hint: { es: 'El juego corre a 30 FPS; la interpolación muestra más cuadros sin cambiar su velocidad.', en: 'The game runs at 30 FPS; interpolation shows more frames without changing its speed.' } },
   { key: 'resolution', es: 'Resolución', en: 'Resolution',
-    values: { es: ['Original (480p)', 'La de la ventana', '720p', '960p', '1440p', '1920p (casi 4K)'], en: ['Original (480p)', 'The window\'s', '720p', '960p', '1440p', '1920p (near 4K)'] }, settings: [1, 0, 1.5, 2, 3, 4],
+    values: { es: ['Original (480p)', 'La de la ventana', '720p', '960p', '1440p', '4K'], en: ['Original (480p)', 'The window\'s', '720p', '960p', '1440p', '4K'] }, settings: [1, 0, 1.5, 2, 3, 5],
     hint: { es: 'Más resolución se ve más nítido y pide más a la tarjeta gráfica.', en: 'More resolution looks sharper and asks more of the graphics card.' } },
   { key: 'fullscreen', es: 'Pantalla completa', en: 'Fullscreen', flag: true, settings: [false, true],
     hint: { es: 'El juego ocupa toda la pantalla.', en: 'The game fills the whole screen.' } },

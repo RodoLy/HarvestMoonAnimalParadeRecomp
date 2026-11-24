@@ -76,7 +76,7 @@
     {
       "id": "resolution",
       "label": "Resolution",
-      "help": "The game draws at the Wii's 480p unless you pick more. The window's draws at your screen's resolution (4K on a 4K screen in fullscreen): sharper, and it asks more of the graphics card.",
+      "help": "The game draws at the Wii's 480p unless you pick more. More looks sharper and asks more of the graphics card; 4K fills a 4K screen.",
       "group": "Video",
       "choices": [
         {
@@ -110,9 +110,9 @@
           }
         },
         {
-          "label": "1920p (near 4K)",
+          "label": "4K",
           "set": {
-            "video/resolution_multiplier": "4.0"
+            "video/resolution_multiplier": "5.0"
           }
         }
       ],
