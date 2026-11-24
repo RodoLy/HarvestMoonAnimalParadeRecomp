@@ -29,6 +29,10 @@ What it says:
   `AnimalParadeLauncher`), as before. RecompLauncher sets `RECOMPLAUNCHER=1` for what it starts; the
   launcher then hides after starting the game and closes when the game does, because RecompLauncher
   takes the end of the program for the end of the game and backs up the saves at that moment.
+- **Video:** Picture (Original 4:3 or Wide), Resolution (the Wii's 480p, the window's, 720p, 960p
+  or 1440p), Frame interpolation and Fullscreen, the same lines of `[video]` in
+  `UserData\Config.toml` as the launcher's Options tab. They start as the original game: 4:3 at
+  480p, which looks blurry on a big screen until Resolution goes up.
 - **Settings:** the mods and the cheats, in two groups (Mods and Cheats), each one a line of
   `[mods]` in `UserData\Config.toml` (`mods/<name>` in the file). The speed mods are Off, ×1.25 …
   ×4 for the actions and … ×3 for walking, written as the launcher writes them (`faster_actions = true` and
@@ -75,6 +79,10 @@ Lo que dice:
   `AnimalParadeLauncher`), como antes. RecompLauncher pone `RECOMPLAUNCHER=1` a lo que abre; entonces
   el launcher se oculta al abrir el juego y se cierra cuando el juego se cierra, porque RecompLauncher
   toma el final del programa como el final del juego y en ese momento respalda las partidas.
+- **Video:** Imagen (Original 4:3 o Ancha), Resolución (los 480p de la Wii, la de la ventana, 720p,
+  960p o 1440p), Interpolación de cuadros y Pantalla completa, las mismas líneas de `[video]` en
+  `UserData\Config.toml` que la pestaña Opciones del launcher. Empiezan como el juego original: 4:3 a
+  480p, que se ve borroso en una pantalla grande hasta que se sube la Resolución.
 - **Ajustes:** los mods y los trucos, en dos grupos (Mods y Cheats), cada uno una línea de `[mods]`
   en `UserData\Config.toml` (`mods/<nombre>` en el archivo). Los de velocidad son Off, ×1.25 … ×4 para
   las acciones y … ×3 para caminar, escritos como los escribe el launcher (`faster_actions = true` y `faster_actions_percent = 150`).

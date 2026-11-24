@@ -51,6 +51,128 @@
   ],
   "settings": [
     {
+      "id": "picture",
+      "label": "Picture",
+      "help": "Wide fills a widescreen window: the 3D cameras see more at the sides and the menus keep their shape.",
+      "group": "Video",
+      "choices": [
+        {
+          "label": "Original (4:3)",
+          "set": {
+            "video/widescreen": "false"
+          }
+        },
+        {
+          "label": "Wide",
+          "set": {
+            "video/widescreen": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "video/widescreen": "false"
+      }
+    },
+    {
+      "id": "resolution",
+      "label": "Resolution",
+      "help": "The game draws at the Wii's 480p unless you pick more. The window's draws at your screen's resolution: sharper, and it asks more of the graphics card.",
+      "group": "Video",
+      "choices": [
+        {
+          "label": "Original (480p)",
+          "set": {
+            "video/resolution_multiplier": "1.0"
+          }
+        },
+        {
+          "label": "The window's",
+          "set": {
+            "video/resolution_multiplier": "0.0"
+          }
+        },
+        {
+          "label": "720p",
+          "set": {
+            "video/resolution_multiplier": "1.5"
+          }
+        },
+        {
+          "label": "960p",
+          "set": {
+            "video/resolution_multiplier": "2.0"
+          }
+        },
+        {
+          "label": "1440p",
+          "set": {
+            "video/resolution_multiplier": "3.0"
+          }
+        }
+      ],
+      "defaults": {
+        "video/resolution_multiplier": "1.0"
+      }
+    },
+    {
+      "id": "interpolation",
+      "label": "Frame interpolation",
+      "help": "The game runs at 30 FPS; interpolation shows more frames without changing its speed.",
+      "group": "Video",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "video/frame_interpolation_fps": "0"
+          }
+        },
+        {
+          "label": "60 FPS",
+          "set": {
+            "video/frame_interpolation_fps": "60"
+          }
+        },
+        {
+          "label": "120 FPS",
+          "set": {
+            "video/frame_interpolation_fps": "120"
+          }
+        },
+        {
+          "label": "180 FPS",
+          "set": {
+            "video/frame_interpolation_fps": "180"
+          }
+        }
+      ],
+      "defaults": {
+        "video/frame_interpolation_fps": "0"
+      }
+    },
+    {
+      "id": "fullscreen",
+      "label": "Fullscreen",
+      "help": "The game fills the whole screen.",
+      "group": "Video",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "video/display_mode": "\"windowed\""
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "video/display_mode": "\"borderless\""
+          }
+        }
+      ],
+      "defaults": {
+        "video/display_mode": "\"windowed\""
+      }
+    },
+    {
       "id": "romance_any_gender",
       "label": "Romance for everyone",
       "help": "Any bachelor or bachelorette can fall in love with you and marry you, boy or girl.",
