@@ -31,9 +31,10 @@
 #                step reads them. / Además escribe cada paso como una línea "progress <0..1> <paso>".
 #
 # What the computer needs / Lo que necesita la computadora:
-#   Linux: the C library's headers (Debian, Ubuntu: sudo apt install libc6-dev; Fedora:
-#          sudo dnf install glibc-devel), and a Vulkan driver to play. The package brings its own
-#          compiler, CMake and Ninja.
+#   Linux: a Vulkan driver to play. The package brings its own compiler, CMake and Ninja, and the
+#          C and C++ libraries' files to compile against (Toolkit/sysroot), so nothing has to be
+#          installed, not even on a Steam Deck. Without Toolkit/sysroot (built from the sources),
+#          the computer's own: libc6-dev on Debian and Ubuntu, glibc-devel on Fedora.
 #   macOS: Apple's command line tools (xcode-select --install), for the compiler.
 set -euo pipefail
 
@@ -221,7 +222,13 @@ translator() {
     fi
 }
 
-if [[ "$system" == Linux && ! -f /usr/include/stdio.h ]]; then
+# Linux: the package's compiler compiles against the package's own C and C++ libraries
+# (packaging/unix/make-sysroot.sh), the same ones its precompiled archives were built with, so the
+# computer needs no development files (SteamOS has none, and cannot easily get them).
+sysroot=''
+if [[ "$system" == Linux && "$cc" == "$toolchain_bin/"* && -f "$toolkit/sysroot/usr/include/stdio.h" ]]; then
+    sysroot=$toolkit/sysroot
+elif [[ "$system" == Linux && ! -f /usr/include/stdio.h ]]; then
     fail 'The C library headers are missing. Debian, Ubuntu: sudo apt install libc6-dev; Fedora: sudo dnf install glibc-devel / Faltan los encabezados de la biblioteca de C (mismos comandos).'
 fi
 
@@ -297,6 +304,12 @@ grep -q 'MKW_TRANSLATED_GUEST_REGION 3' "$shards/shards.cmake" ||
 # A runtime or aurora file newer than the last configuration (a fix copied into BuildWorkspace)
 # configures again; what was compiled is kept.
 cache=$build/CMakeCache.txt
+# A build configured with other C libraries (before the package had its own, or the folder was
+# moved) configures again.
+if [[ -f "$cache" ]] && [[ "$(sed -n 's/^CMAKE_SYSROOT:[A-Z]*=//p' "$cache")" != "$sysroot" ]]; then
+    echo "The C libraries changed; configuring again / Cambiaron las bibliotecas de C; se configura otra vez"
+    rm -f "$cache"
+fi
 if [[ -f "$cache" ]]; then
     changed=$(find "$workspace/runtime" "$workspace/aurora-main/lib" "$workspace/aurora-main/include" \
         -type f -newer "$cache" 2>/dev/null | head -n 1)
@@ -324,6 +337,7 @@ if [[ ! -f "$cache" ]]; then
         configure+=(-DCMAKE_AR="$toolchain_bin/llvm-ar" -DCMAKE_RANLIB="$toolchain_bin/llvm-ranlib"
             -DCMAKE_LINKER="$toolchain_bin/ld.lld" -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld)
     fi
+    [[ -n "$sysroot" ]] && configure+=(-DCMAKE_SYSROOT="$sysroot")
     # The precompiled aurora and libraries, made with the same compiler (the package's), save most
     # of the first build. Without them aurora is compiled here too.
     if [[ -f "$workspace/NativePrebuilt/native_prebuilt.cmake" ]]; then
