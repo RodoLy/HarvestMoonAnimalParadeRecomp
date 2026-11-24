@@ -33,6 +33,13 @@ What it says:
   1440p or 4K), Frame interpolation and Fullscreen, the same lines of `[video]` in
   `UserData\Config.toml` as the launcher's Options tab. They start as the original game: 4:3 at
   480p, which looks blurry on a big screen until Resolution goes up.
+- **Controls:** the controller's buttons for each Wii Remote and Nunchuk button (A, B, 1, 2, +, −,
+  Nunchuk Z and C, the D-pad), up to two each: press a box, then a button on the controller. They are
+  the lines of `[controller]` in `UserData\Config.toml`, written by the names RecompLauncher shows
+  ("A", "LB", "D-Pad Up"); the game reads those as well as its own ("south", "left_shoulder") and the
+  PlayStation ones ("Cross", "L1"), and the launcher writes them the same way. The Nunchuk stick is
+  the left stick. Keys are set in the game's F10 menu or the launcher's Controls tab, since the game
+  keeps them in a file of its own (`UserData\keyboard_bindings.dat`).
 - **Settings:** the mods and the cheats, in two groups (Mods and Cheats), each one a line of
   `[mods]` in `UserData\Config.toml` (`mods/<name>` in the file). The speed mods are Off, ×1.25 …
   ×4 for the actions and … ×3 for walking, written as the launcher writes them (`faster_actions = true` and
@@ -83,6 +90,14 @@ Lo que dice:
   960p, 1440p o 4K), Interpolación de cuadros y Pantalla completa, las mismas líneas de `[video]` en
   `UserData\Config.toml` que la pestaña Opciones del launcher. Empiezan como el juego original: 4:3 a
   480p, que se ve borroso en una pantalla grande hasta que se sube la Resolución.
+- **Controles:** los botones del control para cada botón del Wii Remote y del Nunchuk (A, B, 1, 2,
+  +, −, Z y C del Nunchuk, la cruceta), hasta dos cada uno: se toca una casilla y luego un botón del
+  control. Son las líneas de `[controller]` en `UserData\Config.toml`, escritas con los nombres que
+  muestra RecompLauncher ("A", "LB", "D-Pad Up"); el juego los lee igual que los suyos ("south",
+  "left_shoulder") y los de PlayStation ("Cross", "L1"), y el launcher los escribe igual. El stick del
+  Nunchuk es el stick izquierdo. Las teclas se cambian en el menú F10 del juego o en la pestaña
+  Controles del launcher, porque el juego las guarda en un archivo propio
+  (`UserData\keyboard_bindings.dat`).
 - **Ajustes:** los mods y los trucos, en dos grupos (Mods y Cheats), cada uno una línea de `[mods]`
   en `UserData\Config.toml` (`mods/<nombre>` en el archivo). Los de velocidad son Off, ×1.25 … ×4 para
   las acciones y … ×3 para caminar, escritos como los escribe el launcher (`faster_actions = true` y `faster_actions_percent = 150`).
