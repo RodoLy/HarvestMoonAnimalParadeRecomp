@@ -9,6 +9,8 @@
 //   play         prepare (quick when nothing changed), then start Game/AnimalParade
 //   chooseDisc   ask for the disc image (zenity or kdialog on Linux, the Finder on macOS)
 //   openLog      open the newest UserData/Logs/.../console.log
+//   update       download a newer version with update.sh, then stop so that it can be put in place
+//                (the script starts the launcher again, in a new tab)
 //   exit         stop; the program also stops a minute after the page was closed
 //
 // Built by launcher/build.sh with the computer's C++ compiler.
@@ -35,6 +37,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <iostream>
@@ -277,6 +280,74 @@ void CancelPreparation() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Updating: update.sh downloads the new version's package while the page shows how far it is, then
+// says "apply"; the launcher stops, and the script (in its own session, so it goes on alone) puts the
+// package over this folder and starts the launcher again. See launcher_core.h.
+
+std::atomic<bool> g_updating{false};
+
+void StartUpdate(const std::string& version) {
+    if (!IsVersion(version) || g_updating.exchange(true)) return;
+    int pipeEnds[2];
+    if (pipe(pipeEnds) != 0) {
+        g_updating = false;
+        PostToPage(UpdateJson(0, "update.sh could not be started."));
+        return;
+    }
+    const std::string launcherPid = std::to_string(getpid());
+    const pid_t child = fork();
+    if (child == 0) {
+        setsid();
+        dup2(pipeEnds[1], 1);
+        dup2(pipeEnds[1], 2);
+        close(pipeEnds[0]);
+        close(pipeEnds[1]);
+        if (chdir(Root().c_str()) != 0) _exit(1);
+        const std::string script = (Root() / "update.sh").string();
+        execl("/bin/bash", "bash", script.c_str(), version.c_str(), launcherPid.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+    }
+    close(pipeEnds[1]);
+    if (child < 0) {
+        close(pipeEnds[0]);
+        g_updating = false;
+        PostToPage(UpdateJson(0, "update.sh could not be started."));
+        return;
+    }
+
+    std::thread([readEnd = pipeEnds[0], child] {
+        std::string pending, error;
+        bool applying = false;
+        char buffer[4096];
+        ssize_t got;
+        while (!applying && (got = read(readEnd, buffer, sizeof(buffer))) > 0) {
+            pending.append(buffer, static_cast<size_t>(got));
+            size_t end;
+            while ((end = pending.find_first_of("\r\n")) != std::string::npos) {
+                const std::string line = Trim(pending.substr(0, end));
+                pending.erase(0, end + 1);
+                if (line.empty()) continue;
+                std::cout << line << '\n';
+                if (line.rfind("progress ", 0) == 0) PostToPage(UpdateJson(std::atof(line.c_str() + 9), ""));
+                else if (line.rfind("error ", 0) == 0) error = line.substr(6);
+                else if (line == "apply") { applying = true; break; }
+            }
+        }
+        close(readEnd);
+        if (applying) {
+            // The script waits for this program to end before it replaces its files.
+            PostToPage(UpdateJson(1, ""));
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            Quit();
+            return;
+        }
+        waitpid(child, nullptr, 0);
+        g_updating = false;
+        PostToPage(UpdateJson(0, error.empty() ? "update.sh stopped." : error));
+    }).detach();
+}
+
+// ---------------------------------------------------------------------------------------------
 // The disc: asked for in a file window, remembered in UserData/disc.txt (play.sh reads it there).
 
 bool ChooseDisc() {
@@ -305,6 +376,8 @@ void OnPageMessage(const std::string& json) {
     const auto found = message.find("cmd");
     const std::string cmd = found == message.end() ? std::string() : found->second;
     bool sendState = false;
+    // While a new version is being downloaded, this one is not prepared or played.
+    if (g_updating && (cmd == "prepare" || cmd == "play" || cmd == "chooseDisc")) return;
     if (cmd == "hello") {
         PostToPage(CurrentState());
     } else if (cmd == "prepare" || cmd == "play") {
@@ -318,6 +391,9 @@ void OnPageMessage(const std::string& json) {
         const fs::path log = NewestLog();
         if (log.empty()) PostToPage(ToastJson("noLog"));
         else OpenWithSystem(log.string());
+    } else if (cmd == "update") {
+        const auto version = message.find("version");
+        if (!g_prep.running && version != message.end()) StartUpdate(version->second);
     } else if (HandleSettingsMessage(message, sendState)) {
         if (sendState) PostToPage(CurrentState());
     } else if (cmd == "exit") {
@@ -442,6 +518,8 @@ int main() {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, SIG_DFL);
     SetRoot(ProgramFolder());
+    const char* recompLauncher = std::getenv("RECOMPLAUNCHER");
+    SetStartedByRecompLauncher(recompLauncher && std::string(recompLauncher) == "1");
     WriteFirstConfig();
     WriteFirstKeyboard();
 

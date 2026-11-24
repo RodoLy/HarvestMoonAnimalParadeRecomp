@@ -34,6 +34,15 @@ std::string ReadText(const fs::path& path);
 void WriteText(const fs::path& path, const std::string& text);
 std::string Trim(std::string text);
 
+// Started by RecompLauncher (RECOMPLAUNCHER=1): the page does not look for new versions then, since
+// RecompLauncher updates the game itself.
+void SetStartedByRecompLauncher(bool started);
+
+// A version as the releases name it, "0.2.3" (numbers and dots only).
+bool IsVersion(const std::string& text);
+// This package's version: version.txt ("v0.2.3") without its "v".
+std::string BareVersion();
+
 // ---------------------------------------------------------------------------------------------
 // JSON, as much as the page needs.
 
@@ -66,10 +75,19 @@ fs::path NewestLog();
 
 // ---------------------------------------------------------------------------------------------
 // The page's settings messages: setOption, setKey, setPad, setKeyboard, setMod, setModSetting,
-// resetControls and setUiLanguage. True when the message was one of them; `sendState` then says
-// whether the page should get the state again.
+// resetControls, setUiLanguage and seenWhatsNew (a new version's notes were shown). True when the
+// message was one of them; `sendState` then says whether the page should get the state again.
 
 bool HandleSettingsMessage(const std::map<std::string, std::string>& message, bool& sendState);
+
+// ---------------------------------------------------------------------------------------------
+// Updating to a new version (update.ps1 or update.sh): the script downloads this system's package
+// of that version from the GitHub release and prints "progress <0..1>" as it goes, then "apply"
+// when the launcher should close so that its files can be replaced; it puts the package over this
+// folder (UserData stays) and opens the launcher again. "error <message>" when it could not.
+
+// The page's {"type":"update",...}: how far the download is, or why it failed.
+std::string UpdateJson(double fraction, const std::string& error);
 
 // ---------------------------------------------------------------------------------------------
 // The preparation (play.ps1 or play.sh with --no-start), line by line.

@@ -19,8 +19,31 @@ namespace LauncherCore {
 namespace {
 
 fs::path g_root;
+bool g_startedByRecompLauncher = false;
 
 } // namespace
+
+void SetStartedByRecompLauncher(bool started) { g_startedByRecompLauncher = started; }
+
+bool IsVersion(const std::string& text) {
+    // "0.2.3": numbers with dots between them, nothing else (it goes into a download address).
+    if (text.empty() || text.size() > 20 || !std::isdigit(static_cast<unsigned char>(text.front())) ||
+        !std::isdigit(static_cast<unsigned char>(text.back())))
+        return false;
+    bool dot = false;
+    for (char c : text) {
+        if (c == '.') { if (dot) return false; dot = true; }
+        else if (std::isdigit(static_cast<unsigned char>(c))) dot = false;
+        else return false;
+    }
+    return text.find('.') != std::string::npos;
+}
+
+std::string BareVersion() {
+    std::string version = Trim(ReadText(Root() / "version.txt"));
+    if (!version.empty() && version[0] == 'v') version.erase(0, 1);
+    return version;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Where things are.
@@ -219,6 +242,8 @@ const Option kOptions[] = {
     {"wiiRemotes", "controller", "wii_remotes", Option::Bool, "false"},
     {"wiiAutoPair", "controller", "wii_auto_pair", Option::Bool, "true"},
     {"wiiSensorBar", "controller", "wii_sensor_bar", Option::Text, "below"},
+    // The launcher's own: whether it asks GitHub for a newer version when it opens.
+    {"checkUpdates", "launcher", "check_updates", Option::Bool, "true"},
 };
 
 // The page's value (JSON: true, 60, 1.5, "vulkan") as the line in Config.toml.
@@ -544,6 +569,9 @@ void WriteFirstConfig() {
         config.Set(option.section, option.key, value);
     }
     config.Set("launcher", "language", "\"en\"");
+    // A new install has nothing new to show: the notes of a version show after updating to it.
+    const std::string version = BareVersion();
+    if (IsVersion(version)) config.Set("launcher", "notes_seen", "\"" + version + "\"");
     config.Save();
 }
 
@@ -569,6 +597,12 @@ std::string StateJson(const char* status, int controllers) {
          << ",\"discId\":\"" << (HasDisc() ? "RBIEE9" : "—") << "\",\"controllers\":" << controllers;
     const std::string version = Trim(ReadText(Root() / "version.txt"));
     json << ",\"version\":" << JsonString(version.empty() ? "dev" : version);
+    json << ",\"recompLauncher\":" << (g_startedByRecompLauncher ? "true" : "false");
+    // After an update (the version whose notes were last shown is another one), the page shows this
+    // version's notes once.
+    const std::string bare = BareVersion();
+    const std::string seen = config.Get("launcher", "notes_seen").value_or("");
+    if (IsVersion(bare) && seen != bare) json << ",\"whatsNewFor\":" << JsonString(bare);
     json << ",\"uiLanguage\":" << JsonString(config.Get("launcher", "language").value_or("en"));
     json << ",\"options\":{";
     bool first = true;
@@ -603,6 +637,12 @@ std::string ProgressJson(int stage, double fraction) {
 std::string FinishedJson(bool ok, bool cancelled, const std::string& error) {
     return std::string("{\"type\":\"finished\",\"ok\":") + (ok ? "true" : "false") + ",\"cancelled\":" +
            (cancelled ? "true" : "false") + ",\"error\":" + JsonString(ok ? "" : error) + "}";
+}
+
+std::string UpdateJson(double fraction, const std::string& error) {
+    std::ostringstream json;
+    json << "{\"type\":\"update\",\"fraction\":" << fraction << ",\"error\":" << JsonString(error) << "}";
+    return json.str();
 }
 
 std::string ToastJson(const char* key) { return std::string("{\"type\":\"toast\",\"key\":\"") + key + "\"}"; }
@@ -667,6 +707,15 @@ bool HandleSettingsMessage(const std::map<std::string, std::string>& message, bo
         }
     } else if (cmd == "resetControls") {
         ResetControls();
+    } else if (cmd == "seenWhatsNew") {
+        // The page closed the new version's notes: they do not show again.
+        sendState = false;
+        const std::string version = Field(message, "version");
+        if (IsVersion(version)) {
+            ConfigFile config = ConfigFile::Load();
+            config.Set("launcher", "notes_seen", "\"" + version + "\"");
+            config.Save();
+        }
     } else if (cmd == "setUiLanguage") {
         sendState = false;
         ConfigFile config = ConfigFile::Load();

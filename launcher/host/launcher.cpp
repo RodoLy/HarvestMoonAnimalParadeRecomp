@@ -17,7 +17,9 @@
 //   resetControls  put every key and controller button back as they start
 //   setMod       turn a game mod on or off ([mods] in Config.toml)
 //   setModSetting  set a mod's percentage (its own line in [mods])
-//   setUiLanguage, minimize, drag, exit
+//   update       download a newer version with update.ps1, then close so that it can be put in
+//                place (the script opens the launcher again)
+//   setUiLanguage, seenWhatsNew, minimize, drag, exit
 //
 // What the launcher does on every system (the settings, the controls, what the page is told) is in
 // launcher_core.cpp; this file is the Windows window around it.
@@ -255,6 +257,71 @@ void CancelPreparation() {
     TerminateJobObject(g_prep.job, 1);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Updating: update.ps1 downloads the new version's package while the page shows how far it is, then
+// says "apply"; the launcher closes, and the script (which goes on alone) puts the package over this
+// folder and opens the launcher again. See launcher_core.h.
+
+std::atomic<bool> g_updating{false};
+
+void StartUpdate(const std::string& version) {
+    if (!IsVersion(version) || g_updating.exchange(true)) return;
+    std::wstring command = L"powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File \"" +
+                           (Root() / "update.ps1").wstring() + L"\" -Version " + Wide(version, CP_UTF8) +
+                           L" -LauncherPid " + std::to_wstring(GetCurrentProcessId());
+
+    SECURITY_ATTRIBUTES inherit{sizeof(inherit), nullptr, TRUE};
+    HANDLE readEnd = nullptr, writeEnd = nullptr;
+    CreatePipe(&readEnd, &writeEnd, &inherit, 0);
+    SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOW startup{sizeof(startup)};
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdOutput = writeEnd;
+    startup.hStdError = writeEnd;
+    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    PROCESS_INFORMATION process{};
+    // Not in a job that closes with the launcher: the script has to outlive it.
+    BOOL started = CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB,
+                                  nullptr, Root().c_str(), &startup, &process);
+    if (!started) started = CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
+                                           Root().c_str(), &startup, &process);
+    CloseHandle(writeEnd);
+    if (!started) {
+        CloseHandle(readEnd);
+        g_updating = false;
+        PostToPage(UpdateJson(0, "PowerShell could not be started."));
+        return;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+
+    std::thread([readEnd] {
+        std::string pending, error;
+        bool applying = false;
+        char buffer[4096];
+        DWORD read = 0;
+        while (!applying && ReadFile(readEnd, buffer, sizeof(buffer), &read, nullptr) && read) {
+            pending.append(buffer, read);
+            size_t end;
+            while ((end = pending.find_first_of("\r\n")) != std::string::npos) {
+                const std::string line = Trim(pending.substr(0, end));
+                pending.erase(0, end + 1);
+                if (line.rfind("progress ", 0) == 0) PostToPage(UpdateJson(std::atof(line.c_str() + 9), ""));
+                else if (line.rfind("error ", 0) == 0) error = line.substr(6);
+                else if (line == "apply") { applying = true; break; }
+            }
+        }
+        CloseHandle(readEnd);
+        if (applying) {
+            // The script waits for this program to end before it replaces its files.
+            PostMessageW(g_window, WM_CLOSE, 0, 0);
+            return;
+        }
+        g_updating = false;
+        PostToPage(UpdateJson(0, error.empty() ? "update.ps1 stopped." : error));
+    }).detach();
+}
+
 // Started by RecompLauncher (it sets RECOMPLAUNCHER=1 for what it starts): RecompLauncher takes
 // the end of this program for the end of the game, and backs up the saves then. So the launcher
 // hides and stays until the game closes, instead of closing as soon as the game starts.
@@ -366,6 +433,8 @@ void OnPageMessage(const std::wstring& json) {
     const auto field = [&](const char* key) { const auto found = message.find(key); return found == message.end() ? std::string() : found->second; };
     const std::string cmd = field("cmd");
     bool sendState = false;
+    // While a new version is being downloaded, this one is not prepared or played.
+    if (g_updating && (cmd == "prepare" || cmd == "play" || cmd == "chooseDisc")) return;
     if (cmd == "hello") {
         PostToPage(CurrentState());
     } else if (cmd == "prepare" || cmd == "play") {
@@ -379,6 +448,8 @@ void OnPageMessage(const std::wstring& json) {
         OpenNewestLog();
     } else if (HandleSettingsMessage(message, sendState)) {
         if (sendState) PostToPage(CurrentState());
+    } else if (cmd == "update") {
+        if (!g_prep.running) StartUpdate(field("version"));
     } else if (cmd == "minimize") {
         ShowWindow(g_window, SW_MINIMIZE);
     } else if (cmd == "drag") {
@@ -499,6 +570,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     SetRoot(ProgramFolder());
+    SetStartedByRecompLauncher(StartedByRecompLauncher());
     WriteFirstConfig();
     WriteFirstKeyboard();
 

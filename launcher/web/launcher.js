@@ -4,11 +4,13 @@
 //
 // Messages to the program:   { cmd: 'hello' | 'prepare' | 'play' | 'cancel' | 'chooseDisc' |
 //                               'openLog' | 'exit' | 'minimize' | 'drag' | 'setOption' | 'setUiLanguage' |
-//                               'setKey' | 'setPad' | 'setKeyboard' | 'resetControls' | 'setMod', ... }
+//                               'setKey' | 'setPad' | 'setKeyboard' | 'resetControls' | 'setMod' |
+//                               'update', ... }
 // Messages from the program: { type: 'state', ... }      everything the page shows about the game
 //                            { type: 'progress', ... }   a step of the preparation and how far it is
 //                            { type: 'finished', ... }   the preparation ended: ok, or the error
 //                            { type: 'toast', text }     a line for the message box
+//                            { type: 'update', ... }     the update being downloaded: how far, or why it failed
 
 'use strict';
 
@@ -20,6 +22,12 @@ const T = {
     subtitle: 'versión nativa para PC', tabs: ['Juego', 'Opciones', 'Mods', 'Trucos', 'Controles'],
     panel: ['Animal Parade', 'Imagen y sonido', '', '', 'Botones y teclas'], modsOn: (a, b) => a + ' de ' + b + ' activados',
     disc: 'Disco', version: 'versión', on: 'Activado', off: 'Desactivado',
+    updateTo: (v) => 'Actualizar a la v' + v, updateNew: '¡Nueva!', updating: 'Actualizando…',
+    updateHint: (v) => 'Ya salió la v' + v + '. Se baja de GitHub y se pone encima de esta: tus partidas y ajustes se quedan. Después el juego se prepara otra vez.',
+    updatingHint: 'Bajando la versión nueva. Al terminar, el launcher se cierra un momento, se pone la versión nueva y se vuelve a abrir.',
+    updateFailed: (e) => 'No se pudo actualizar: ' + e + ' Puedes bajarla a mano de la página de GitHub.',
+    updateLine: (from, to) => 'v' + from + '  →  v' + to, playThis: (v) => 'Jugar con la v' + v,
+    whatsNew: (v) => '¡Novedades de la v' + v + '!', whatsNewClose: '¡A jugar!',
     ready: 'Listo', notPrepared: 'Sin preparar', preparingS: 'Preparando', failed: 'Falló',
     play: 'Jugar', prepare: 'Preparar el juego', preparing: 'Preparando…', tryAgain: 'Intentar de nuevo',
     playHint: 'Abre el juego con tu disco. Dentro del juego, F10 abre el menú de opciones.',
@@ -71,6 +79,12 @@ const T = {
     subtitle: 'native PC port', tabs: ['Game', 'Options', 'Mods', 'Cheats', 'Controls'],
     panel: ['Animal Parade', 'Picture and sound', '', '', 'Buttons and keys'], modsOn: (a, b) => a + ' of ' + b + ' on',
     disc: 'Disc', version: 'version', on: 'On', off: 'Off',
+    updateTo: (v) => 'Update to v' + v, updateNew: 'New!', updating: 'Updating…',
+    updateHint: (v) => 'v' + v + ' is out. It is downloaded from GitHub and put over this one: your saves and settings stay. Then the game is prepared again.',
+    updatingHint: 'Downloading the new version. When it is done, the launcher closes for a moment, puts the new version in place and opens again.',
+    updateFailed: (e) => 'The update failed: ' + e + ' You can download it by hand from the GitHub page.',
+    updateLine: (from, to) => 'v' + from + '  →  v' + to, playThis: (v) => 'Play v' + v,
+    whatsNew: (v) => 'What\'s new in v' + v + '!', whatsNewClose: 'Let\'s play!',
     ready: 'Ready', notPrepared: 'Not prepared', preparingS: 'Preparing', failed: 'Failed',
     play: 'Play', prepare: 'Prepare the game', preparing: 'Preparing…', tryAgain: 'Try again',
     playHint: 'Opens the game with your disc. Inside the game, F10 opens the options menu.',
@@ -146,6 +160,9 @@ const OPTS = [
       en: 'Holding its key (Tab to begin with) or its button fast-forwards everything; change them in Controls. Fast loading is always on.' } },
   { key: 'showFps', es: 'Mostrar FPS', en: 'Show FPS', flag: true, settings: [false, true],
     hint: { es: 'Muestra los cuadros por segundo en una esquina.', en: 'Shows the frames per second in a corner.' } },
+  { key: 'checkUpdates', es: 'Buscar versiones nuevas', en: 'Look for new versions', flag: true, yesNo: true, settings: [false, true],
+    hint: { es: 'Al abrir el launcher, pregunta a GitHub si salió una versión nueva y la ofrece en Juego. Solo lee la lista pública de versiones.',
+      en: 'When the launcher opens, it asks GitHub whether a new version is out and offers it in Game. It only reads the public list of versions.' } },
   // Real Wii Remotes ([controller] in Config.toml, as F10 > Controllers keeps them). They show in the
   // Controls tab, under "Real Wii Remote", not in Options.
   { key: 'wiiRemotes', controls: true, es: 'Usar Wii Remotes de Nintendo', en: 'Use Nintendo Wii Remotes', flag: true, yesNo: true, settings: [false, true],
@@ -301,7 +318,7 @@ const state = {
   status: 'notPrepared', // 'ready' | 'notPrepared' | 'preparing' | 'failed'
   hasDisc: false, discId: 'RBIEE9', error: '',
   stage: 0, fraction: 0, // the preparation: which step (0 extract, 1 translate, 2 compile) and how far, 0..1
-  options: { picture: 0, interpolation: 0, resolution: 0, fullscreen: 0, api: 0, language: 0, fastForward: 0, showFps: 0, wiiRemotes: 0, wiiAutoPair: 1, wiiSensorBar: 0 },
+  options: { picture: 0, interpolation: 0, resolution: 0, fullscreen: 0, api: 0, language: 0, fastForward: 0, showFps: 0, checkUpdates: 1, wiiRemotes: 0, wiiAutoPair: 1, wiiSensorBar: 0 },
   controllers: 0,        // how many controllers the system sees (the program counts them)
   pads: [],              // the names of the controllers the page itself sees (the Gamepad API)
   input: 'keys',         // what was used last to move around the page: 'keys' or 'pad'
@@ -309,6 +326,13 @@ const state = {
   capture: null,         // the button waiting for a key or a controller button: { action, until }
   mods: MODS, modsOn: {}, modSettings: {},
   version: 'dev',
+  // A newer version on GitHub: { version, status: 'available' | 'downloading' | 'failed', fraction, error }.
+  // Not looked for when RecompLauncher started the launcher (it updates the game itself).
+  update: null, recompLauncher: false,
+  // After an update the program says which version's notes to show (whatsNewFor); the page reads
+  // them from that version's release on GitHub and shows them once, as a window over the page,
+  // until it is closed. whatsNew: { version, notes } or null.
+  whatsNewFor: null, whatsNew: null,
 };
 
 let send = () => {};
@@ -402,6 +426,21 @@ function rows() {
     } else {
       const hint = !state.hasDisc ? w.noDiscHint : st === 'failed' ? state.error : w.prepareHint;
       Object.assign(play, { label: st === 'failed' ? w.tryAgain : w.prepare, hint, activate: () => send({ cmd: 'prepare' }) });
+    }
+    // A newer version on GitHub comes first, as the main choice; playing this one stays right under it.
+    if (state.update && st !== 'preparing') {
+      const u = state.update, downloading = u.status === 'downloading';
+      const update = { update: true, label: downloading ? w.updating : w.updateTo(u.version),
+        value: downloading ? Math.floor((u.fraction || 0) * 100) + '%' : 'Enter', progress: downloading ? u.fraction || 0 : null,
+        hint: downloading ? w.updatingHint : u.status === 'failed' ? w.updateFailed(u.error) : w.updateHint(u.version),
+        activate: () => { if (downloading) return; u.status = 'downloading'; u.fraction = 0; send({ cmd: 'update', version: u.version }); } };
+      if (st === 'ready') play.label = w.playThis(bareVersion());
+      return [update, play,
+        { label: w.changeDisc, value: state.discId || '—', tone: 'value', hint: w.changeDiscHint, activate: () => { if (st !== 'preparing') send({ cmd: 'chooseDisc' }); } },
+        { label: w.uiLanguage, value: LANGUAGE.values.en[state.options.language], tone: 'value', arrows: true, hint: w.uiLanguageHint,
+          change: (step) => setLanguage(state.options.language + step), activate: () => setLanguage(state.options.language + 1) },
+        { label: w.openLog, hint: w.openLogHint, activate: () => send({ cmd: 'openLog' }) },
+        { label: w.exit, value: 'Esc', tone: 'key', hint: w.exitHint, activate: escape }];
     }
     return [play,
       { label: w.changeDisc, value: state.discId || '—', tone: 'value', hint: w.changeDiscHint, activate: () => { if (st !== 'preparing') send({ cmd: 'chooseDisc' }); } },
@@ -502,6 +541,25 @@ const $ = (id) => document.getElementById(id);
 const TONES = { on: '#2f7d12', off: '#a08a4a', value: '#4a2c12', warning: '#c25a00' };
 const glow = (chosen) => chosen ? '<div style="position:absolute;inset:0;border-radius:6px;background:#ffec94;animation:apPulse 1.2s ease-in-out infinite"></div>' : '';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// The new version, as the Game tab's first and biggest row: what it is, from which version to which,
+// and how far the download is.
+function updateRow(r, i, chosen) {
+  const w = t(), u = state.update;
+  const hero = animal('lion', { width: 94, height: 94, animation: chosen ? 'apJoy .55s ease-out, apBreathe 3.6s ease-in-out .55s infinite' : 'apBreathe 3.6s ease-in-out infinite' });
+  const badge = u.status === 'downloading' ? '' : '<span style="margin-left:auto;padding:3px 14px;border-radius:14px;background:#d2401a;color:#fff8d8;font:800 22px/1.2 \'Baloo 2\',sans-serif;letter-spacing:.06em;animation:apHopOnce 2.6s ease-in-out infinite">' + esc(w.updateNew) + '</span>';
+  return '<div data-row="' + i + '" style="position:relative;flex:none;height:124px;border-radius:6px;background:#bfe36a;display:flex;align-items:center;cursor:pointer">' + glow(chosen) +
+    (r.progress != null ? '<div style="position:absolute;left:0;top:0;bottom:0;border-radius:6px 0 0 6px;background:rgba(255,255,255,.45);width:' + (r.progress * 100) + '%"></div>' : '') +
+    '<span style="position:relative;flex:none;width:44px;align-self:stretch;border-radius:6px 0 0 6px;background:#7cc22e;display:grid;place-items:center;font:800 24px/1 \'Baloo 2\',sans-serif;color:#fff8d8">★</span>' +
+    '<div style="position:relative;flex:none;margin-left:12px;width:100px;height:100px;box-sizing:border-box;border-radius:6px;border:2px solid #5a9a1c;background:linear-gradient(#fff3b0 0 66%,#a8d830 66%);overflow:hidden;display:grid;place-items:end center">' + hero + '</div>' +
+    '<div style="position:relative;flex:1;min-width:0;margin:0 22px 0 20px;display:flex;flex-direction:column;gap:10px">' +
+      '<div style="display:flex;align-items:center;gap:14px;padding-bottom:4px;border-bottom:2px solid rgba(255,255,255,.7)">' +
+        '<span style="font-size:42px;line-height:46px;letter-spacing:.04em;white-space:nowrap;color:' + (chosen ? '#d2401a' : '#4a2c12') + '">' + esc(r.label) + '</span>' + badge + '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;padding-bottom:5px;border-bottom:2px solid rgba(255,255,255,.7)">' +
+        '<span style="font:800 24px/1 \'Baloo 2\',sans-serif;letter-spacing:.06em;color:#3f6d12;white-space:nowrap">' + esc(w.updateLine(bareVersion(), u.version)) + '</span>' +
+        '<span style="flex:none;margin-left:auto;min-width:58px;box-sizing:border-box;text-align:center;padding:2px 12px;border-radius:8px;background:#5e3712;color:#fff3d0;font-size:19px;letter-spacing:.05em">' + esc(r.value) + '</span>' +
+      '</div></div></div>';
+}
 
 function playRow(r, i, chosen) {
   const w = t(), st = state.status;
@@ -744,12 +802,14 @@ function render() {
     if (tab === TAB.controls) html += deviceBar();
     html += '<div class="abs wheel" style="left:56px;top:' + top + 'px;width:1136px;height:' + visible() + 'px;overflow:hidden">' +
       '<div id="list" style="display:flex;flex-direction:column;gap:6px;padding:6px;box-sizing:content-box;width:1124px">' +
-      list.map((r, i) => (r.play ? playRow(r, i, i === sel) : tab === TAB.controls ? controlsRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
+      list.map((r, i) => (r.update ? updateRow(r, i, i === sel) : r.play ? playRow(r, i, i === sel) : tab === TAB.controls ? controlsRow(r, i, i === sel) : normalRow(r, i, i === sel))).join('') + '</div></div>';
   }
   if (!list.length) {
     html += '<div class="abs" style="left:62px;top:122px;width:1124px;height:340px;box-sizing:border-box;border-radius:6px;border:3px dashed #c9a83a;display:grid;place-items:center;font-size:25px;letter-spacing:.06em;color:#8a6a2a">' + (tab === TAB.cheats ? w.noCheats : w.noMods) + '</div>';
   }
   $('content').innerHTML = html;
+  $('whatsNew').innerHTML = state.whatsNew ? whatsNewWindow() : '';
+  $('whatsNew').style.display = state.whatsNew ? 'block' : 'none';
   applyScroll(false);
   blinkEyes($('stage'));
 
@@ -864,6 +924,7 @@ $('track').addEventListener('mousedown', (e) => {
   window.addEventListener('mouseup', stop);
 });
 $('close').addEventListener('click', () => send({ cmd: 'exit' }));
+$('whatsNew').addEventListener('click', (e) => { if (e.target.closest('#whatsNewClose')) closeWhatsNew(); });
 $('minimize').addEventListener('click', () => send({ cmd: 'minimize' }));
 $('titlebar').addEventListener('mousedown', (e) => { if (!e.target.closest('.titlebutton')) send({ cmd: 'drag' }); });
 // One language for both: the game's (Config.toml [console] language, five of them) and the
@@ -885,6 +946,12 @@ $('langEn').addEventListener('click', () => setLanguage(LANGUAGE.settings.indexO
 // What the keys and the controller do on the page: 'up', 'down', 'left', 'right', 'ok', 'back'
 // (the controller's B: back to the Game tab), 'prev' and 'next' (the tab beside).
 function press(what) {
+  if (state.whatsNew) {
+    // The list scrolls with the arrows; Enter (A) or Esc (B) closes it.
+    if (what === 'up' || what === 'down') { const list = $('whatsNewList'); if (list) list.scrollTop += what === 'up' ? -60 : 60; }
+    else if (what === 'ok' || what === 'back') closeWhatsNew();
+    return;
+  }
   if (what === 'prev' || what === 'next') return setTab(state.tab + (what === 'prev' ? -1 : 1));
   if (what === 'up' || what === 'down') return move(what === 'up' ? -1 : 1);
   if (what === 'back') { if (state.tab !== TAB.game) setTab(TAB.game); return; }
@@ -900,7 +967,7 @@ window.addEventListener('keydown', (e) => {
   if (state.capture) { e.preventDefault(); if (!e.repeat) captureKey(e.code); return; }
   usedInput('keys');
   const k = e.key;
-  if (k === 'Escape') return escape();
+  if (k === 'Escape') return state.whatsNew ? closeWhatsNew() : escape();
   const what = { q: 'prev', Q: 'prev', e: 'next', E: 'next', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'ok' }[k];
   if (!what) return;
   if (k.startsWith('Arrow')) e.preventDefault();
@@ -1039,7 +1106,7 @@ window.addEventListener('resize', fit);
 function receive(message) {
   const w = t();
   if (message.type === 'state') {
-    for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version', 'controls']) if (key in message) state[key] = message[key];
+    for (const key of ['status', 'hasDisc', 'discId', 'error', 'controllers', 'version', 'controls', 'recompLauncher', 'whatsNewFor']) if (key in message) state[key] = message[key];
     if (message.mods) state.modsOn = message.mods;
     if (message.modSettings) state.modSettings = message.modSettings;
 
@@ -1059,8 +1126,114 @@ function receive(message) {
     state.tab = 0; state.sel = 0;
   } else if (message.type === 'toast') {
     state.toast = message.key ? w[message.key] : message.text;
+  } else if (message.type === 'update' && state.update) {
+    state.update.status = message.error ? 'failed' : 'downloading';
+    state.update.fraction = message.fraction || 0;
+    state.update.error = message.error || '';
   }
   render();
+  if (message.type === 'state') { lookForUpdate(); lookForNotes(); }
+}
+
+// ---------------------------------------------------------------------------------------------
+// New versions: once, when the launcher opens, the page asks GitHub for the newest release (the
+// public list, the same one the Releases page shows) and offers it in Game when it is newer than
+// this one. The program does the rest: it downloads this system's package, and after the launcher
+// closes puts it over this folder and opens the launcher again.
+
+const RELEASES = 'https://api.github.com/repos/RodoLy/HarvestMoonAnimalParadeRecomp/releases/';
+const isVersion = (text) => /^\d+(\.\d+)+$/.test(text);
+let lookedForNotes = false;
+
+// This version's notes, once, after an update: the text of its release on GitHub. Without internet
+// they show the next time the launcher opens with it.
+function lookForNotes() {
+  const version = state.whatsNewFor;
+  if (lookedForNotes || !version || !isVersion(version) || !state.options.checkUpdates) return;
+  lookedForNotes = true;
+  fetch(RELEASES + 'tags/v' + version, { headers: { Accept: 'application/vnd.github+json' } })
+    .then((answer) => (answer.ok ? answer.json() : null))
+    .then((release) => {
+      if (release && release.body && newsItems(release.body, 'en').length) { state.whatsNew = { version, notes: release.body }; render(); }
+    })
+    .catch(() => {});
+}
+
+// The "What's new" list of the release notes (docs/releases/vX.md, the release's text): the English
+// part's bullets under "### What's new", or the Spanish part's under "Qué hay de nuevo".
+function newsItems(notes, lang) {
+  const spanish = notes.indexOf('### Español');
+  const part = lang === 'es' && spanish >= 0 ? notes.slice(spanish) : notes.slice(0, spanish >= 0 ? spanish : undefined);
+  const lines = part.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^(###\s*What's new|Qué hay de nuevo)/i.test(line.trim()));
+  const items = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*-\s+/.test(line)) items.push(line.replace(/^\s*-\s+/, ''));
+    else if (items.length && /^\s{2,}\S/.test(line)) items[items.length - 1] += ' ' + line.trim();
+    else if (items.length && line.trim()) break;
+  }
+  return start < 0 ? [] : items;
+}
+
+// The little Markdown the notes use: **bold**, `code` and [links](...) (shown as their text).
+function inlineMarkdown(text) {
+  return esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:#d2401a">$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>')
+    .replace(/`(.+?)`/g, '<span style="font-family:monospace">$1</span>').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+}
+
+function whatsNewWindow() {
+  const w = t(), items = newsItems(state.whatsNew.notes || '', state.lang);
+  const pets = ['cow', 'sheep', 'chicken', 'duck', 'chick'];
+  return '<div class="abs" style="inset:0;background:rgba(58,31,8,.55)"></div>' +
+    '<div class="abs" style="left:190px;top:70px;width:900px;height:560px;box-sizing:border-box;border-radius:22px;background:#a8d830;border:5px solid #3f7d14;box-shadow:0 10px 0 rgba(58,31,8,.35);padding:12px;animation:apRise .5s cubic-bezier(.3,.7,.3,1) both">' +
+      '<div style="width:100%;height:100%;box-sizing:border-box;border-radius:14px;background:#fbf8d2;border:3px solid #dff29a;display:flex;flex-direction:column;padding:22px 34px 20px">' +
+        '<div style="display:flex;align-items:center;gap:18px">' +
+          '<span style="flex:none;width:86px;height:86px;border-radius:50%;background:#fff6d6;border:4px solid #fff;box-shadow:0 3px 0 rgba(58,31,8,.25);display:grid;place-items:center;overflow:hidden">' +
+            animal('lion', { width: 70, height: 70, animation: 'apJoy .55s ease-out, apBreathe 3.6s ease-in-out .55s infinite' }) + '</span>' +
+          '<span style="font-size:40px;letter-spacing:.04em;color:#4a2c12">' + esc(w.whatsNew(state.whatsNew.version)) + '</span></div>' +
+        '<div id="whatsNewList" style="flex:1;min-height:0;overflow:auto;margin:16px 0 12px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin">' +
+          items.map((item, k) => '<div style="display:flex;gap:14px;align-items:flex-start;font-size:21px;line-height:1.35;letter-spacing:.03em;color:#4a2c12">' +
+            '<span style="flex:none;width:34px;height:34px;margin-top:1px;border-radius:50%;background:#f1d250;display:grid;place-items:end center;overflow:hidden">' +
+              animal(pets[k % pets.length], { width: 30, height: 30 }) + '</span><span>' + inlineMarkdown(item) + '</span></div>').join('') + '</div>' +
+        '<div style="display:flex;justify-content:center"><span id="whatsNewClose" style="display:inline-flex;align-items:center;gap:14px;white-space:nowrap;padding:6px 30px;border-radius:22px;background:#d2401a;color:#fff8d8;font:800 26px/1.3 \'Baloo 2\',sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 0 #8a2a10">' +
+          esc(w.whatsNewClose) + '<span class="key">Enter</span></span></div>' +
+      '</div></div>';
+}
+
+// Closed: the program remembers this version's notes were seen, so they show only once.
+function closeWhatsNew() {
+  if (!state.whatsNew) return;
+  send({ cmd: 'seenWhatsNew', version: state.whatsNew.version });
+  state.whatsNew = null;
+  // The new version's package is not prepared yet: it is done now, as after choosing a disc.
+  if (state.hasDisc && state.status !== 'preparing') send({ cmd: 'prepare' });
+  render();
+}
+let lookedForUpdate = false;
+// version.txt says "v0.2.3"; GitHub's tags too, and the comparisons use the numbers alone.
+const bareVersion = () => String(state.version || '').replace(/^v/, '');
+
+// "0.2.10" is newer than "0.2.9": each part as a number.
+function newer(a, b) {
+  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+
+function lookForUpdate() {
+  if (lookedForUpdate || !state.options.checkUpdates || state.recompLauncher || !isVersion(bareVersion())) return;
+  lookedForUpdate = true;
+  // Without internet (or with GitHub out of reach) nothing happens: no row, no message.
+  fetch(RELEASES + 'latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then((answer) => (answer.ok ? answer.json() : null))
+    .then((release) => {
+      const version = release && !release.draft && String(release.tag_name || '').replace(/^v/, '');
+      if (version && isVersion(version) && newer(version, bareVersion())) {
+        state.update = { version, status: 'available', fraction: 0, error: '' };
+        render();
+      }
+    })
+    .catch(() => {});
 }
 
 // ---------------------------------------------------------------------------------------------
