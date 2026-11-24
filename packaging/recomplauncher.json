@@ -179,6 +179,92 @@
       }
     },
     {
+      "id": "controller_buttons",
+      "label": "Controller buttons",
+      "help": "Your controller's buttons for the Wii Remote and the Nunchuk; the Nunchuk stick is the left stick. Press a box, then a button on your controller. Keys are set in the game's F10 menu.",
+      "group": "Controls",
+      "bindings": {
+        "separator": ",",
+        "max": 2,
+        "actions": [
+          {
+            "label": "A",
+            "key": "controller/a",
+            "pad": true
+          },
+          {
+            "label": "B",
+            "key": "controller/b",
+            "pad": true
+          },
+          {
+            "label": "1",
+            "key": "controller/x",
+            "pad": true
+          },
+          {
+            "label": "2",
+            "key": "controller/y",
+            "pad": true
+          },
+          {
+            "label": "+ (Plus)",
+            "key": "controller/start",
+            "pad": true
+          },
+          {
+            "label": "− (Minus)",
+            "key": "controller/z",
+            "pad": true
+          },
+          {
+            "label": "Nunchuk Z",
+            "key": "controller/l",
+            "pad": true
+          },
+          {
+            "label": "Nunchuk C",
+            "key": "controller/r",
+            "pad": true
+          },
+          {
+            "label": "D-pad up",
+            "key": "controller/up",
+            "pad": true
+          },
+          {
+            "label": "D-pad down",
+            "key": "controller/down",
+            "pad": true
+          },
+          {
+            "label": "D-pad left",
+            "key": "controller/left",
+            "pad": true
+          },
+          {
+            "label": "D-pad right",
+            "key": "controller/right",
+            "pad": true
+          }
+        ]
+      },
+      "defaults": {
+        "controller/a": "A",
+        "controller/b": "B",
+        "controller/x": "X",
+        "controller/y": "Y",
+        "controller/start": "Start",
+        "controller/z": "RB",
+        "controller/l": "LT",
+        "controller/r": "RT",
+        "controller/up": "D-Pad Up",
+        "controller/down": "D-Pad Down",
+        "controller/left": "D-Pad Left",
+        "controller/right": "D-Pad Right"
+      }
+    },
+    {
       "id": "romance_any_gender",
       "label": "Romance for everyone",
       "help": "Any bachelor or bachelorette can fall in love with you and marry you, boy or girl.",
