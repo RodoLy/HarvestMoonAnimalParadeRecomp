@@ -293,7 +293,7 @@ index f367955..35ce419 100644
      }
    } else if (subCmd == GX_AURORA_DEBUG_GROUP_PUSH) {
 diff --git a/lib/gx/gx.cpp b/lib/gx/gx.cpp
-index e373bf0..2bc6276 100644
+index e373bf0..21bf3c2 100644
 --- a/lib/gx/gx.cpp
 +++ b/lib/gx/gx.cpp
 @@ -42,6 +42,8 @@ wgpu::BindGroupLayout sTextureBindGroupLayout;
@@ -305,7 +305,7 @@ index e373bf0..2bc6276 100644
  
  template <typename T>
  T round_away_from_zero(float value) noexcept {
-@@ -260,6 +262,55 @@ void update() noexcept {
+@@ -260,6 +262,78 @@ void update() noexcept {
      window::set_force_aspect_16_9(policy == AURORA_VIEWPORT_16_9);
      window::set_present_surface_fill(policy == AURORA_VIEWPORT_STRETCH);
    }
@@ -319,12 +319,35 @@ index e373bf0..2bc6276 100644
 +  sPendingWideAspect.store(gameAspect > 0.f ? gameAspect : 0.f, std::memory_order_release);
 +}
 +
-+// The frame's copies of a part of the frame are not all made yet. The count to expect is the fewer of
-+// the two frames before: when a game makes one copy more only now and then, the frame after that one
-+// would otherwise wait for a copy that never comes and draw its text box as if it were part of that
-+// work (stretched, with holes where the sky shows through).
-+bool wide_copies_pending() noexcept {
-+  return g_gxState.texCopiesThisFrame < std::min(g_gxState.texCopiesLastFrame, g_gxState.texCopiesFrameBefore);
++// The count to expect is the fewest of the frames before: when a game makes a copy more only now and
++// then, the frames after would otherwise wait for a copy that never comes and draw their text box as if
++// it were part of that work (stretched, with holes where the sky shows through). Looking back on a few
++// frames rather than one keeps that from happening when the extra copy lasts a frame or two.
++u32 wide_copies_expected() noexcept {
++  const auto& before = g_gxState.texCopiesFramesBefore;
++  return *std::min_element(before.begin(), before.end());
++}
++
++// The frame's copies of a part of the frame are not all made yet.
++bool wide_copies_pending() noexcept { return g_gxState.texCopiesThisFrame < wide_copies_expected(); }
++
++void finish_wide_frame() noexcept {
++  auto& before = g_gxState.texCopiesFramesBefore;
++  const u32 made = g_gxState.texCopiesThisFrame;
++  const u32 expected = wide_copies_expected();
++  if (g_gxState.wideGameAspect > 0.f && made < expected) {
++    // The first few, then one in a thousand: enough to tell from a log how often it happens.
++    static u64 s_short = 0;
++    if (s_short < 10 || s_short % 1000 == 0) {
++      Log.warn("wide picture: a frame made {} copies of a part of itself, fewer than the {} expected "
++               "(frames before: {}, {}, {}, {}); its text boxes may have come out stretched ({} times so far)",
++               made, expected, before[0], before[1], before[2], before[3], s_short + 1);
++    }
++    ++s_short;
++  }
++  std::copy_backward(before.begin(), before.end() - 1, before.end());
++  before[0] = made;
++  g_gxState.texCopiesThisFrame = 0;
 +}
 +
 +float wide_frame_factor() noexcept {
@@ -361,7 +384,7 @@ index e373bf0..2bc6276 100644
  }
  
  Vec2<uint32_t> logical_fb_size() noexcept {
-@@ -303,10 +354,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
+@@ -303,10 +377,18 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept
    const float scaleX = static_cast<float>(targetWidth) / static_cast<float>(logicalFbWidth);
    const float scaleY = static_cast<float>(targetHeight) / static_cast<float>(logicalFbHeight);
  
@@ -382,7 +405,7 @@ index e373bf0..2bc6276 100644
  
    const auto mappedLeft = std::clamp(static_cast<int32_t>(std::floor(left)), 0, static_cast<int32_t>(targetWidth));
    const auto mappedTop = std::clamp(static_cast<int32_t>(std::floor(top)), 0, static_cast<int32_t>(targetHeight));
-@@ -433,7 +492,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
+@@ -433,7 +515,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept {
    }
    g_gxState.logicalViewport = viewport;
    set_render_viewport(mapped_render_viewport());
@@ -392,7 +415,7 @@ index e373bf0..2bc6276 100644
      set_render_scissor(mapped_render_scissor());
    }
  }
-@@ -460,6 +520,18 @@ void set_render_scissor(const gfx::ClipRect& scissor) noexcept {
+@@ -460,6 +543,18 @@ void set_render_scissor(const gfx::ClipRect& scissor) noexcept {
    gfx::set_scissor(scissor);
  }
  
@@ -412,14 +435,17 @@ index e373bf0..2bc6276 100644
  
  wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, const gfx::RenderTargetLayout& layout,
 diff --git a/lib/gx/gx.hpp b/lib/gx/gx.hpp
-index 02be26a..ca6ce95 100644
+index 02be26a..e8da695 100644
 --- a/lib/gx/gx.hpp
 +++ b/lib/gx/gx.hpp
-@@ -305,6 +305,29 @@ inline bool operator==(const AttrArray& lhs, const AttrArray& rhs) {
+@@ -305,6 +305,32 @@ inline bool operator==(const AttrArray& lhs, const AttrArray& rhs) {
  }
  inline bool operator!=(const AttrArray& lhs, const AttrArray& rhs) { return !(lhs == rhs); }
  
 +// A box around the places a frame copied parts of itself from (wide picture, see GXState).
++// How many frames before the count of copies to expect looks back on (see wide_copies_expected).
++inline constexpr size_t WideCopyFramesRemembered = 4;
++
 +struct WideCopyArea {
 +  float left = 0.f;
 +  float top = 0.f;
@@ -445,7 +471,7 @@ index 02be26a..ca6ce95 100644
  struct GXState {
    struct CopyTextureKey {
      const void* dest = nullptr;
-@@ -406,6 +429,28 @@ struct GXState {
+@@ -406,6 +432,28 @@ struct GXState {
  
    // View state
    AuroraViewportPolicy viewportPolicy = AURORA_VIEWPORT_FIT;
@@ -461,12 +487,12 @@ index 02be26a..ca6ce95 100644
 +  // of the frame (the shadow under a character) before its last such copy of the frame, and the
 +  // picture shown on screen - its text, its clock - after. A copy of the whole frame does not count:
 +  // the game can make one only now and then (this one does every other frame), and it reads back
-+  // the picture as shown anyway. The count of copies to expect is the fewer of the two frames
-+  // before (see wide_copies_pending), so a frame with one copy more than the next one does not
-+  // leave the next one's text box half stretched.
++  // the picture as shown anyway. The count of copies to expect is the fewest of the frames before
++  // (see wide_copies_expected), so frames with a copy more than the next one do not leave the next
++  // one's text box half stretched.
 +  u32 texCopiesThisFrame = 0;
-+  u32 texCopiesLastFrame = 0;
-+  u32 texCopiesFrameBefore = 0;
++  // The counts of the frames before, the latest first.
++  std::array<u32, WideCopyFramesRemembered> texCopiesFramesBefore{};
 +  // Where those copies read from, in logical EFB pixels: all of them together, this frame and the
 +  // frame before (empty when there were none).
 +  WideCopyArea texCopyAreaThisFrame;
@@ -474,7 +500,7 @@ index 02be26a..ca6ce95 100644
    gfx::Viewport logicalViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
    gfx::Viewport renderViewport{0.f, 0.f, 640.f, 480.f, 0.f, 1.f};
    gfx::ClipRect logicalScissor{0, 0, 640, 480};
-@@ -455,6 +500,19 @@ void initialize() noexcept;
+@@ -455,6 +503,24 @@ void initialize() noexcept;
  void shutdown() noexcept;
  void update() noexcept;
  void set_viewport_policy(AuroraViewportPolicy policy) noexcept;
@@ -486,15 +512,20 @@ index 02be26a..ca6ce95 100644
 +// The same, leaving out whether the draw is one the game will read back: how many times wider the
 +// frame is, as long as the viewport spans it.
 +float wide_frame_factor() noexcept;
-+// Whether the frame is still before its last copy of a part of itself (going by the frame before),
++// How many copies of a part of itself the frame is expected to make: the fewest of the frames before.
++u32 wide_copies_expected() noexcept;
++// Whether the frame is still before its last copy of a part of itself (going by the frames before),
 +// when what is drawn may be something the game reads back as a texture.
 +bool wide_copies_pending() noexcept;
++// At the copy to the display: the frame's count joins those of the frames before. A frame that made
++// fewer copies than expected is noted in the log, since its text boxes may have come out stretched.
++void finish_wide_frame() noexcept;
 +// The share of the frame's width a viewport, a scissor or a draw must span to count as the whole frame.
 +inline constexpr float WidePictureFullWidth = 0.97f;
  void clear_static_texture_cache() noexcept;
  void clear_copy_texture_cache() noexcept;
  void evict_copy_texture(const void* dest) noexcept;
-@@ -470,6 +528,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept;
+@@ -470,6 +536,8 @@ void set_logical_viewport(const gfx::Viewport& viewport) noexcept;
  void set_render_viewport(const gfx::Viewport& viewport) noexcept;
  void set_logical_scissor(const gfx::ClipRect& scissor) noexcept;
  void set_render_scissor(const gfx::ClipRect& scissor) noexcept;
@@ -504,10 +535,10 @@ index 02be26a..ca6ce95 100644
  void copy_disp(GXBool clear, u32 copyControl) noexcept;
  const gfx::TextureBind& get_texture(GXTexMapID id) noexcept;
 diff --git a/lib/gx/regs.cpp b/lib/gx/regs.cpp
-index e709ab6..df8e30d 100644
+index e709ab6..2fb5ea0 100644
 --- a/lib/gx/regs.cpp
 +++ b/lib/gx/regs.cpp
-@@ -286,11 +286,30 @@ void bp_clear_depth(u8, u32 value) noexcept { g_gxState.clearDepth = reg_get(val
+@@ -286,11 +286,28 @@ void bp_clear_depth(u8, u32 value) noexcept { g_gxState.clearDepth = reg_get(val
  // EFB copy trigger (0x52)
  void bp_efb_copy(u8, u32 value) noexcept {
    const bool clear = reg_get(value, 1, 11) != 0;
@@ -515,9 +546,7 @@ index e709ab6..df8e30d 100644
 +  g_gxState.orthoDrawClearOfCopies = false;
    if (reg_get(value, 1, 14) != 0) {
      copy_disp(clear, value);
-+    g_gxState.texCopiesFrameBefore = g_gxState.texCopiesLastFrame;
-+    g_gxState.texCopiesLastFrame = g_gxState.texCopiesThisFrame;
-+    g_gxState.texCopiesThisFrame = 0;
++    finish_wide_frame();
 +    g_gxState.texCopyAreaLastFrame = g_gxState.texCopyAreaThisFrame;
 +    g_gxState.texCopyAreaThisFrame = {};
    } else {
