@@ -48,8 +48,8 @@ $logs = Join-Path $root 'UserData\Logs'
 $log = Join-Path $logs 'update.log'
 $repository = 'RodoLy/HarvestMoonAnimalParadeRecomp'
 
-# The launcher reads the lines as UTF-8 (the messages have accents).
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+# The launcher reads the lines as UTF-8 (the messages have accents), without a byte order mark.
+try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch { }
 
 function Say([string]$Line) {
     # Straight to the output, so that each one is a line of its own. When the launcher is gone (it
