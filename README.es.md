@@ -35,6 +35,7 @@ menú **F10** dentro del juego.
 | **Linux, macOS y Android** | Paquetes para Linux (x86-64 y ARM64, que incluye una Nintendo Switch con switchroot Linux) y Macs con Apple Silicon, y una app de Android (un teléfono, una tableta o una Switch con switchroot Android) con un control Classic en pantalla. Trabajo en progreso: ver abajo. |
 | **Imagen ancha** | *F10 > Graphics > Picture > Wide* llena una ventana panorámica: las cámaras 3D ven más a los lados, y los menús y textos conservan su forma en el centro. |
 | **Interpolación de cuadros** | El juego corre a 30 FPS; *F10 > Graphics > Frame interpolation* muestra 60, 120 o 180 FPS metiendo cuadros intermedios. La velocidad del juego no cambia. |
+| **Hasta 4K** | La *Resolución* en el launcher (o en *F10 > Graphics*) dibuja el juego a 720p, 960p, 1440p, 4K o al tamaño de la ventana en lugar de los 480p de la Wii. 4K le pide mucho a la tarjeta gráfica. |
 | **Carga rápida** | Siempre activa: el cambio de zona (el fundido a negro, la carga y el letrero del lugar) va hasta ocho veces más rápido, lo que permita la PC, igual que las demás pantallas negras. Mientras la pantalla está en negro no se dibuja el mundo 3D de detrás, así que hasta una PC lenta pasa rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
 | **Cámara libre** | Un mod, apagado de inicio (launcher > Mods): al aire libre el stick derecho gira la cámara alrededor del personaje por completo y la inclina, R3 la regresa. [Ver abajo](#cámara-libre). |
 | **Amor para todos** | Un mod: cualquiera de los veinte candidatos, con la Diosa y el Rey de la Cosecha, se puede enamorar y casar sin importar el sexo del jugador. [Ver abajo](#amor-para-todos). |
@@ -158,7 +159,9 @@ interpolación de cuadros, la resolución, la pantalla completa y la API gráfic
 dice arriba si hay un control conectado (y cuál), y a cada botón del Wii Remote y del Nunchuk, y al
 avance rápido, le da cualquier tecla o botón del control, en dos columnas; ahí mismo se configuran
 los Wii Remotes reales. Está en inglés o en español, y se usa con el mouse, el teclado o un control
-(cruceta, A, B, LB y RB).
+(cruceta, A, B, LB y RB). Cuando sale una versión nueva, la pestaña Juego empieza con **Actualizar a
+la vX**: con un clic la baja, la pone encima de la carpeta (tus partidas y ajustes se quedan) y
+muestra las novedades; sin internet no cambia nada, y *Buscar versiones nuevas* en Opciones lo apaga.
 
 | Juego | Opciones | Controles |
 |---|---|---|
@@ -184,6 +187,10 @@ Es un driver de gráficos Adreno viejo con Direct3D 12. Actualiza el driver con 
 **Vulkan se detiene con "Device lost", va lento o muestra colores raros.** Algunas GPU, entre
 ellas Adreno, solo le dan a Vulkan un modo reducido. Cambia a Direct3D 12 (*Automatic* en
 *F10 > Graphics > Graphics API*) y reinicia.
+
+**La imagen se ve borrosa o de baja resolución.** El juego empieza a los 480p de la Wii, como el
+original. Sube la *Resolución* en Opciones del launcher (o en *F10 > Graphics*): 1440p o 4K para una
+pantalla grande, o *La de la ventana* para que coincida con la ventana.
 
 **El contador de FPS dice 30.** El juego corre a 30 cuadros por segundo, como en la Wii. Activa
 *Frame interpolation* en F10 para ver 60, 120 o 180 FPS.

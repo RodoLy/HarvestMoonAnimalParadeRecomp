@@ -35,6 +35,7 @@ second, English. Everything below except fast loading is a choice in the launche
 | **Linux, macOS and Android** | Packages for Linux (x86-64 and ARM64, which includes a Nintendo Switch with switchroot Linux) and Macs with Apple Silicon, and an Android app (a phone, a tablet, or a Switch with switchroot Android) with an on-screen Classic Controller. Early work: see below. |
 | **Wide picture** | *F10 > Graphics > Picture > Wide* fills a widescreen window: the 3D cameras see more at the sides, and the menus and text keep their shape in the middle. |
 | **Frame interpolation** | The game runs at 30 FPS; *F10 > Graphics > Frame interpolation* shows 60, 120 or 180 FPS by inserting frames in between. The game's own speed does not change. |
+| **Up to 4K** | *Resolution* in the launcher (or *F10 > Graphics*) draws the game at 720p, 960p, 1440p, 4K or the window's own size instead of the Wii's 480p. 4K asks a lot of the graphics card. |
 | **Fast loading** | Always on: the change of area (the fade to black, the loading and the place sign) runs up to eight times faster, as fast as the PC allows, and so do the other black screens. While the screen is black the 3D world behind it is not drawn, so even a slow PC gets through it quickly. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
 | **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera all the way around the player and tilts it, R3 puts it back. [See below](#free-camera). |
 | **Romance for everyone** | A mod: any of the twenty marriage candidates, the Harvest Goddess and the Harvest King included, can be courted and married whatever the player's sex. [See below](#romance-for-everyone). |
@@ -157,7 +158,9 @@ picture, frame interpolation, resolution, fullscreen and the graphics API. **Con
 top whether a controller is connected (and which), and gives every Wii Remote and Nunchuk button,
 and fast-forward, any key or controller button, in two columns; real Wii Remotes are set up there
 too. It speaks English or Spanish, and is driven with the mouse, the keyboard or a controller
-(D-pad, A, B, LB and RB).
+(D-pad, A, B, LB and RB). When a new version is out, the Game tab starts with **Update to vX**:
+one click downloads it, puts it over the folder (your saves and settings stay) and shows what's
+new; without internet nothing changes, and *Look for new versions* in Options turns it off.
 
 | Game | Options | Controls |
 |---|---|---|
@@ -183,6 +186,10 @@ Panel* app (Microsoft Store) or your laptop maker's support app.
 **Vulkan stops with "Device lost", runs slowly or shows wrong colors.** Some GPUs, Adreno among
 them, only give Vulkan a reduced mode. Switch to Direct3D 12 (*Automatic* in
 *F10 > Graphics > Graphics API*) and restart.
+
+**The picture looks blurry or low-resolution.** The game starts at the Wii's 480p, as the
+original. Raise *Resolution* in the launcher's Options (or *F10 > Graphics*): 1440p or 4K for a
+big screen, or *The window's* to match the window.
 
 **The FPS counter says 30.** The game runs at 30 frames per second, as on the Wii. Turn on
 *Frame interpolation* in F10 to see 60, 120 or 180 FPS.
