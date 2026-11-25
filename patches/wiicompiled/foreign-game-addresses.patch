@@ -3183,6 +3183,76 @@ index 0000000..fe265c4
 +}
 +
 +} // namespace GameMods
+diff --git a/runtime/src/hle/game_mods/no_button_prompts.cpp b/runtime/src/hle/game_mods/no_button_prompts.cpp
+new file mode 100644
+index 0000000..e3b3fda
+--- /dev/null
++++ b/runtime/src/hle/game_mods/no_button_prompts.cpp
+@@ -0,0 +1,64 @@
++// Harvest Moon: Animal Parade mod "no_button_prompts": no button prompts in the corner of the
++// field, for a cleaner screen. Off unless Config.toml says
++//   [mods]
++//   no_button_prompts = true
++//
++// What the game does: while the player walks around, the top right corner shows what two buttons do
++// right now, each a picture of the button with a word under it: "(1) Help" always, and "(A)" with
++// the action at hand ("Check", "Dismount"...). The menus have their own key legends, drawn
++// by other code (bb_menu_cmnpart_mngr), and stay as they are.
++//
++// 0x801504DC draws one such prompt: the button's picture (0x801CC950) and the word, nine times with
++// a pixel between them, which gives it its dark outline (0x80222E68 queues each word in the frame's
++// list of words, drawn later by 0x80222D4C). Its arguments: r3 x, r4 y, r5 the word (an index into
++// the game's own words, 0x8014FED4), r6 the button's picture (none when negative), r7 alpha.
++//
++// It is called from four places, and only two are the field's prompts:
++//   0x80150748  the two prompts of the field, each frame: the slots at 0x8057C5D8 (0x14 bytes each:
++//               +0 shown, +4 word, +8 alpha, +0xC picture), which the game fills when a prompt is
++//               wanted and this function empties after drawing. Its call returns to 0x80150848.
++//   0x800D8FB0  a state of the player that shows "(A) Check" alone. Its call returns to 0x800D8FE4.
++//   0x8014BECC  the controls while placing furniture (move, turn, place...)
++//   0x801DDCEC  the controls of the camera (direction, closer, take a picture...)
++// The last two teach controls, so they stay. The mod wraps 0x801504DC and leaves out only the calls
++// from the first two; the slots are filled and emptied as always, so nothing else changes.
++
++#include "game_mods.h"
++#include "guest_abi/cpu_context.h"
++#include "guest_function_imports.h"
++#include "hle_stubs.h"
++#include "runtime_config.h"
++
++#include <cstdint>
++
++// Its own namespace: the runtime is built in unity batches, where another mod's Enabled() can share
++// this file's translation unit.
++namespace NoButtonPrompts {
++namespace {
++
++constexpr const char* kMod = "no_button_prompts";
++constexpr uint32_t kDrawPrompt = 0x801504DCu;
++// Where a call to kDrawPrompt returns to, for the two callers that draw the field's prompts.
++constexpr uint32_t kFromFieldPrompts = 0x80150848u;
++constexpr uint32_t kFromCheckState = 0x800D8FE4u;
++
++bool Enabled() {
++    static const bool enabled = RuntimeConfigFile::ModEnabled(kMod);
++    return enabled;
++}
++
++bool IsFieldPrompt(const CpuContext* ctx) {
++    return ctx->lr == kFromFieldPrompts || ctx->lr == kFromCheckState;
++}
++
++} // namespace
++} // namespace NoButtonPrompts
++
++// 0x801504DC: draw one button prompt (its picture and its word).
++extern "C" void AnimalParadeDrawButtonPrompt(CpuContext* ctx) {
++    if (NoButtonPrompts::Enabled() && NoButtonPrompts::IsFieldPrompt(ctx)) {
++        return;
++    }
++    GuestFunctions::BaseTranslation(NoButtonPrompts::kDrawPrompt)(ctx);
++}
++FOREIGN_GAME_WRAPPER(RBIEE9, 801504DC, AnimalParadeDrawButtonPrompt);
 diff --git a/runtime/src/hle/game_mods/no_place_sign.cpp b/runtime/src/hle/game_mods/no_place_sign.cpp
 new file mode 100644
 index 0000000..e8ab5aa
