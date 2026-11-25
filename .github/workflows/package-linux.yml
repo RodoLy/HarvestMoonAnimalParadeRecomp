@@ -203,7 +203,8 @@ jobs:
           sudo unshare -m bash -c "mount --bind '$probe/empty' /usr/include && mount --bind '$probe/empty' /usr/lib/gcc &&
             '$PACKAGE/Toolkit/toolchain/bin/clang++' --sysroot='$PACKAGE/Toolkit/sysroot' -fuse-ld=lld -pthread \
               -static-libstdc++ -static-libgcc '$probe/probe.cpp' -o '$probe/probe'"
-          test "$("$probe/probe")" = 2
+          # It runs where the game will (glibc 2.38 or newer), not on this older runner.
+          test "$(docker run --rm -v "$probe:/probe:ro" ubuntu:24.04 /probe/probe)" = 2
           # What the precompiled Dawn needs from the C and C++ libraries is in the sysroot: glibc
           # 2.38's C23 strtol and GCC 13's string code (without them the game does not link).
           nm -D --defined-only "$PACKAGE"/Toolkit/sysroot/usr/lib/*-linux-gnu/libc.so.6 | grep -q ' __isoc23_strtol'
