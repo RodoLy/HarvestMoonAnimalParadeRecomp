@@ -311,6 +311,29 @@
       }
     },
     {
+      "id": "no_button_prompts",
+      "label": "No button prompts on the field",
+      "help": "A cleaner screen: the 1 (Help) and A prompts in the top right corner are not drawn. Menus keep their button guides.",
+      "group": "Mods",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "mods/no_button_prompts": "false"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "mods/no_button_prompts": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "mods/no_button_prompts": "false"
+      }
+    },
+    {
       "id": "faster_actions",
       "label": "Faster actions",
       "help": "Tools, picking things up and putting them down, and looking after the animals, at the speed you choose. Only your character.",

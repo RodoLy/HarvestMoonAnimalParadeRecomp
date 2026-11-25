@@ -575,7 +575,8 @@ void ResetControls() {
 // Config.toml, off unless it says true. Some have a setting, a percentage in a line of its own in
 // [mods] (from 100, the original game, to 400 for the actions and 300 for walking). The page has
 // their names, descriptions and limits.
-const char* const kMods[] = {"romance_any_gender",     "no_place_sign",        "faster_actions",  "faster_walking", "free_camera",
+const char* const kMods[] = {"romance_any_gender",   "no_place_sign",          "no_button_prompts",
+                              "faster_actions",       "faster_walking",         "free_camera",
                               "cheat_infinite_stamina", "cheat_infinite_money", "cheat_infinite_lumber",
                               "cheat_infinite_stone", "cheat_infinite_feed", "cheat_stop_time"};
 const char* const kModSettings[] = {"faster_actions_percent", "faster_walking_percent"};
