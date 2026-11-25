@@ -127,7 +127,8 @@ configuración, las partidas y los registros quedan en `UserData\`.
 Los paquetes son `HarvestMoonAnimalParade-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` (una
 Raspberry Pi 5, una Nintendo Switch con switchroot Linux) y `-macos-arm64.zip` (Apple Silicon).
 Descomprime uno y abre `AnimalParadeLauncher` (en una Mac, `Animal Parade.command`); se abre en el
-navegador y funciona como en Windows. Linux solo necesita un controlador Vulkan: el paquete trae su
+navegador y funciona como en Windows. Linux solo necesita un controlador Vulkan y un sistema de 2023
+en adelante (glibc 2.38: SteamOS actual, Ubuntu 24.04, Fedora 39, Debian 13): el paquete trae su
 compilador y las bibliotecas de C y C++ para compilar, así que no hay que instalar nada (una Steam
 Deck funciona tal cual, en modo escritorio). macOS necesita las herramientas de línea de comandos de
 Apple (`xcode-select --install`). Los pasos están en [packaging/unix/README.txt](packaging/unix/README.txt).
