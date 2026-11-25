@@ -14,6 +14,13 @@
 # Usage / Uso (on Debian or Ubuntu, from the packages already installed):
 #   packaging/unix/make-sysroot.sh <folder>
 #
+# The Linux workflow runs it in an Ubuntu 24.04 container (glibc 2.39, GCC 13): the precompiled Dawn
+# needs glibc 2.38 and GCC 13's libstdc++, newer than its own runner's. play.sh links libstdc++ into
+# the game, so a player needs glibc 2.38 or newer and nothing else (current SteamOS too).
+# / El workflow de Linux lo corre en un contenedor de Ubuntu 24.04: el Dawn precompilado necesita
+# glibc 2.38 y la libstdc++ de GCC 13. play.sh mete libstdc++ en el juego, así que quien juega solo
+# necesita glibc 2.38 o más nueva (SteamOS actual también).
+#
 # What it takes / Lo que toma:
 #   libc6, libc6-dev, linux-libc-dev     the C library: headers, startup files, libc.so and friends
 #   libgcc-N-dev, libstdc++-N-dev        the compiler runtime and the C++ library of the computer's

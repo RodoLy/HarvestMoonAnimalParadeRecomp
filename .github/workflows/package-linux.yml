@@ -31,8 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Ubuntu 22.04: the compiled game and archives then run on any distribution from about
-          # 2022 on (glibc 2.35).
+          # Ubuntu 22.04 builds the tools and the precompiled archives. The game compiled on the
+          # player's computer needs glibc 2.38 or newer (2023 on: Ubuntu 24.04, Fedora 39, Debian 13,
+          # current SteamOS) all the same, since the precompiled Dawn it links was built against it.
           - runner: ubuntu-22.04
             arch: x86_64
             dotnet_rid: linux-x64
@@ -159,11 +160,16 @@ jobs:
           cp -a "$wc/projects/animal-parade" "$workspace/projects/animal-parade"
           cp -a "$artifacts/native-prebuilt-${{ matrix.arch }}" "$workspace/NativePrebuilt"
 
-          # The C and C++ libraries' files the game compiles against on the player's computer, from
-          # this runner (the same ones the precompiled archives were built with): nothing to install
-          # there, not even on a Steam Deck. / Las bibliotecas de C y C++ contra las que se compila el
-          # juego en la computadora de quien juega: no hay que instalar nada, ni en una Steam Deck.
-          bash packaging/unix/make-sysroot.sh "$toolkit/sysroot"
+          # The C and C++ libraries' files the game compiles against on the player's computer:
+          # nothing to install there, not even on a Steam Deck. They come from Ubuntu 24.04 (glibc
+          # 2.39, GCC 13), in a container, because the precompiled Dawn needs glibc 2.38 and GCC 13's
+          # libstdc++; this runner's (glibc 2.35, GCC 11) are too old for it. / Las bibliotecas de C
+          # y C++ contra las que se compila el juego en la computadora de quien juega: no hay que
+          # instalar nada, ni en una Steam Deck. Salen de Ubuntu 24.04, en un contenedor, porque el
+          # Dawn precompilado necesita glibc 2.38 y la libstdc++ de GCC 13.
+          docker run --rm -v "$PWD/packaging/unix:/scripts:ro" -v "$toolkit:/toolkit" ubuntu:24.04 bash -c "
+            apt-get update -qq && apt-get install -y -qq gcc libc6-dev linux-libc-dev libstdc++-13-dev > /dev/null &&
+            bash /scripts/make-sysroot.sh /toolkit/sysroot && chown -R $(id -u):$(id -g) /toolkit/sysroot"
           mkdir -p "$PACKAGE/licenses/sysroot"
           mv "$toolkit/sysroot/licenses/"* "$PACKAGE/licenses/sysroot/"
           rmdir "$toolkit/sysroot/licenses"
@@ -195,8 +201,13 @@ jobs:
           mkdir -p "$probe/empty"
           printf '#include <vector>\n#include <thread>\n#include <cstdio>\nint main() { std::vector<int> v{1}; std::thread t([&] { v.push_back(2); }); t.join(); std::printf("%%zu\\n", v.size()); }\n' > "$probe/probe.cpp"
           sudo unshare -m bash -c "mount --bind '$probe/empty' /usr/include && mount --bind '$probe/empty' /usr/lib/gcc &&
-            '$PACKAGE/Toolkit/toolchain/bin/clang++' --sysroot='$PACKAGE/Toolkit/sysroot' -fuse-ld=lld -pthread '$probe/probe.cpp' -o '$probe/probe'"
+            '$PACKAGE/Toolkit/toolchain/bin/clang++' --sysroot='$PACKAGE/Toolkit/sysroot' -fuse-ld=lld -pthread \
+              -static-libstdc++ -static-libgcc '$probe/probe.cpp' -o '$probe/probe'"
           test "$("$probe/probe")" = 2
+          # What the precompiled Dawn needs from the C and C++ libraries is in the sysroot: glibc
+          # 2.38's C23 strtol and GCC 13's string code (without them the game does not link).
+          nm -D --defined-only "$PACKAGE"/Toolkit/sysroot/usr/lib/*-linux-gnu/libc.so.6 | grep -q ' __isoc23_strtol'
+          nm --defined-only "$PACKAGE"/Toolkit/sysroot/usr/lib/gcc/*-linux-gnu/*/libstdc++.a 2>/dev/null | grep -q '_M_replace_cold'
           test -f "$PACKAGE/BuildWorkspace/NativePrebuilt/native_prebuilt.cmake"
           # A made-up disc of another game: the script must find the disc and stop at the disc
           # check, before anything is translated.
