@@ -232,6 +232,16 @@ elif [[ "$system" == Linux && ! -f /usr/include/stdio.h ]]; then
     fail 'The C library headers are missing. Debian, Ubuntu: sudo apt install libc6-dev; Fedora: sudo dnf install glibc-devel / Faltan los encabezados de la biblioteca de C (mismos comandos).'
 fi
 
+# How the game is linked: with the package's own linker, and with the package's own C and C++
+# libraries the C++ library and GCC's runtime go inside the game (-static-libstdc++). The game then
+# needs the computer's glibc only, not its libstdc++, which may be older than the one the
+# precompiled Dawn was built with.
+linker_flags=''
+if [[ "$cc" == "$toolchain_bin/"* ]]; then
+    linker_flags='-fuse-ld=lld'
+    if [[ -n "$sysroot" ]]; then linker_flags+=' -static-libstdc++ -static-libgcc'; fi
+fi
+
 # The same three knobs as play.ps1: a translated file takes about half a GB in clang, so the
 # compile jobs are capped by memory as well as by processors.
 if [[ "$system" == Darwin ]]; then
@@ -304,9 +314,10 @@ grep -q 'MKW_TRANSLATED_GUEST_REGION 3' "$shards/shards.cmake" ||
 # A runtime or aurora file newer than the last configuration (a fix copied into BuildWorkspace)
 # configures again; what was compiled is kept.
 cache=$build/CMakeCache.txt
-# A build configured with other C libraries (before the package had its own, or the folder was
-# moved) configures again.
-if [[ -f "$cache" ]] && [[ "$(sed -n 's/^CMAKE_SYSROOT:[A-Z]*=//p' "$cache")" != "$sysroot" ]]; then
+# A build configured with other C libraries or linked another way (before the package had its own,
+# or the folder was moved) configures again.
+if [[ -f "$cache" ]] && { [[ "$(sed -n 's/^CMAKE_SYSROOT:[A-Z]*=//p' "$cache")" != "$sysroot" ]] ||
+                          [[ "$(sed -n 's/^CMAKE_EXE_LINKER_FLAGS:[A-Z]*=//p' "$cache")" != "$linker_flags" ]]; }; then
     echo "The C libraries changed; configuring again / Cambiaron las bibliotecas de C; se configura otra vez"
     rm -f "$cache"
 fi
@@ -335,8 +346,9 @@ if [[ ! -f "$cache" ]]; then
     # The package's own linker and archiver go with its own compiler.
     if [[ "$cc" == "$toolchain_bin/"* ]]; then
         configure+=(-DCMAKE_AR="$toolchain_bin/llvm-ar" -DCMAKE_RANLIB="$toolchain_bin/llvm-ranlib"
-            -DCMAKE_LINKER="$toolchain_bin/ld.lld" -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld)
+            -DCMAKE_LINKER="$toolchain_bin/ld.lld")
     fi
+    [[ -n "$linker_flags" ]] && configure+=("-DCMAKE_EXE_LINKER_FLAGS=$linker_flags")
     [[ -n "$sysroot" ]] && configure+=(-DCMAKE_SYSROOT="$sysroot")
     # The precompiled aurora and libraries, made with the same compiler (the package's), save most
     # of the first build. Without them aurora is compiled here too.
