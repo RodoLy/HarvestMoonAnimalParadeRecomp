@@ -39,7 +39,7 @@ menú **F10** dentro del juego.
 | **Carga rápida** | Siempre activa: el cambio de zona (el fundido a negro, la carga y el letrero del lugar) va hasta ocho veces más rápido, lo que permita la PC, igual que las demás pantallas negras. Mientras la pantalla está en negro no se dibuja el mundo 3D de detrás, así que hasta una PC lenta pasa rápido. Mantener **Tab** (o la tecla o el botón del control que elijas) acelera todo (apagado de inicio; se activa en el launcher o en F10). |
 | **Cámara libre** | Un mod, apagado de inicio (launcher > Mods): al aire libre el stick derecho gira la cámara alrededor del personaje por completo y la inclina, R3 la regresa. [Ver abajo](#cámara-libre). |
 | **Amor para todos** | Un mod: cualquiera de los veinte candidatos, con la Diosa y el Rey de la Cosecha, se puede enamorar y casar sin importar el sexo del jugador. [Ver abajo](#amor-para-todos). |
-| **Calidad de vida** | Mods para quitar el letrero de la zona al cargar ([ver abajo](#pantallas-de-carga-más-cortas)) y para caminar más rápido (×1.25 a ×3) y actuar más rápido (×1.25 a ×4). Ver [docs/MODS.md](docs/MODS.md). |
+| **Calidad de vida** | Mods para quitar el letrero de la zona al cargar ([ver abajo](#pantallas-de-carga-más-cortas)), quitar los avisos de botones en el campo ([ver abajo](#una-pantalla-más-limpia)) y para caminar más rápido (×1.25 a ×3) y actuar más rápido (×1.25 a ×4). Ver [docs/MODS.md](docs/MODS.md). |
 | **Trucos** | Estamina, dinero, madera, piedra y alimento infinitos, y detener el tiempo, en el launcher y en F10 (ver las preguntas abajo). |
 | **Cinco idiomas** | Inglés, español, francés, alemán e italiano desde el mismo disco de EE. UU. (ver abajo). |
 | **Direct3D 12 o Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* elige Direct3D 12. |
@@ -62,6 +62,18 @@ letrero: la zona nueva aparece en cuanto termina de cargar.
 | El letrero que quita el mod |
 |---|
 | ![El letrero de la zona: un dibujo de Memoria Farm y su nombre](docs/images/area-sign.jpg) |
+
+## Una pantalla más limpia
+
+Mientras caminas, la esquina de arriba a la derecha dice qué hacen dos botones: el **1**, Ayuda,
+siempre, y el **A** con la acción del momento (Revisar, Bajarse...). El mod **Sin avisos de botones
+en el campo** (launcher > Mods, apagado de inicio) los quita para una pantalla más limpia; los
+botones hacen lo mismo de siempre. Los menús conservan sus guías de botones, igual que la cámara de
+fotos y la colocación de muebles.
+
+| Con los avisos (el juego original) | Con el mod |
+|---|---|
+| ![1 Ayuda y A Revisar en la esquina de arriba a la derecha](docs/images/button-prompts-on-es.jpg) | ![El mismo cuarto sin ellos](docs/images/button-prompts-off-es.jpg) |
 
 ## Cámara libre
 

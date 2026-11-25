@@ -192,6 +192,33 @@ What the game does, and what the mod changes (`runtime/src/hle/game_mods/no_plac
 
 Tried: on a Windows ARM PC, crossing several areas.
 
+### No button prompts on the field (`no_button_prompts`)
+
+Quality of life, for a cleaner screen. While the player walks around, the top right corner says
+what two buttons do: **1**, Help, always, and **A** with the action at hand (Check, Dismount...).
+With this mod they are not drawn; the buttons do the same as always. The menus keep their button
+guides, and so do the photo camera and placing furniture, which teach their controls.
+
+| With the prompts (the original game) | With the mod |
+|---|---|
+| ![1 Help and A Check in the top right corner](images/button-prompts-on.jpg) | ![The same room without them](images/button-prompts-off.jpg) |
+
+What the game does, and what the mod changes (`runtime/src/hle/game_mods/no_button_prompts.cpp`):
+
+- 0x801504DC draws one prompt: the button's picture (0x801CC950) and its word, nine times a pixel
+  apart, which gives the word its dark outline. The word is an index into the game's own words
+  (0x8014FED4): 0x111 Check, 0x116 Dismount, 0x128 Help...
+- Four places call it. 0x80150748 draws the field's two prompts each frame, from the slots at
+  0x8057C5D8 (0x14 bytes each: shown, word, alpha, picture), which the game fills when a prompt is
+  wanted and that function empties after drawing. 0x800D8FB0, a state of the player, shows
+  "A Check" alone. 0x8014BECC and 0x801DDCEC are the controls of placing furniture and of the photo
+  camera.
+- The mod wraps 0x801504DC and leaves out only the calls from the first two (they return to
+  0x80150848 and 0x800D8FE4). The slots are filled and emptied as always, so nothing else changes.
+
+Tried: in the cloud, in English and Spanish, in the farmhouse: the prompts are gone, and the map
+(the + button) still shows its button guide.
+
 ### Faster actions and faster walking (`faster_actions`, `faster_walking`)
 
 Quality of life. Each is turned on or off and has a speed, a percentage from 100 (the original
@@ -468,6 +495,35 @@ Qué hace el juego y qué cambia el mod (`runtime/src/hle/game_mods/no_place_sig
   letrero nunca se crea. No toca nada más del cambio de zona.
 
 Probado: en una PC Windows ARM, cruzando varias zonas.
+
+### Sin avisos de botones en el campo (`no_button_prompts`)
+
+Calidad de vida, para una pantalla más limpia. Mientras caminas, la esquina de arriba a la derecha
+dice qué hacen dos botones: el **1**, Ayuda, siempre, y el **A** con la acción del momento
+(Revisar, Bajarse...). Con este mod no se dibujan; los botones hacen lo mismo de siempre. Los menús
+conservan sus guías de botones, igual que la cámara de fotos y la colocación de muebles, que
+enseñan sus controles.
+
+| Con los avisos (el juego original) | Con el mod |
+|---|---|
+| ![1 Ayuda y A Revisar en la esquina de arriba a la derecha](images/button-prompts-on-es.jpg) | ![El mismo cuarto sin ellos](images/button-prompts-off-es.jpg) |
+
+Qué hace el juego y qué cambia el mod (`runtime/src/hle/game_mods/no_button_prompts.cpp`):
+
+- 0x801504DC dibuja un aviso: el dibujo del botón (0x801CC950) y su palabra, nueve veces a un píxel
+  de distancia, lo que le da a la palabra su contorno oscuro. La palabra es un índice de las
+  palabras del propio juego (0x8014FED4): 0x111 Revisar, 0x116 Bajarse, 0x128 Ayuda...
+- La llaman cuatro lugares. 0x80150748 dibuja los dos avisos del campo en cada cuadro, desde los
+  espacios en 0x8057C5D8 (0x14 bytes cada uno: se muestra, palabra, transparencia, dibujo), que el
+  juego llena cuando quiere un aviso y esa función vacía después de dibujar. 0x800D8FB0, un estado
+  del personaje, muestra "A Revisar" solo. 0x8014BECC y 0x801DDCEC son los controles de la
+  colocación de muebles y de la cámara de fotos.
+- El mod envuelve 0x801504DC y deja fuera solo las llamadas de los dos primeros (regresan a
+  0x80150848 y 0x800D8FE4). Los espacios se llenan y se vacían como siempre, así que no cambia nada
+  más.
+
+Probado: en la nube, en inglés y en español, en la casa de la granja: los avisos ya no salen, y el
+mapa (el botón +) sigue mostrando su guía de botones.
 
 ### Acciones más rápidas y caminar más rápido (`faster_actions`, `faster_walking`)
 

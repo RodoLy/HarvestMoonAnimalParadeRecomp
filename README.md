@@ -39,7 +39,7 @@ second, English. Everything below except fast loading is a choice in the launche
 | **Fast loading** | Always on: the change of area (the fade to black, the loading and the place sign) runs up to eight times faster, as fast as the PC allows, and so do the other black screens. While the screen is black the 3D world behind it is not drawn, so even a slow PC gets through it quickly. Holding **Tab** (or any key or controller button you choose) fast-forwards everything (off by default; turn it on in the launcher or F10). |
 | **Free camera** | A mod, off by default (launcher > Mods): outdoors the right stick turns the camera all the way around the player and tilts it, R3 puts it back. [See below](#free-camera). |
 | **Romance for everyone** | A mod: any of the twenty marriage candidates, the Harvest Goddess and the Harvest King included, can be courted and married whatever the player's sex. [See below](#romance-for-everyone). |
-| **Quality of life** | Mods for no area sign when loading ([see below](#shorter-loading-screens)) and for faster walking (×1.25 to ×3) and faster actions (×1.25 to ×4). See [docs/MODS.md](docs/MODS.md). |
+| **Quality of life** | Mods for no area sign when loading ([see below](#shorter-loading-screens)), no button prompts on the field ([see below](#a-cleaner-screen)) and for faster walking (×1.25 to ×3) and faster actions (×1.25 to ×4). See [docs/MODS.md](docs/MODS.md). |
 | **Cheats** | Infinite stamina, money, lumber, stone and feed, and stop time, in the launcher and in F10 (see the questions below). |
 | **Five languages** | English, Spanish, French, German and Italian from the same US disc (see below). |
 | **Direct3D 12 or Vulkan** | *F10 > Graphics > Graphics API*. *Automatic* picks Direct3D 12. |
@@ -62,6 +62,18 @@ new area appears as soon as it has loaded.
 | The sign the mod takes away |
 |---|
 | ![The area sign: a picture of Memoria Farm and its name](docs/images/area-sign.jpg) |
+
+## A cleaner screen
+
+While you walk around, the top right corner of the screen says what two buttons do: **1**, Help,
+always, and **A** with the action at hand (Check, Dismount...). The **No button prompts on the
+field** mod (launcher > Mods, off by default) takes them away for a cleaner screen; the buttons do
+the same as always. The menus keep their button guides, and so do the photo camera and placing
+furniture.
+
+| With the prompts (the original game) | With the mod |
+|---|---|
+| ![1 Help and A Check in the top right corner](docs/images/button-prompts-on.jpg) | ![The same room without them](docs/images/button-prompts-off.jpg) |
 
 ## Free camera
 
