@@ -90,7 +90,7 @@ jobs:
             git -C "$WIICOMPILED" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
           done
           # aurora is a submodule, so its patches apply inside it.
-          for patch in aurora-storage-buffer aurora-overrun-layout aurora-interpolation-30fps aurora-wide-picture; do
+          for patch in aurora-storage-buffer aurora-overrun-layout aurora-interpolation-30fps aurora-wide-picture aurora-thread-load; do
             git -C "$WIICOMPILED/aurora-main" apply --verbose "$GITHUB_WORKSPACE/patches/wiicompiled/$patch.patch"
           done
 

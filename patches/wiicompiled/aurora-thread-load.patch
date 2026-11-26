@@ -1,0 +1,141 @@
+diff --git a/include/aurora/aurora.h b/include/aurora/aurora.h
+index 0f2a02a..db3e744 100644
+--- a/include/aurora/aurora.h
++++ b/include/aurora/aurora.h
+@@ -191,6 +191,16 @@ double aurora_get_display_refresh_rate();
+ // False when the display is too slow to show interpolated frames, which are then dropped.
+ bool aurora_display_shows_interpolation();
+ 
++// Running totals, in nanoseconds since aurora started, of how the rendering spends its time: the
++// render worker working on what it was handed (its waits for the graphics card included), and the
++// thread that hands it frames waiting for it to make room (a free frame slot, a mapped staging
++// buffer, a place in its queue). Two readings apart tell how loaded each one was in between.
++typedef struct {
++  uint64_t renderBusyNanos;
++  uint64_t producerWaitNanos;
++} AuroraThreadLoad;
++void aurora_get_thread_load(AuroraThreadLoad* load);
++
+ typedef enum {
+   AURORA_METALFX_DISABLED,
+   AURORA_METALFX_UNSUPPORTED,
+diff --git a/lib/gfx/frame.cpp b/lib/gfx/frame.cpp
+index 0014f08..0477e67 100644
+--- a/lib/gfx/frame.cpp
++++ b/lib/gfx/frame.cpp
+@@ -693,6 +693,7 @@ size_t acquire_frame_slot() {
+       const auto waitDuration = PresentClock::now() - waitStart;
+       const double waitMs = std::chrono::duration<double, std::milli>{waitDuration}.count();
+       TracyPlot("aurora: frameSlotWaitMs", waitMs);
++      render_worker::add_producer_wait(waitDuration);
+       return *slot;
+     }
+ 
+@@ -702,6 +703,12 @@ size_t acquire_frame_slot() {
+ 
+ std::optional<size_t> acquire_mapped_staging_buffer() {
+   ZoneScopedN("Acquire mapped staging buffer");
++  // Waiting here is waiting for the render worker (or the graphics card) to give a buffer back.
++  const auto waitStart = PresentClock::now();
++  struct CountWait {
++    PresentClock::time_point start;
++    ~CountWait() { render_worker::add_producer_wait(PresentClock::now() - start); }
++  } countWait{waitStart};
+ 
+   while (true) {
+     if (auto slot = g_stagingSlots.try_acquire()) {
+diff --git a/lib/gfx/render_worker.cpp b/lib/gfx/render_worker.cpp
+index 0cdb411..9d19207 100644
+--- a/lib/gfx/render_worker.cpp
++++ b/lib/gfx/render_worker.cpp
+@@ -2,6 +2,8 @@
+ 
+ #include "../thread.hpp"
+ 
++#include <aurora/aurora.h>
++
+ #include <algorithm>
+ #include <atomic>
+ #include <chrono>
+@@ -19,6 +21,13 @@ std::atomic_bool g_running = false;
+ std::atomic_size_t g_pendingItems = 0;
+ std::thread::id g_workerThreadId;
+ std::atomic<ProducerWaitCallback> g_producerWaitCallback = nullptr;
++std::atomic_uint64_t g_busyNanos = 0;
++std::atomic_uint64_t g_producerWaitNanos = 0;
++
++uint64_t nanos(std::chrono::steady_clock::duration duration) noexcept {
++  const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
++  return count > 0 ? static_cast<uint64_t>(count) : 0;
++}
+ 
+ void complete_sync(const std::shared_ptr<SyncState>& sync) {
+   if (!sync) {
+@@ -47,7 +56,9 @@ void worker_main(std::stop_token token) {
+ 
+     if (item->work) {
+       ZoneScopedN("QueueItem work");
++      const auto start = std::chrono::steady_clock::now();
+       item->work();
++      g_busyNanos.fetch_add(nanos(std::chrono::steady_clock::now() - start), std::memory_order_relaxed);
+     }
+     complete_sync(item->sync);
+     g_pendingItems.fetch_sub(1, std::memory_order_acq_rel);
+@@ -89,7 +100,12 @@ BoundedQueue::BoundedQueue(size_t capacity) : m_capacity(capacity) {}
+ bool BoundedQueue::push(QueueItem item) {
+   ZoneScoped;
+   std::unique_lock lock{m_mutex};
+-  wait_servicing(m_notFull, lock, [&] { return m_closed || m_items.size() < m_capacity; });
++  if (!m_closed && m_items.size() >= m_capacity) {
++    // A full queue: the thread handing work waits for the worker (aurora_get_thread_load).
++    const auto start = std::chrono::steady_clock::now();
++    wait_servicing(m_notFull, lock, [&] { return m_closed || m_items.size() < m_capacity; });
++    add_producer_wait(std::chrono::steady_clock::now() - start);
++  }
+   if (m_closed) {
+     return false;
+   }
+@@ -294,6 +310,14 @@ ProducerWaitCallback producer_wait_callback() noexcept {
+   return g_producerWaitCallback.load(std::memory_order_acquire);
+ }
+ 
++uint64_t busy_nanos() noexcept { return g_busyNanos.load(std::memory_order_relaxed); }
++
++uint64_t producer_wait_nanos() noexcept { return g_producerWaitNanos.load(std::memory_order_relaxed); }
++
++void add_producer_wait(std::chrono::steady_clock::duration wait) noexcept {
++  g_producerWaitNanos.fetch_add(nanos(wait), std::memory_order_relaxed);
++}
++
+ void service_producer_wait() noexcept {
+   if (is_worker_thread()) {
+     return;
+@@ -304,3 +328,11 @@ void service_producer_wait() noexcept {
+ }
+ 
+ } // namespace aurora::gfx::render_worker
++
++void aurora_get_thread_load(AuroraThreadLoad* load) {
++  if (load == nullptr) {
++    return;
++  }
++  load->renderBusyNanos = aurora::gfx::render_worker::busy_nanos();
++  load->producerWaitNanos = aurora::gfx::render_worker::producer_wait_nanos();
++}
+diff --git a/lib/gfx/render_worker.hpp b/lib/gfx/render_worker.hpp
+index 0181344..0218843 100644
+--- a/lib/gfx/render_worker.hpp
++++ b/lib/gfx/render_worker.hpp
+@@ -96,6 +96,12 @@ ProducerWaitCallback producer_wait_callback() noexcept;
+ // Runs the producer wait callback while the calling thread blocks on the renderer.
+ void service_producer_wait() noexcept;
+ 
++// Running totals behind aurora_get_thread_load, in nanoseconds: the worker's time on its items, and
++// the time a thread handing it frames waited for it to make room (add_producer_wait).
++uint64_t busy_nanos() noexcept;
++uint64_t producer_wait_nanos() noexcept;
++void add_producer_wait(std::chrono::steady_clock::duration wait) noexcept;
++
+ // cv.wait(lock, pred), but the producer wait callback keeps running every millisecond.
+ template <typename Pred>
+ void wait_servicing(std::condition_variable& cv, std::unique_lock<std::mutex>& lock, Pred pred) {
