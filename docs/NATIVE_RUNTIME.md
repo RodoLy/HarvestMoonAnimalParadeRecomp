@@ -275,6 +275,19 @@ explícita en lugar de tramos:
 - `patches/wiicompiled/aurora-overrun-layout.patch` hace que el aviso de aurora
   sobre un dibujo con menos datos de los que espera diga también qué formato
   de vértices usó para calcular su tamaño.
+- `patches/wiicompiled/aurora-interpolation-30fps.patch` deja que la
+  interpolación de cuadros inserte cuadros en un juego que va a 30 FPS, como
+  este, y no solo en uno de 60.
+- `patches/wiicompiled/aurora-wide-picture.patch` es la pantalla ancha: ensancha
+  la imagen que el juego dibuja en 4:3 y deja en su lugar lo que el juego copia
+  de una parte de la imagen (sombras, el brillo).
+- `patches/wiicompiled/aurora-thread-load.patch` lleva la cuenta de cuánto
+  trabaja el hilo que le pasa los cuadros a la tarjeta gráfica y de cuánto lo
+  espera el hilo de GX. El runtime la junta con la del hilo del juego y la
+  anota en el registro cada 300 cuadros (`[perf] last 300 frames, ... ms each;
+  busy per frame: game thread ..., GX thread ..., render thread ...`). Si el
+  juego va lento, el hilo que está ocupado casi todo lo que dura un cuadro es
+  el que lo frena.
 - `patches/wiicompiled/foreign-game-translator.patch` hace que el traductor
   compile para `ForeignGame` (`MKW_TRANSLATED_GUEST_REGION 3`) todo juego que
   no sea *Mario Kart Wii*. Sin él, un ID desconocido como `RBIEE9` caía en PAL
@@ -327,6 +340,9 @@ git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addres
 git apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-storage-buffer.patch
 git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-overrun-layout.patch
+git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-interpolation-30fps.patch
+git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-wide-picture.patch
+git -C aurora-main apply /ruta/a/harvest-moon-ap-recomp/patches/wiicompiled/aurora-thread-load.patch
 
 # Desde harvest-moon-ap-recomp: el mapa de funciones y la capa.
 python3 tools/export_wiicompiled_map.py          # pone al día wiicompiled/RBIEE9-MAP.txt
@@ -765,6 +781,19 @@ instead of stretches:
 - `patches/wiicompiled/aurora-overrun-layout.patch` makes aurora's warning
   about a draw with less data than it expects also say which vertex layout it
   computed the size from.
+- `patches/wiicompiled/aurora-interpolation-30fps.patch` lets frame
+  interpolation insert frames into a game that runs at 30 FPS, like this one,
+  and not only into one at 60.
+- `patches/wiicompiled/aurora-wide-picture.patch` is the wide screen: it widens
+  the picture the game draws in 4:3 and leaves where they are the parts of the
+  picture the game copies (shadows, the glow).
+- `patches/wiicompiled/aurora-thread-load.patch` keeps count of how much the
+  thread that hands frames to the graphics card works, and of how long the GX
+  thread waits for it. The runtime adds the game thread's count and writes the
+  three to the log every 300 frames (`[perf] last 300 frames, ... ms each; busy
+  per frame: game thread ..., GX thread ..., render thread ...`). When the game
+  runs slow, the thread that is busy for almost all of a frame is the one
+  holding it back.
 - `patches/wiicompiled/foreign-game-translator.patch` makes the translator
   build every game that is not *Mario Kart Wii* for `ForeignGame`
   (`MKW_TRANSLATED_GUEST_REGION 3`). Without it, an unknown ID such as
@@ -818,6 +847,9 @@ git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-addre
 git apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/foreign-game-translator.patch
 git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-storage-buffer.patch
 git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-overrun-layout.patch
+git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-interpolation-30fps.patch
+git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-wide-picture.patch
+git -C aurora-main apply /path/to/harvest-moon-ap-recomp/patches/wiicompiled/aurora-thread-load.patch
 
 # From harvest-moon-ap-recomp: the function map and the layer.
 python3 tools/export_wiicompiled_map.py          # brings wiicompiled/RBIEE9-MAP.txt up to date
