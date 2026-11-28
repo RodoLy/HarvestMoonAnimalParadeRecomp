@@ -280,7 +280,11 @@ explícita en lugar de tramos:
   este, y no solo en uno de 60.
 - `patches/wiicompiled/aurora-wide-picture.patch` es la pantalla ancha: ensancha
   la imagen que el juego dibuja en 4:3 y deja en su lugar lo que el juego copia
-  de una parte de la imagen (sombras, el brillo).
+  de una parte de la imagen (sombras, el brillo). Un dibujo plano que podría
+  ser de esos se deja al ancho del juego; si al final del cuadro ninguna copia
+  lo leyó, era parte de la imagen (un cuadro de diálogo, su texto) y se lleva
+  al centro antes de que el cuadro llegue a la tarjeta gráfica. Así un cuadro
+  de diálogo no sale con huecos aunque el juego haga sus copias en otro orden.
 - `patches/wiicompiled/aurora-thread-load.patch` lleva la cuenta de cuánto
   trabaja el hilo que le pasa los cuadros a la tarjeta gráfica y de cuánto lo
   espera el hilo de GX. El runtime la junta con la del hilo del juego y la
@@ -786,7 +790,12 @@ instead of stretches:
   and not only into one at 60.
 - `patches/wiicompiled/aurora-wide-picture.patch` is the wide screen: it widens
   the picture the game draws in 4:3 and leaves where they are the parts of the
-  picture the game copies (shadows, the glow).
+  picture the game copies (shadows, the glow). A flat draw that could be one of
+  those is left at the game's width; if by the end of the frame no copy read
+  it, it was part of the picture (a dialogue box, its text) and is moved to the
+  middle before the frame reaches the graphics card. That way a dialogue box
+  does not come out with holes even when the game makes its copies in another
+  order.
 - `patches/wiicompiled/aurora-thread-load.patch` keeps count of how much the
   thread that hands frames to the graphics card works, and of how long the GX
   thread waits for it. The runtime adds the game thread's count and writes the
